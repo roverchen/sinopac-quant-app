@@ -250,6 +250,19 @@ def resolve_stock_code(input_str, api):
             
     return None, []
 
+def get_mass_scan_list(api):
+    """從 4.6 萬檔合約中過濾出真正的股票 (台股 4 碼, 美股字母代碼)"""
+    all_map = get_stock_name_map(api)
+    filtered = []
+    for code in all_map.keys():
+        # 台股：4 碼數字 (排除 6 碼權證)
+        if code.isdigit() and len(code) == 4:
+            filtered.append(code)
+        # 美股：純字母 (排除含有點號或數字的衍生標的)
+        elif code.isalpha():
+            filtered.append(code)
+    return filtered
+
 # --- 側邊欄設定 ---
 # 1. 優先處理搜尋與新增邏輯
 if 'watchlist' not in st.session_state:
@@ -602,7 +615,9 @@ elif st.session_state.get("last_watchlist") != current_watchlist_key:
     should_sync = True
 
 # 執行同步
-scan_btn = st.sidebar.button("🚀 重新掃描市場", use_container_width=True, type="primary")
+scan_btn = st.sidebar.button("🚀 重新掃描目前清單", use_container_width=True, type="primary")
+big_scan_btn = st.sidebar.button("🔍 執行「全市場」大選股", use_container_width=True)
+
 if should_sync or scan_btn:
     st.toast("🔍 啟動市場掃描...", icon="🚀")
     with st.spinner('🔄 市場數據分析同步中...'):
@@ -611,11 +626,30 @@ if should_sync or scan_btn:
         st.session_state.results = results
         st.session_state.history_data = history_data
         st.session_state.last_update = datetime.now().strftime("%H:%M:%S")
+        st.session_state.is_big_scan = False # 標記為一般掃描
         
         if results.empty:
             st.warning("⚠️ 掃描完成，但在現有清單中找不到可分析的有效數據。")
         else:
             st.toast("✅ 數據同步完成！", icon="📉")
+
+elif big_scan_btn:
+    mass_list = get_mass_scan_list(api)
+    st.toast(f"🐘 啟動全市場掃描 ({len(mass_list)} 檔)...", icon="🔍")
+    with st.spinner(f'🔄 全市場數據同步中 (共 {len(mass_list)} 檔)...'):
+        # 執行全市場分析
+        results, history_data = fetch_and_analyze(mass_list)
+        
+        # 只保留前 10 名
+        if not results.empty:
+            top_10 = results.head(10).copy()
+            st.session_state.results = top_10
+            st.session_state.history_data = history_data
+            st.session_state.last_update = datetime.now().strftime("%H:%M:%S")
+            st.session_state.is_big_scan = True # 標記為大選股模式
+            st.toast("✅ 全市場大選股完成！", icon="🏆")
+        else:
+            st.error("❌ 全市場掃描未成功取得數據。")
 
 # 顯示最後更新時間
 if "last_update" in st.session_state:
@@ -654,8 +688,9 @@ if "results" in st.session_state:
         - **MACD 狀態**：`🚀 金叉發動` 代表短線動能剛由空轉多。
         """)
 
-    # --- 自定義列表 (含垃圾桶移除功能) ---
-    st.markdown("### 📊 目前追蹤清單")
+    # --- 自定義列表 ---
+    list_title = "🏆 全市場大選股 TOP 10" if st.session_state.get("is_big_scan") else "📊 目前追蹤清單"
+    st.markdown(f"### {list_title}")
     
     # 表頭 (依照操作建議排版)
     cols = st.columns([1.5, 1, 1, 1, 1, 3.5, 0.5])
@@ -678,12 +713,21 @@ if "results" in st.session_state:
         cols[3].write(row['年線乖離'])
         cols[4].write(row['MA20乖離'])
         cols[5].markdown(f"**`{row['操作建議']}`**")
-        if cols[6].button("🗑️", key=f"del_{row['代碼']}"):
-            st.session_state.watchlist.remove(row['代碼'])
+        action_icon = "🗑️" if row['代碼'] in st.session_state.watchlist else "➕"
+        if cols[6].button(action_icon, key=f"act_{row['代碼']}"):
+            if row['代碼'] in st.session_state.watchlist:
+                st.session_state.watchlist.remove(row['代碼'])
+                st.toast(f"已從清單移除 {row['代碼']}")
+            else:
+                st.session_state.watchlist.append(row['代碼'])
+                st.toast(f"已加入追蹤清單 {row['代碼']}")
+            
             save_watchlist(st.session_state.watchlist)
-            # 同步清除結果，強制下次執行時重新計算
-            if "results" in st.session_state:
-                del st.session_state.results
+            
+            # 若為一般模式，移除 results 以觸發重新計算；大選股模式則保留結果
+            if not st.session_state.get("is_big_scan"):
+                if "results" in st.session_state:
+                    del st.session_state.results
             st.rerun()
     
     st.divider()
