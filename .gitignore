@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+bin/
+lib/
+include/
+etc/
+share/
+pyvenv.cfg
+
+# Projects
+secrets.toml
+*.pfx
+shioaji.log
+cache/
+watchlist.json
+
+# Streamlit
+.streamlit/
+
+# OS specific
+.DS_Store

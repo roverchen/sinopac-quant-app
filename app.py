@@ -1,0 +1,735 @@
+import streamlit as st
+import shioaji as sj
+import pandas as pd
+import numpy as np
+from datetime import datetime, timedelta
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import os
+import difflib
+import json
+import requests
+import yfinance as yf
+
+# --- 頁面設定 ---
+st.set_page_config(page_title="量化選股戰情室", layout="wide")
+st.title("📈 台美股量化選股系統")
+
+# --- 初始化 API ---
+@st.cache_resource
+def init_api():
+    api = sj.Shioaji()
+    # 優先從 st.secrets 讀取，若無則使用預設硬編碼內容
+    try:
+        api_key = st.secrets.get("API_KEY", "BPHcXm1CfdU8jw626rRVx3MXB9aqJ3HKaaovHGHkzYTn")
+        secret_key = st.secrets.get("SECRET_KEY", "AJvvVZqxQCaXDwPs5CE6jYhkU5pujBm7ujhFZNbfoM7a")
+    except Exception:
+        # 當找不到 secrets.toml 時，Streamlit 可能會拋出異常，此時回退到硬編碼
+        api_key = "BPHcXm1CfdU8jw626rRVx3MXB9aqJ3HKaaovHGHkzYTn"
+        secret_key = "AJvvVZqxQCaXDwPs5CE6jYhkU5pujBm7ujhFZNbfoM7a"
+    
+    try:
+        # 避免重複連線，如果已經有 session 可以列出帳號代表已連線
+        if len(api.list_accounts()) > 0:
+            return api
+        
+        api.login(api_key=api_key, secret_key=secret_key)
+    except Exception as e:
+        error_msg = str(e)
+        if "451" in error_msg or "Too Many Connections" in error_msg:
+            st.error("⚠️ **API 連線數已達上限 (Error 451)**")
+            st.warning("這是永豐金證券伺服器的限制，通常是因為短時間內重複登入/清除快取導致。")
+            st.info("💡 **請等待 3-5 分鐘後再重新整理頁面**，期間請避免點擊「重連 API」或「深度清除」。")
+        else:
+            st.error(f"API 登入失敗: {e}")
+    return api
+
+# 側邊欄：API 狀態與手動重整
+api = init_api()
+
+with st.sidebar.expander("🛠️ 系統連線狀態", expanded=False):
+    # 檢查是否登入成功 (session 是否有效)
+    try:
+        accounts = api.list_accounts()
+        if not accounts:
+            st.error("❌ API 尚未登入")
+        else:
+            st.success(f"✅ 已連線: {accounts[0].account_id}")
+    except:
+        st.error("❌ API 連線異常")
+
+    # 確保合約在登入後只抓一次 (強制下載模式)
+    if not st.session_state.get('contracts_fetched', False):
+        with st.status("🔄 正在同步市場...", expanded=False) as status:
+            try:
+                api.fetch_contracts()
+                if not hasattr(api.Contracts, 'Stocks') or len(dir(api.Contracts.Stocks)) < 3:
+                    api.fetch_contracts(contract_download=True)
+                st.session_state.contracts_fetched = True
+                status.update(label="✅ 同步完成", state="complete")
+            except Exception as e:
+                status.update(label=f"⚠️ 同步不完全: {e}", state="error")
+    else:
+        st.caption("✅ 市場資料已同步")
+
+col1, col2 = st.sidebar.columns(2)
+if col1.button("🔄 重連 API"):
+    st.cache_resource.clear()
+    st.cache_data.clear()
+    if 'last_chance_tried' in st.session_state:
+        del st.session_state.last_chance_tried
+    st.rerun()
+
+if col2.button("🧹 深度清除", help="清除所有 Session 與資源快取，重新登入"):
+    st.cache_resource.clear()
+    st.cache_data.clear()
+    for key in list(st.session_state.keys()):
+        del st.session_state[key]
+    st.rerun()
+
+@st.cache_data(show_spinner=False)
+def get_stock_name_map(_api):
+    """建立 代碼 -> 名稱 的映射表，包含台、美 (備用專案) 市場"""
+    code_to_name = {}
+    
+    # --- 🇺🇸 美股備用清單 (針對函式庫版本限制的補全) ---
+    # 這裡包含 S&P 500 與主要龍頭，確保搜尋 "nvida" 或 "NVDA" 必中
+    US_STOCK_FALLBACK = {
+        "NVDA": "NVIDIA Corp (US)", "AAPL": "Apple Inc (US)", "MSFT": "Microsoft Corp (US)",
+        "GOOGL": "Alphabet Inc A (US)", "AMZN": "Amazon.com Inc (US)", "TSLA": "Tesla Inc (US)",
+        "META": "Meta Platforms (US)", "AMD": "AMD (US)", "INTC": "Intel (US)",
+        "NFLX": "Netflix (US)", "DIS": "Disney (US)", "NKE": "NIKE (US)",
+        "MCD": "McDonald's (US)", "KO": "Coca-Cola (US)", "PEP": "PepsiCo (US)",
+        "COST": "Costco (US)", "PYPL": "PayPal (US)", "BABA": "Alibaba (US)",
+        "T": "AT&T (US)", "VZ": "Verizon (US)", "PFE": "Pfizer (US)",
+        "JPM": "JPMorgan (US)", "V": "Visa (US)", "MA": "Mastercard (US)",
+        "BRK.B": "Berkshire B (US)", "LLY": "Eli Lilly (US)", "XOM": "Exxon Mobil (US)"
+    }
+    # 預載備用清單
+    code_to_name.update(US_STOCK_FALLBACK)
+
+    # 如果有 API 合約資訊，則進行深度補完
+    if hasattr(_api, "Contracts") and hasattr(_api.Contracts, "Stocks"):
+        stocks = _api.Contracts.Stocks
+        def recursive_scan(item, depth=0):
+            if depth > 5: return
+            for attr in dir(item):
+                if attr.startswith('_') or attr in ['append', 'get', 'keys', 'post_init']: continue
+                try:
+                    val = getattr(item, attr)
+                    if hasattr(val, '_code2contract'):
+                        for c, contract in val._code2contract.items():
+                            c_code = str(c).upper()
+                            # 不要覆蓋已有的備用清單名稱 (保留 (US) 標記)
+                            if c_code not in code_to_name:
+                                code_to_name[c_code] = getattr(contract, 'name', 'Unknown')
+                    elif hasattr(val, '__slots__') or hasattr(val, 'get'):
+                        recursive_scan(val, depth + 1)
+                except: continue
+        recursive_scan(stocks)
+
+    # 驗證機制 (台股預期萬檔以上，若不足則僅警告不崩潰)
+    if len(code_to_name) < 1000:
+        st.warning(f"⚠️ 股票清單載入不完全 (僅 {len(code_to_name)} 檔)，部分代碼可能暫時無法解析名稱。")
+    return code_to_name
+
+# --- 診斷與 UI 回饋 ---
+try:
+    current_map = get_stock_name_map(api)
+    map_size = len(current_map)
+    st.sidebar.caption(f"📊 已載入標的: {map_size} 檔")
+    
+    # 檢查函式庫是否受限於台股
+    from shioaji.constant import Exchange
+    if not hasattr(Exchange, "US"):
+        st.sidebar.warning("⚠️ 偵測到函式庫版本受限 (僅支援台股)")
+        st.sidebar.caption("💡 已啟用跨市場備用清單，NVDA 等美股仍可搜尋。")
+except Exception as e:
+    st.sidebar.caption(f"📊 標的載入中...")
+
+if st.sidebar.checkbox("🔍 偵錯：市場探險家"):
+    try:
+        st.sidebar.markdown("### 📡 核心結構偵測")
+        # 顯示 Contracts 與 Stocks 的屬性
+        c_attrs = [a for a in dir(api.Contracts) if not a.startswith('_')]
+        st.sidebar.write(f"Contracts: {', '.join(c_attrs)}")
+        
+        if hasattr(api.Contracts, 'Stocks'):
+            stocks = api.Contracts.Stocks
+            s_attrs = [a for a in dir(stocks) if not a.startswith('_')]
+            st.sidebar.write(f"Stocks: {', '.join(s_attrs)}")
+            
+            # 如果沒有 US 屬性，顯示提示
+            if not hasattr(stocks, 'US'):
+                st.sidebar.info("📌 此版本函式庫不包含 `.US` 屬性。")
+            else:
+                st.sidebar.success("✅ 偵測到原生美股支援屬性。")
+        
+        st.sidebar.markdown("---")
+        st.sidebar.caption(f"目前對應表總數: {len(get_stock_name_map(api))} 檔")
+    except Exception as e:
+        st.sidebar.error(f"偵測失敗: {e}")
+
+# --- 快取管理 ---
+CACHE_DIR = "cache"
+if not os.path.exists(CACHE_DIR):
+    os.makedirs(CACHE_DIR)
+
+if st.sidebar.button("🗑️ 清除本地快取"):
+    for f in os.listdir(CACHE_DIR):
+        os.remove(os.path.join(CACHE_DIR, f))
+    st.sidebar.success("快取已清除")
+    st.rerun()
+
+# --- 輔助函式 ---
+WATCHLIST_FILE = "watchlist.json"
+
+def load_watchlist():
+    if os.path.exists(WATCHLIST_FILE):
+        try:
+            with open(WATCHLIST_FILE, "r") as f:
+                return json.load(f)
+        except:
+            pass
+    return ["2330", "2317"]
+
+def save_watchlist(watchlist):
+    with open(WATCHLIST_FILE, "w") as f:
+        json.dump(watchlist, f)
+
+@st.cache_data
+def check_revenue_momentum(code):
+    """檢查近三個月營收是否連續 YoY 年減 (僅限台股)"""
+    if not code.isdigit(): return "N/A", True # 美股目前跳過營收檢查或回傳 OK
+    try:
+        # 使用 FinMind 開放 API
+        url = "https://api.finmindtrade.com/api/v4/data"
+        params = {
+            "dataset": "TaiwanStockMonthRevenue",
+            "data_id": code,
+            "start_date": (datetime.now() - timedelta(days=150)).strftime("%Y-%m-%d")
+        }
+        res = requests.get(url, params=params, timeout=5)
+        data = res.json().get('data', [])
+        if len(data) >= 3:
+            # 取得最近三筆資料
+            recent_yoy = [d.get('revenue_month_year_comparison', 0) for d in data[-3:]]
+            # 如果三個月都小於 0，則為營收衰退
+            if all(y < 0 for y in recent_yoy):
+                return "❌ 連續三月衰退", False
+            return "✅ 營收動能正常", True
+    except:
+        pass
+    return "💡 無法取得營收", True
+
+
+def resolve_stock_code(input_str, api):
+    """
+    將使用者輸入（代碼或名稱）解析為代碼。
+    如果無法精確解析，則傳回建議清單。
+    """
+    input_str = input_str.strip().upper()
+    if not input_str:
+        return None, []
+    
+    code_to_name = get_stock_name_map(api)
+    if not code_to_name:
+        return None, []
+
+    # 1. 精確比對 (代碼優先)
+    if input_str in code_to_name:
+        return input_str, []
+    
+    # 2. 精確比對 (名稱優先)
+    for code, name in code_to_name.items():
+        if name.upper() == input_str:
+            return code, []
+
+    # 3. 如果輸入是純英文 (可能為美股 Ticker) - 針對 Ticker 做優先處理
+    if input_str.isalpha():
+        # A. 前綴比對 (例如 NV -> NVDA)
+        prefix_matches = []
+        for code, name in code_to_name.items():
+            if code.upper().startswith(input_str):
+                prefix_matches.append((name, code))
+        if prefix_matches:
+            return None, sorted(prefix_matches, key=lambda x: len(x[1]))[:8]
+
+        # B. 針對 Ticker 的拼寫糾錯 (更寬鬆的門檻以捕捉 nvida -> NVDA)
+        tickers = [c for c in code_to_name.keys() if not c.isdigit()]
+        close_tickers = difflib.get_close_matches(input_str, tickers, n=5, cutoff=0.5)
+        if close_tickers:
+            results = [(code_to_name[c], c) for c in close_tickers]
+            return None, results
+
+    # 4. 處理台股同音/錯別字變體 (錸德/萊德等)
+    var_set = {input_str}
+    for char in ["來", "萊", "錸"]:
+        if char in input_str:
+            for target in ["來", "萊", "錸"]:
+                var_set.add(input_str.replace(char, target))
+    for char in ["德", "得"]:
+        if char in input_str:
+            for target in ["德", "得"]:
+                var_set.add(input_str.replace(char, target))
+    variants = list(var_set)
+
+    # 5. 模糊建議 (包含子字串與名稱相似度)
+    suggestions = []
+    
+    # A. 名稱包含子字串 (包含變體)
+    for code, name in code_to_name.items():
+        if any(v in name.upper() for v in variants):
+            suggestions.append((name, code))
+    
+    # B. 如果建議太少，才使用慢速的 difflib 比對全市場名稱
+    if len(suggestions) < 5:
+        all_names = list(code_to_name.values())
+        # 限制比對深度與提高門檻，避免找太久與出現亂湊的結果
+        close_names = difflib.get_close_matches(input_str, all_names, n=5, cutoff=0.5)
+        name_to_code = {v: k for k, v in code_to_name.items()}
+        for n in close_names:
+            c = name_to_code.get(n)
+            if c and not any(s[1] == c for s in suggestions):
+                suggestions.append((n, c))
+
+    if suggestions:
+        # 排序：長度越接近輸入的排越前面
+        suggestions.sort(key=lambda x: abs(len(x[0]) - len(input_str)))
+        return None, suggestions[:8]
+            
+    return None, []
+
+# --- 側邊欄設定 ---
+# 1. 優先處理搜尋與新增邏輯
+if 'watchlist' not in st.session_state:
+    st.session_state.watchlist = load_watchlist()
+if 'resolved_code' not in st.session_state:
+    st.session_state.resolved_code = None
+if 'suggestions' not in st.session_state:
+    st.session_state.suggestions = []
+
+st.sidebar.header("➕ 新增股票")
+with st.sidebar.form("add_stock_form", clear_on_submit=True):
+    new_input = st.text_input("輸入代碼或名稱 (例: 2330 或 台積電)")
+    submitted = st.form_submit_button("新增到清單")
+    if submitted and new_input:
+        # 先進行代碼檢索，暫不觸發全域掃描
+        resolved_code, suggestions = resolve_stock_code(new_input, api)
+        if resolved_code:
+            if resolved_code not in st.session_state.watchlist:
+                st.session_state.watchlist.append(resolved_code)
+                save_watchlist(st.session_state.watchlist)
+                # 成功找到代碼，清除建議並準備同步
+                if "last_suggestions" in st.session_state:
+                    del st.session_state.last_suggestions
+                st.rerun()
+            else:
+                st.sidebar.warning(f"⚠️ {resolved_code} 已在清單中")
+        elif suggestions:
+            # 沒找到精確代碼，存下建議
+            st.session_state.last_suggestions = (new_input, suggestions)
+        else:
+            st.sidebar.error(f"❌ 找不到與「{new_input}」相符的股票")
+            if "last_suggestions" in st.session_state:
+                del st.session_state.last_suggestions
+
+# 2. 顯示建議清單 (如果有的話)
+if "last_suggestions" in st.session_state:
+    orig_input, suggestions = st.session_state.last_suggestions
+    st.sidebar.info(f"🤔 找不到「{orig_input}」，您指的可能是：")
+    for name, code in suggestions:
+        if st.sidebar.button(f"{name} ({code})", key=f"suggest_{code}"):
+            if code not in st.session_state.watchlist:
+                st.session_state.watchlist.append(code)
+                save_watchlist(st.session_state.watchlist)
+                del st.session_state.last_suggestions
+                st.rerun()
+
+watchlist = st.session_state.watchlist
+
+# --- 核心邏輯 ---
+def fetch_and_analyze(watchlist):
+    data_list = []
+    # 儲存所有個股的歷史資料供視覺化使用
+    history_data = {}
+    
+    # 擴大歷史長度至 365 天 (以計算年線 MA240 與一年高低位階)
+    start_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
+    
+    # 預先建立 代碼 -> 名稱 映射
+    try:
+        code_to_name = get_stock_name_map(api)
+    except:
+        # 如果對應表還沒好，嘗試現場補抓合約 (這在 API 被重置後很有用)
+        try:
+            api.fetch_contracts()
+            code_to_name = get_stock_name_map(api)
+        except:
+            code_to_name = {}
+    
+    # 再次檢查合約狀態，若未完成則現場補抓
+    if not st.session_state.get('contracts_fetched', False):
+        api.fetch_contracts()
+        st.session_state.contracts_fetched = True
+    
+    # 紀錄是否已經在迴圈中嘗試過重抓合約，避免每檔都重抓
+    has_retried_contracts = False
+    
+    # 用於顯示進度的佔位符
+    status_placeholder = st.empty()
+    
+    for i, code in enumerate(watchlist):
+        progress_info = f"🕒 正在分析 ({i+1}/{len(watchlist)}): {code} ..."
+        status_placeholder.info(progress_info)
+        # 同步輸出到終端機供診斷
+        print(f"[Analysis] {progress_info}")
+        try:
+            stock_name = code_to_name.get(code, "未知")
+            cache_file = os.path.join(CACHE_DIR, f"{code}.csv")
+            df = None
+            source = "☁️ 雲端"
+
+            # 檢查快取是否存在且為「今日」更新
+            if os.path.exists(cache_file):
+                file_time = datetime.fromtimestamp(os.path.getmtime(cache_file))
+                if file_time.date() == datetime.now().date():
+                    df = pd.read_csv(cache_file)
+                    df['ts'] = pd.to_datetime(df['ts']) # 讀取 CSV 後轉換時間格式
+                    source = "💾 本地"
+
+            if df is None:
+                # 取得合約物件 (支援台股與美股備用機制)
+                contract = None
+                
+                # 1. 優先嘗試標準路徑 (台股)
+                if code.isdigit():
+                    for mk in ['TSE', 'OTC', 'OES']:
+                        if hasattr(api.Contracts.Stocks, mk):
+                            try:
+                                contract = getattr(api.Contracts.Stocks, mk)[code]
+                                if contract: break
+                            except: continue
+                    
+                    # 2. 如果標準路徑找不到，嘗試全域掃描 (防止節點名稱變更)
+                    if not contract:
+                        def find_in_obj(obj):
+                            for a in dir(obj):
+                                if a.startswith('_') or a in ['append', 'get', 'keys', 'post_init']: continue
+                                try:
+                                    sub = getattr(obj, a)
+                                    if hasattr(sub, '__getitem__'):
+                                        try:
+                                            res = sub[code]
+                                            if res: return res
+                                        except: pass
+                                    # 繼續往下一層找 (深度限制)
+                                    if hasattr(sub, '__dict__'):
+                                        res = find_in_obj(sub)
+                                        if res: return res
+                                except: pass
+                            return None
+                        contract = find_in_obj(api.Contracts.Stocks)
+
+                    if not contract:
+                        status_msg = "❌ 找不到合約"
+                        if not st.session_state.get('last_chance_tried', False):
+                            st.info(f"🔍 正在刷新系統合約以尋找 {code}...")
+                            try:
+                                api.fetch_contracts(contract_download=True)
+                                # 在原地重新嘗試尋找
+                                contract = find_in_obj(api.Contracts.Stocks)
+                            except: pass
+                            st.session_state.last_chance_tried = True
+                            # 不再執行 st.rerun()，避免分析流程中斷
+                            
+                    if not contract:
+                        st.warning(f"找不到代碼 {code} 的合約，請確認代碼是否正確。")
+                        data_list.append({
+                            "代碼": code, "名稱": stock_name, "最新價格": 0, "操作建議": status_msg,
+                            "一年位階": "-", "年線乖離": "-", "MA20乖離": "-", "MACD狀態": "-", "綜合評分": -1
+                        })
+                        continue
+                    
+                    # 取得台股 KBar
+                    try:
+                        kbars = api.kbars(contract, start=start_date)
+                        df = pd.DataFrame({**kbars})
+                        source = "☁️ 雲端"
+                    except Exception as e:
+                        st.warning(f"無法取得台股 {code} 的 K 線資料: {e}")
+                        data_list.append({
+                            "代碼": code, "名稱": stock_name, "最新價格": 0, "操作建議": "❌ 無法取得K線",
+                            "一年位階": "-", "年線乖離": "-", "MA20乖離": "-", "MACD狀態": "-", "綜合評分": -1
+                        })
+                        continue
+                else:
+                    # 3. 處理美股 (透過 yfinance 補完計畫)
+                    try:
+                        ticker = yf.Ticker(code)
+                        df_yf = ticker.history(period="1y", interval="1d")
+                        if not df_yf.empty:
+                            df = df_yf.reset_index()
+                            df.columns = [c.lower() for c in df.columns]
+                            if 'date' in df.columns:
+                                df = df.rename(columns={'date': 'ts'})
+                            df['ts'] = pd.to_datetime(df['ts'])
+                            df = df[['ts', 'open', 'high', 'low', 'close', 'volume']]
+                            source = "🌐 Yahoo"
+                        else:
+                            st.warning(f"Yahoo Finance 查無代碼 {code} 的歷史資料")
+                            data_list.append({
+                                "代碼": code, "名稱": stock_name, "最新價格": 0, "操作建議": "❌ 無美股數據",
+                                "一年位階": "-", "年線乖離": "-", "MA20乖離": "-", "MACD狀態": "-", "綜合評分": -1
+                            })
+                            continue
+                    except Exception as yf_err:
+                        st.error(f"美股數據抓取失敗 ({code}): {yf_err}")
+                        data_list.append({
+                            "代碼": code, "名稱": stock_name, "最新價格": 0, "操作建議": "❌ 抓取失敗",
+                            "一年位階": "-", "年線乖離": "-", "MA20乖離": "-", "MACD狀態": "-", "綜合評分": -1
+                        })
+                        continue
+                
+                # 確認資料有效性
+                if df is None or df.empty:
+                    st.warning(f"代碼 {code} 無法獲取有效資料")
+                    continue
+
+                df.columns = [c.lower() for c in df.columns]
+                df['ts'] = pd.to_datetime(df['ts'])
+
+                # 計算指標並存檔
+                df['ma20'] = df['close'].rolling(window=20).mean()
+                df['ma60'] = df['close'].rolling(window=60).mean()
+                df['ma240'] = df['close'].rolling(window=240).mean()
+                ema12 = df['close'].ewm(span=12).mean()
+                ema26 = df['close'].ewm(span=26).mean()
+                df['macd'] = ema12 - ema26
+                df['signal'] = df['macd'].ewm(span=9).mean()
+                df['hist'] = df['macd'] - df['signal']
+                
+                # 儲存到本地快取
+                df.to_csv(cache_file, index=False)
+            
+            # --- 核心邏輯：分倉與評選 ---
+            last_price = df['close'].iloc[-1]
+            year_high = df['close'].max()
+            year_low = df['close'].min()
+            level_percentile = (last_price - year_low) / (year_high - year_low) if (year_high - year_low) != 0 else 0
+            
+            ma20_last = df['ma20'].iloc[-1]
+            ma240_last = df['ma240'].iloc[-1]
+            dist_to_ma20 = (last_price / ma20_last - 1) if not np.isnan(ma20_last) else 100
+            dist_to_ma240 = (last_price / ma240_last - 1) if not np.isnan(ma240_last) else 0
+            
+            # MACD 狀態
+            last_hist = df['hist'].iloc[-1]
+            prev_hist = df['hist'].iloc[-2]
+            is_gold_cross = prev_hist <= 0 and last_hist > 0
+            macd_status = "🚀 金叉發動" if is_gold_cross else "趨勢中"
+            
+            # 盈餘動能檢查
+            rev_status, is_rev_ok = check_revenue_momentum(code)
+            
+            # --- 分享策略判定 ---
+            if last_price > ma240_last and not np.isnan(ma240_last):
+                # 策略 B: 強勢股回測 (Growth Pullback) - 30% 資金
+                # 買點：靠近 MA20，停損：MA20 - 5%，目標：買點 + 15%
+                buy_zone = ma20_last
+                stop_loss = ma20_last * 0.95
+                target = buy_zone * 1.15
+                actionable_str = f"📈強勢 | 買:{buy_zone:.1f} | 標:{target:.1f} | 損:{stop_loss:.1f}"
+                
+                # 分數：回測 20 日線越近分數越高 (加成 70%)，加上 MACD 加分 (30%)
+                pullback_score = (1 - min(abs(dist_to_ma20), 0.1)/0.1) * 70
+                if is_gold_cross: pullback_score += 30
+                final_score = pullback_score
+            else:
+                # 策略 A: 價值防禦 (Value + Level) - 70% 資金
+                # 買點：靠近年線或前低，停損：前低破底，目標：年線 + 20%
+                buy_zone = min(last_price, ma240_last) if not np.isnan(ma240_last) else last_price
+                stop_loss = year_low * 0.95
+                target = ma240_last * 1.2 if not np.isnan(ma240_last) else buy_zone * 1.2
+                actionable_str = f"🛡價值 | 買:{buy_zone:.1f} | 標:{target:.1f} | 損:{stop_loss:.1f}"
+                
+                # 分數：位階低 (70%) + 年線支撐 (30%)
+                value_score = (1 - level_percentile) * 70
+                if -0.05 < dist_to_ma240 < 0.05:
+                    value_score += 30
+                final_score = value_score
+                
+            # --- 篩選 ---
+            # 如果營收衰退，則排到最下面 (分數砍半)
+            if not is_rev_ok:
+                final_score *= 0.1
+                
+            # 取得名稱 (已在迴圈開頭取得)
+            # stock_name = code_to_name.get(code, "未知")
+            
+            data_list.append({
+                "代碼": code,
+                "名稱": stock_name,
+                "最新價格": last_price,
+                "操作建議": actionable_str,
+                "一年位階": f"{level_percentile*100:.1f}%",
+                "年線乖離": f"{dist_to_ma240*100:.1f}%",
+                "MA20乖離": f"{dist_to_ma20*100:.1f}%",
+                "MACD狀態": macd_status,
+                "綜合評分": final_score
+            })
+            
+            history_data[code] = df
+            
+        except Exception as e:
+            st.warning(f"無法取得 {code} 的資料: {str(e)}")
+            
+    if not data_list:
+        return pd.DataFrame(columns=["代碼", "名稱", "最新價格", "操作建議", "一年位階", "年線乖離", "MA20乖離", "MACD狀態", "綜合評分"]), {}
+        
+    # 清除進度顯示
+    status_placeholder.empty()
+    
+    results_df = pd.DataFrame(data_list).sort_values("綜合評分", ascending=False)
+    return results_df, history_data
+
+def plot_financial_charts(df, title):
+    # 建立具有兩行子圖的圖表
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 
+                        vertical_spacing=0.05, 
+                        subplot_titles=(f'{title} K線圖', 'MACD 指標'),
+                        row_width=[0.3, 0.7])
+
+    # 1. K線圖
+    fig.add_trace(go.Candlestick(
+        x=df['ts'], open=df['open'], high=df['high'], 
+        low=df['low'], close=df['close'], name='K線'
+    ), row=1, col=1)
+
+    # 加入均線
+    fig.add_trace(go.Scatter(x=df['ts'], y=df['ma20'], name='MA20', line=dict(color='yellow', width=1)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=df['ts'], y=df['ma60'], name='MA60', line=dict(color='cyan', width=1)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=df['ts'], y=df['ma240'], name='MA240 (年線)', line=dict(color='red', width=2)), row=1, col=1)
+
+    # 2. MACD 指標
+    fig.add_trace(go.Scatter(x=df['ts'], y=df['macd'], name='MACD', line=dict(color='blue', width=1.5)), row=2, col=1)
+    fig.add_trace(go.Scatter(x=df['ts'], y=df['signal'], name='Signal', line=dict(color='orange', width=1.5)), row=2, col=1)
+    
+    # MACD 柱狀圖 (Histogram)
+    colors = ['red' if val >= 0 else 'green' for val in df['hist']]
+    fig.add_trace(go.Bar(x=df['ts'], y=df['hist'], name='Histogram', marker_color=colors), row=2, col=1)
+
+    # 佈局設定
+    fig.update_layout(
+        height=600,
+        showlegend=True,
+        xaxis_rangeslider_visible=False,
+        template="plotly_dark",
+        margin=dict(l=50, r=50, t=50, b=50)
+    )
+    
+    st.plotly_chart(fig, width="stretch")
+
+# --- 自動化掃描與顯示 ---
+# 如果正在顯示建議清單，可以選擇先不自動掃描，避免干擾使用者操作
+current_watchlist_key = ",".join(watchlist)
+should_sync = False
+
+if "results" not in st.session_state:
+    # 第一次啟動時，若沒有建議清單正在顯示，則自動啟動
+    if "last_suggestions" not in st.session_state:
+        should_sync = True
+elif st.session_state.get("last_watchlist") != current_watchlist_key:
+    # 清單有變動，必定同步
+    should_sync = True
+
+# 執行同步
+if should_sync or st.sidebar.button("🚀 開始/手動掃描市場"):
+    st.toast("🔍 啟動市場掃描...", icon="🚀")
+    with st.spinner('🔄 市場數據分析同步中...'):
+        st.session_state.last_watchlist = current_watchlist_key
+        results, history_data = fetch_and_analyze(watchlist)
+        st.session_state.results = results
+        st.session_state.history_data = history_data
+        st.session_state.last_update = datetime.now().strftime("%H:%M:%S")
+        
+        if results.empty:
+            st.warning("⚠️ 掃描完成，但在現有清單中找不到可分析的有效數據。")
+        else:
+            st.toast("✅ 數據同步完成！", icon="📉")
+
+# 顯示最後更新時間
+if "last_update" in st.session_state:
+    st.sidebar.caption(f"最後更新時間: {st.session_state.last_update}")
+            
+if "results" in st.session_state:
+    results = st.session_state.results
+    history_data = st.session_state.history_data
+    
+    # --- 自動名稱修復機制 ---
+    # 如果目前的結果中有 '未知'，且全域 mapping 已經準備好，則自動補完名稱
+    if (results['名稱'] == '未知').any():
+        code_map = get_stock_name_map(api)
+        if code_map:
+            # 使用列表推導式或 map 來更新名稱，避免直接修改視圖引發警告
+            results['名稱'] = results['代碼'].apply(lambda c: code_map.get(c, '未知'))
+            st.session_state.results = results
+
+    # 顯示首選
+    top_pick = results.iloc[0]
+    st.success(f"🛡️ 今日最值得佈局：**{top_pick['代碼']} {top_pick['名稱']}** ( {top_pick['操作建議']} | 評分：{top_pick['綜合評分']:.1f})")
+    
+    # --- 指標說明 ---
+    with st.expander("💡 投資策略與操作建議 (70% 價值防禦 + 30% 強勢回測)"):
+        st.markdown("""
+        本系統採用 **「分倉分流」** 策略，並自動剔除營收衰退標的，計算出最具勝算的行動點位：
+        - **🛡️ 價值防禦 (70% 資金)**：
+            - **適用**：長線有撐的穩健股 (股價低位階或具年線保護)。
+            - **操作**：建議在**靠近年線或前低**時買進，不破底就續抱，中長線目標看**年線之上 20%**。
+        - **📈 強勢回測 (30% 資金)**：
+            - **適用**：多頭趨勢中、回測支撐的成長股 (如台積電、美股巨頭，股價在年線之上)。
+            - **操作**：建議在**靠近 20 日線 (MA20)** 動能轉強時買進，跌破 MA20 停損 (-5%)，短波段停利抓 **+15%**。
+        - **MACD 狀態**：`🚀 金叉發動` 代表短線動能剛由空轉多。
+        """)
+
+    # --- 自定義列表 (含垃圾桶移除功能) ---
+    st.markdown("### 📊 目前追蹤清單")
+    
+    # 表頭 (依照操作建議排版)
+    cols = st.columns([1.5, 1, 1, 1, 1, 3.5, 0.5])
+    headers = ["股票", "最新價", "位階", "年線乖離", "MA20乖離", "操作建議 (買點/目標/停損)", ""]
+    for col, header in zip(cols, headers):
+        col.write(f"**{header}**")
+    
+    # 內容列
+    for index, row in results.iterrows():
+        cols = st.columns([1.5, 1, 1, 1, 1, 3.5, 0.5])
+        cols[0].write(f"**{row['代碼']}** {row['名稱']}")
+        
+        # 處理載入失敗的數值顯示
+        if row['最新價格'] == 0:
+            cols[1].write("-")
+        else:
+            cols[1].write(f"{row['最新價格']:.1f}")
+            
+        cols[2].write(row['一年位階'])
+        cols[3].write(row['年線乖離'])
+        cols[4].write(row['MA20乖離'])
+        cols[5].markdown(f"**`{row['操作建議']}`**")
+        if cols[6].button("🗑️", key=f"del_{row['代碼']}"):
+            st.session_state.watchlist.remove(row['代碼'])
+            save_watchlist(st.session_state.watchlist)
+            # 同步清除結果，強制下次執行時重新計算
+            if "results" in st.session_state:
+                del st.session_state.results
+            st.rerun()
+    
+    st.divider()
+    
+    # 互動式圖表選擇
+    selected_code = st.selectbox("選擇要查看詳情的股票", results['代碼'].tolist())
+    
+    if selected_code in history_data:
+        plot_financial_charts(history_data[selected_code], selected_code)
+else:
+    st.info("🔄 正在初始化市場數據，或請點擊左側「🚀 手動重新掃描數據」。")
