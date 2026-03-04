@@ -1,4 +1,13 @@
 import streamlit as st
+import os
+
+# --- Mac SSL 憑證修正 (解決 [SSL: CERTIFICATE_VERIFY_FAILED]) ---
+try:
+    import certifi
+    os.environ['SSL_CERT_FILE'] = certifi.where()
+except ImportError:
+    pass
+
 import shioaji as sj
 import pandas as pd
 import numpy as np
@@ -10,6 +19,11 @@ import difflib
 import json
 import requests
 import yfinance as yf
+
+# --- 全域設定 ---
+CACHE_DIR = "cache"
+if not os.path.exists(CACHE_DIR):
+    os.makedirs(CACHE_DIR)
 
 # --- 頁面設定 ---
 st.set_page_config(page_title="量化選股戰情室", layout="wide")
@@ -44,48 +58,18 @@ def init_api():
             st.error(f"API 登入失敗: {e}")
     return api
 
-# 側邊欄：API 狀態與手動重整
+# 側邊欄：API 狀態
 api = init_api()
 
-with st.sidebar.expander("🛠️ 系統連線狀態", expanded=False):
-    # 檢查是否登入成功 (session 是否有效)
+# 確保合約在登入後只抓一次 (強制下載模式)
+if not st.session_state.get('contracts_fetched', False):
     try:
-        accounts = api.list_accounts()
-        if not accounts:
-            st.error("❌ API 尚未登入")
-        else:
-            st.success(f"✅ 已連線: {accounts[0].account_id}")
+        api.fetch_contracts()
+        if not hasattr(api.Contracts, 'Stocks') or len(dir(api.Contracts.Stocks)) < 3:
+            api.fetch_contracts(contract_download=True)
+        st.session_state.contracts_fetched = True
     except:
-        st.error("❌ API 連線異常")
-
-    # 確保合約在登入後只抓一次 (強制下載模式)
-    if not st.session_state.get('contracts_fetched', False):
-        with st.status("🔄 正在同步市場...", expanded=False) as status:
-            try:
-                api.fetch_contracts()
-                if not hasattr(api.Contracts, 'Stocks') or len(dir(api.Contracts.Stocks)) < 3:
-                    api.fetch_contracts(contract_download=True)
-                st.session_state.contracts_fetched = True
-                status.update(label="✅ 同步完成", state="complete")
-            except Exception as e:
-                status.update(label=f"⚠️ 同步不完全: {e}", state="error")
-    else:
-        st.caption("✅ 市場資料已同步")
-
-col1, col2 = st.sidebar.columns(2)
-if col1.button("🔄 重連 API"):
-    st.cache_resource.clear()
-    st.cache_data.clear()
-    if 'last_chance_tried' in st.session_state:
-        del st.session_state.last_chance_tried
-    st.rerun()
-
-if col2.button("🧹 深度清除", help="清除所有 Session 與資源快取，重新登入"):
-    st.cache_resource.clear()
-    st.cache_data.clear()
-    for key in list(st.session_state.keys()):
-        del st.session_state[key]
-    st.rerun()
+        pass
 
 @st.cache_data(show_spinner=False)
 def get_stock_name_map(_api):
@@ -146,40 +130,6 @@ try:
         st.sidebar.caption("💡 已啟用跨市場備用清單，NVDA 等美股仍可搜尋。")
 except Exception as e:
     st.sidebar.caption(f"📊 標的載入中...")
-
-if st.sidebar.checkbox("🔍 偵錯：市場探險家"):
-    try:
-        st.sidebar.markdown("### 📡 核心結構偵測")
-        # 顯示 Contracts 與 Stocks 的屬性
-        c_attrs = [a for a in dir(api.Contracts) if not a.startswith('_')]
-        st.sidebar.write(f"Contracts: {', '.join(c_attrs)}")
-        
-        if hasattr(api.Contracts, 'Stocks'):
-            stocks = api.Contracts.Stocks
-            s_attrs = [a for a in dir(stocks) if not a.startswith('_')]
-            st.sidebar.write(f"Stocks: {', '.join(s_attrs)}")
-            
-            # 如果沒有 US 屬性，顯示提示
-            if not hasattr(stocks, 'US'):
-                st.sidebar.info("📌 此版本函式庫不包含 `.US` 屬性。")
-            else:
-                st.sidebar.success("✅ 偵測到原生美股支援屬性。")
-        
-        st.sidebar.markdown("---")
-        st.sidebar.caption(f"目前對應表總數: {len(get_stock_name_map(api))} 檔")
-    except Exception as e:
-        st.sidebar.error(f"偵測失敗: {e}")
-
-# --- 快取管理 ---
-CACHE_DIR = "cache"
-if not os.path.exists(CACHE_DIR):
-    os.makedirs(CACHE_DIR)
-
-if st.sidebar.button("🗑️ 清除本地快取"):
-    for f in os.listdir(CACHE_DIR):
-        os.remove(os.path.join(CACHE_DIR, f))
-    st.sidebar.success("快取已清除")
-    st.rerun()
 
 # --- 輔助函式 ---
 WATCHLIST_FILE = "watchlist.json"
@@ -413,9 +363,13 @@ def fetch_and_analyze(watchlist):
                     
                     # 2. 如果標準路徑找不到，嘗試全域掃描 (防止節點名稱變更)
                     if not contract:
-                        def find_in_obj(obj):
+                        def find_in_obj(obj, depth=0):
+                            if depth > 3: return None # 限制搜尋深度以防卡死
                             for a in dir(obj):
-                                if a.startswith('_') or a in ['append', 'get', 'keys', 'post_init']: continue
+                                if (a.startswith('_') or 
+                                    a.startswith('model_') or 
+                                    a in ['append', 'get', 'keys', 'post_init']): 
+                                    continue
                                 try:
                                     sub = getattr(obj, a)
                                     if hasattr(sub, '__getitem__'):
@@ -425,7 +379,7 @@ def fetch_and_analyze(watchlist):
                                         except: pass
                                     # 繼續往下一層找 (深度限制)
                                     if hasattr(sub, '__dict__'):
-                                        res = find_in_obj(sub)
+                                        res = find_in_obj(sub, depth + 1)
                                         if res: return res
                                 except: pass
                             return None
@@ -434,14 +388,15 @@ def fetch_and_analyze(watchlist):
                     if not contract:
                         status_msg = "❌ 找不到合約"
                         if not st.session_state.get('last_chance_tried', False):
-                            st.info(f"🔍 正在刷新系統合約以尋找 {code}...")
+                            st.toast(f"🔍 正在刷新系統合約以尋找 {code}...", icon="🔄")
                             try:
+                                # 加入超時限制 (如果有支援的話)
                                 api.fetch_contracts(contract_download=True)
-                                # 在原地重新嘗試尋找
+                                # 刷新後立刻再找一次
                                 contract = find_in_obj(api.Contracts.Stocks)
-                            except: pass
+                            except Exception as e:
+                                st.warning(f"合約同步發生異常: {e}")
                             st.session_state.last_chance_tried = True
-                            # 不再執行 st.rerun()，避免分析流程中斷
                             
                     if not contract:
                         st.warning(f"找不到代碼 {code} 的合約，請確認代碼是否正確。")
@@ -524,10 +479,13 @@ def fetch_and_analyze(watchlist):
             dist_to_ma240 = (last_price / ma240_last - 1) if not np.isnan(ma240_last) else 0
             
             # MACD 狀態
-            last_hist = df['hist'].iloc[-1]
-            prev_hist = df['hist'].iloc[-2]
-            is_gold_cross = prev_hist <= 0 and last_hist > 0
-            macd_status = "🚀 金叉發動" if is_gold_cross else "趨勢中"
+            if len(df) >= 2:
+                last_hist = df['hist'].iloc[-1]
+                prev_hist = df['hist'].iloc[-2]
+                is_gold_cross = prev_hist <= 0 and last_hist > 0
+                macd_status = "🚀 金叉發動" if is_gold_cross else "趨勢中"
+            else:
+                macd_status = "資料不足"
             
             # 盈餘動能檢查
             rev_status, is_rev_ok = check_revenue_momentum(code)
@@ -541,9 +499,9 @@ def fetch_and_analyze(watchlist):
                 target = buy_zone * 1.15
                 actionable_str = f"📈強勢 | 買:{buy_zone:.1f} | 標:{target:.1f} | 損:{stop_loss:.1f}"
                 
-                # 分數：回測 20 日線越近分數越高 (加成 70%)，加上 MACD 加分 (30%)
-                pullback_score = (1 - min(abs(dist_to_ma20), 0.1)/0.1) * 70
-                if is_gold_cross: pullback_score += 30
+                # 分數：回測 20 日線越近分數越高 (加成 50%)，加上 MACD 加分 (50%)
+                pullback_score = (1 - min(abs(dist_to_ma20), 0.1)/0.1) * 50
+                if is_gold_cross: pullback_score += 50
                 final_score = pullback_score
             else:
                 # 策略 A: 價值防禦 (Value + Level) - 70% 資金
@@ -553,10 +511,10 @@ def fetch_and_analyze(watchlist):
                 target = ma240_last * 1.2 if not np.isnan(ma240_last) else buy_zone * 1.2
                 actionable_str = f"🛡價值 | 買:{buy_zone:.1f} | 標:{target:.1f} | 損:{stop_loss:.1f}"
                 
-                # 分數：位階低 (70%) + 年線支撐 (30%)
-                value_score = (1 - level_percentile) * 70
+                # 分數：位階低 (50%) + 年線支撐 (50%)
+                value_score = (1 - level_percentile) * 50
                 if -0.05 < dist_to_ma240 < 0.05:
-                    value_score += 30
+                    value_score += 50
                 final_score = value_score
                 
             # --- 篩選 ---
@@ -644,7 +602,8 @@ elif st.session_state.get("last_watchlist") != current_watchlist_key:
     should_sync = True
 
 # 執行同步
-if should_sync or st.sidebar.button("🚀 開始/手動掃描市場"):
+scan_btn = st.sidebar.button("🚀 重新掃描市場", use_container_width=True, type="primary")
+if should_sync or scan_btn:
     st.toast("🔍 啟動市場掃描...", icon="🚀")
     with st.spinner('🔄 市場數據分析同步中...'):
         st.session_state.last_watchlist = current_watchlist_key
@@ -676,17 +635,20 @@ if "results" in st.session_state:
             st.session_state.results = results
 
     # 顯示首選
-    top_pick = results.iloc[0]
-    st.success(f"🛡️ 今日最值得佈局：**{top_pick['代碼']} {top_pick['名稱']}** ( {top_pick['操作建議']} | 評分：{top_pick['綜合評分']:.1f})")
+    if not results.empty:
+        top_pick = results.iloc[0]
+        st.success(f"🛡️ 今日最值得佈局：**{top_pick['代碼']} {top_pick['名稱']}** ( {top_pick['操作建議']} | 評分：{top_pick['綜合評分']:.1f})")
+    else:
+        st.warning("⚠️ 目前清單中尚無有效的分析結果，請點擊「🚀 重新掃描」。")
     
     # --- 指標說明 ---
-    with st.expander("💡 投資策略與操作建議 (70% 價值防禦 + 30% 強勢回測)"):
+    with st.expander("💡 投資策略與操作建議 (50% 價值防禦 + 50% 強勢回測)"):
         st.markdown("""
-        本系統採用 **「分倉分流」** 策略，並自動剔除營收衰退標的，計算出最具勝算的行動點位：
-        - **🛡️ 價值防禦 (70% 資金)**：
+        本系統目前採用 **「50/50 均衡配置」** 策略，並自動剔除營收衰退標的，計算出最具勝算的行動點位：
+        - **🛡️ 價值防禦 (50% 資金)**：
             - **適用**：長線有撐的穩健股 (股價低位階或具年線保護)。
             - **操作**：建議在**靠近年線或前低**時買進，不破底就續抱，中長線目標看**年線之上 20%**。
-        - **📈 強勢回測 (30% 資金)**：
+        - **📈 強勢回測 (50% 資金)**：
             - **適用**：多頭趨勢中、回測支撐的成長股 (如台積電、美股巨頭，股價在年線之上)。
             - **操作**：建議在**靠近 20 日線 (MA20)** 動能轉強時買進，跌破 MA20 停損 (-5%)，短波段停利抓 **+15%**。
         - **MACD 狀態**：`🚀 金叉發動` 代表短線動能剛由空轉多。
