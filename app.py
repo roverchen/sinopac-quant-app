@@ -29,6 +29,25 @@ if not os.path.exists(CACHE_DIR):
 
 # --- 頁面設定 ---
 st.set_page_config(page_title="量化選股戰情室", layout="wide")
+
+# --- 手機版與表格優化 CSS ---
+st.markdown("""
+<style>
+    /* 表格容器支援橫向捲動 */
+    .stTableContainer {
+        overflow-x: auto !important;
+    }
+    /* 防止手機橫向滑動觸發瀏覽器上一頁/重新整理 */
+    html, body, [data-testid="stAppViewContainer"] {
+        overscroll-behavior-x: none !important;
+    }
+    /* 讓表格內容更緊湊以適配手機 */
+    div[data-testid="stHorizontalBlock"] {
+        min-width: 600px;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 st.title("📈 台美股量化選股系統")
 
 # --- 初始化 API ---
@@ -553,8 +572,11 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
             # 根據滑桿權重結合分數
             final_score = (defense_weight * value_score) + ((1 - defense_weight) * pullback_score)
             
-            # 決定顯示在表格中的操作建議 (依據目前較高分的策略)
-            if pullback_score > value_score:
+            # 決定顯示在表格中的操作建議 (依據目前較高權重的策略得分)
+            weighted_value_score = defense_weight * value_score
+            weighted_pullback_score = (1 - defense_weight) * pullback_score
+            
+            if weighted_pullback_score >= weighted_value_score:
                 target = growth_buy_zone * 1.15
                 stop_loss = growth_buy_zone * 0.95
                 actionable_str = f"📈強勢 | 買:{growth_buy_zone:.1f} | 標:{target:.1f} | 損:{stop_loss:.1f} | 評分：{final_score:.1f}"
@@ -644,7 +666,11 @@ def rescore_results(history_data, api, defense_weight):
             
             final_score = (defense_weight * value_score) + ((1 - defense_weight) * pullback_score)
             
-            if pullback_score > value_score:
+            # 雙策略加權比拼標籤
+            weighted_value_score = defense_weight * value_score
+            weighted_pullback_score = (1 - defense_weight) * pullback_score
+            
+            if weighted_pullback_score >= weighted_value_score:
                 target = growth_buy_zone * 1.15
                 stop_loss = growth_buy_zone * 0.95
                 actionable_str = f"📈強勢 | 買:{growth_buy_zone:.1f} | 標:{target:.1f} | 損:{stop_loss:.1f} | 評分：{final_score:.1f}"
@@ -820,7 +846,9 @@ if "results" in st.session_state:
     if is_big:
         st.info(f"📍 目前顯示全市場分析中第 {start_idx+1} 至 {end_idx} 檔 (共 {total_rows} 檔)")
     
-    # 表頭 (依照操作建議排版)
+    # 使用容器包裹表格以支援手機版橫向捲動
+    with st.container():
+        # 表頭 (依照操作建議排版)
     cols = st.columns([1.5, 1, 1, 1, 1, 3.5, 0.5])
     headers = ["股票", "最新價", "位階", "年線乖離", "MA20乖離", "操作建議 (買點/目標/停損)", ""]
     for col, header in zip(cols, headers):
