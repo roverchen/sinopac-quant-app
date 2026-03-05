@@ -791,6 +791,13 @@ def rescore_results(results_df, defense_weight):
     """僅重新計算分數，不重新抓取資料 (直接使用 DataFrame 內的預分析資料，極速回應)"""
     if results_df.empty: return results_df
     
+    # --- [修正] 結構檢查：防止快取版本不相容導致 KeyError ---
+    required_cols = ['_v_score', '_p_score', '_is_rev_ok', '_g_buy', '_v_buy', '_ma_base', '_has_ma240', '_y_low']
+    if not all(col in results_df.columns for col in required_cols):
+        # 如果欄位不齊，可能是舊版快取。不報錯，直接回傳原始資料，並提示重新掃描。
+        print("[Notice] Old cache detected in rescore_results, skipping vector update.")
+        return results_df
+    
     # 複製一份避免警告
     df = results_df.copy()
     
@@ -870,11 +877,19 @@ should_sync = False
 if "results" not in st.session_state:
     cache_data = load_results_cache()
     if cache_data:
-        st.session_state.results = cache_data["df"]
-        st.session_state.last_update = cache_data["timestamp"]
-        st.session_state.is_big_scan = cache_data.get("is_big_scan", False)
-        st.session_state.last_watchlist = current_watchlist_key
-        st.toast("💾 已從快取恢復上次數據", icon="📥")
+        # 檢查快取資料結構是否相容 (版本遷移檢查)
+        cache_df = cache_data.get("df", pd.DataFrame())
+        if "_ma_base" in cache_df.columns:
+            st.session_state.results = cache_df
+            st.session_state.last_update = cache_data["timestamp"]
+            st.session_state.is_big_scan = cache_data.get("is_big_scan", False)
+            st.session_state.last_watchlist = current_watchlist_key
+            st.toast("💾 已從快取恢復上次數據", icon="📥")
+        else:
+            # 如果快取太舊，則不載入，強制觸發新掃描
+            print("[Incompatibility] Old cache version detected, ignoring file.")
+            st.sidebar.warning("⚠️ 發現舊版快取資料，將自動進行全新掃描以套用新功能。")
+            should_sync = True
     else:
         # 完全沒快取時，才考慮是否自動啟動 (謹慎觸發)
         if "last_suggestions" not in st.session_state:
