@@ -33,11 +33,10 @@ st.set_page_config(page_title="量化選股戰情室", layout="wide")
 # --- 手機版、表格優化與穩定連線 CSS ---
 st.markdown("""
 <style>
-    /* 1. 終極攔截：強制全網頁只聽從「垂直滑動」，徹底斷絕瀏覽器「水平側滑翻頁」功能 */
+    /* 1. 終極攔截：強制全網頁禁止「任何向外溢出手勢」，杜絕「回上一頁」與「下拉重整」 */
     html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"], #root {
-        overscroll-behavior-x: none !important;
-        overscroll-behavior-y: auto !important;
-        touch-action: pan-y !important; /* 核心：禁止任何水平手勢導航 */
+        overscroll-behavior: none !important; /* 同時鎖定 X 與 Y 軸的瀏覽器預設手勢 */
+        touch-action: pan-y !important; /* 僅允許單純的垂直捲動 */
         overflow-x: hidden !important;
     }
     
@@ -392,7 +391,7 @@ if 'suggestions' not in st.session_state:
 if 'defense_weight' not in st.session_state:
     st.session_state.defense_weight = 0.5
 if 'rows_per_page' not in st.session_state:
-    st.session_state.rows_per_page = 20
+    st.session_state.rows_per_page = 10
 if 'current_page' not in st.session_state:
     st.session_state.current_page = 0
 
@@ -406,9 +405,9 @@ st.session_state.defense_weight = st.sidebar.slider(
 )
 st.sidebar.caption(f"目前權重: {100-st.session_state.defense_weight*100:.0f}% 成長 / {st.session_state.defense_weight*100:.0f}% 防禦")
 
-# 每頁顯示數量
+# 每頁顯示數量 (預設 10 檔以減輕手機負載)
 st.session_state.rows_per_page = st.sidebar.select_slider(
-    "📄 每頁顯示數量",
+    "📄 每頁顯示數量 (手機建議 10)",
     options=[10, 20, 50, 100],
     value=st.session_state.rows_per_page
 )
