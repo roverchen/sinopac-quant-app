@@ -33,12 +33,47 @@ st.set_page_config(page_title="量化選股戰情室", layout="wide")
 # --- 手機版、表格優化與穩定連線 CSS ---
 st.markdown("""
 <style>
-    /* 1. 核心保護：鎖定 Streamlit 主容器的溢出行為，切斷瀏覽器「上下頁」手勢 */
-    #root, .stApp {
-        overscroll-behavior: contain !important;
+    /* 1. 深度鎖定：徹底防止手機瀏覽器橫向手勢干擾，確保連線穩定 */
+    html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
+        overscroll-behavior-x: none !important;
+        overscroll-behavior-y: auto !important;
+        touch-action: pan-y !important;
     }
-    [data-testid="stMain"] {
-        overscroll-behavior: contain !important;
+    
+    /* 2. 側邊欄開關強化 (針對手機版明顯化) */
+    @media (max-width: 768px) {
+        [data-testid="stSidebarCollapsedControl"] {
+            background-color: #007bff !important;
+            border-radius: 50% !important;
+            padding: 5px !important;
+            box-shadow: 0 0 15px rgba(0, 123, 255, 0.8) !important;
+            left: 10px !important;
+            top: 10px !important;
+            width: 45px !important;
+            height: 45px !important;
+            z-index: 999999 !important;
+        }
+        [data-testid="stSidebarCollapsedControl"] svg {
+            color: white !important;
+            width: 30px !important;
+            height: 30px !important;
+        }
+        /* 側邊欄頂部提示文字 */
+        .mobile-hint {
+            background: linear-gradient(90deg, #007bff, #00d4ff);
+            color: white;
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+            font-weight: bold;
+            margin-bottom: 15px;
+            font-size: 0.9rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        }
+    }
+    /* 電腦版隱藏提示 */
+    @media (min-width: 769px) {
+        .mobile-hint { display: none !important; }
     }
     
     /* 2. 響應式佈局：預設隱藏手機版標籤 */
@@ -103,6 +138,9 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("📈 台美股量化選股系統")
+
+# --- 手機版側邊欄提示 ---
+st.markdown('<div class="mobile-hint">💡 點擊左上角 ☰ 符號即可調整策略比重</div>', unsafe_allow_html=True)
 
 # --- 初始化 API ---
 @st.cache_resource
