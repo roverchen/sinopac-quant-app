@@ -33,12 +33,12 @@ st.set_page_config(page_title="量化選股戰情室", layout="wide")
 # --- 手機版、表格優化與穩定連線 CSS ---
 st.markdown("""
 <style>
-    /* 1. 防止手機瀏覽器橫向滑動觸發「上一頁」導致斷線，但保留側邊欄滑動 */
-    html, body {
-        overscroll-behavior-x: none !important;
+    /* 1. 核心保護：鎖定 Streamlit 主容器的溢出行為，切斷瀏覽器「上下頁」手勢 */
+    #root, .stApp {
+        overscroll-behavior: contain !important;
     }
     [data-testid="stMain"] {
-        overscroll-behavior-x: none !important;
+        overscroll-behavior: contain !important;
     }
     
     /* 2. 響應式佈局：預設隱藏手機版標籤 */
