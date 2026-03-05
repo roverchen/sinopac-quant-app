@@ -33,79 +33,70 @@ st.set_page_config(page_title="量化選股戰情室", layout="wide")
 # --- 手機版、表格優化與穩定連線 CSS ---
 st.markdown("""
 <style>
-    /* 1. 深度鎖定：徹底防止手機瀏覽器橫向滑動觸發「上一頁/重新整理」導致斷線 */
+    /* 1. 深度鎖定：徹底防止手機瀏覽器橫向手勢干擾 */
     html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
         overscroll-behavior-x: none !important;
         overscroll-behavior-y: auto !important;
         touch-action: pan-y !important;
     }
     
-    /* 2. 版面容器優化 */
-    [data-testid="stAppViewBlockContainer"] {
-        max-width: 100vw !important;
-        padding-left: 0.5rem !important;
-        padding-right: 0.5rem !important;
-    }
-
-    /* 3. 響應式佈局：電腦版為表格，手機版自動轉為卡片 */
-    
-    /* 預設隱藏手機版標籤 */
+    /* 2. 響應式佈局：預設隱藏手機版標籤 */
     .mobile-label { display: none; }
 
     @media (max-width: 768px) {
-        /* 隱藏電腦版表頭 */
-        .results-header { display: none !important; }
+        /* 隱藏電腦版表頭提示 */
+        [data-testid="stHeader"] { display: none; }
+        .desktop-header { display: none !important; }
         
-        /* 讓每一行變成獨立卡片 */
-        .result-row {
-            background-color: #1e1e1e;
-            border-radius: 12px;
-            padding: 16px;
-            margin-bottom: 20px;
-            border-left: 5px solid #00d4ff;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.4);
-        }
-
-        /* 強制所有欄位垂直堆疊 */
+        /* 強制所有欄位垂直堆疊 (關鍵：針對 st.columns 內部容器) */
         [data-testid="column"] {
             width: 100% !important;
             flex: 1 1 100% !important;
             min-width: 100% !important;
-            margin-bottom: 8px !important;
-        }
-
-        /* 顯示手機版資訊標籤 */
-        .mobile-label { 
-            display: inline; 
-            color: #888;
-            font-size: 0.85rem;
-            margin-right: 4px;
+            margin-bottom: 2px !important;
         }
         
-        /* 操作建議區塊加強 */
-        .result-row code {
-            display: block;
-            width: 100%;
-            padding: 10px;
-            background: #2b2b2b;
-            color: #00ff00;
-            border-radius: 4px;
-            margin: 10px 0;
+        /* 讓原生容器變成漂亮的卡片樣式 */
+        [data-testid="stVerticalBlockBorderWrapper"] {
+            border-left: 5px solid #00d4ff !important;
+            background-color: #1e1e1e !important;
+            border-radius: 12px !important;
+            margin-bottom: 12px !important;
         }
 
-        /* 按鈕加寬 */
+        /* 顯示手機標籤 */
+        .mobile-label { 
+            display: inline-block; 
+            color: #888;
+            font-size: 0.8rem;
+            margin-right: 6px;
+            width: 70px;
+        }
+
+        /* 優化操作建議顯示 */
+        code {
+            display: block !important;
+            width: 100% !important;
+            padding: 10px !important;
+            background: #2b2b2b !important;
+            border-radius: 4px !important;
+            margin: 5px 0 !important;
+        }
+
+        /* 讓按鈕在手機上更好點擊 */
         .stButton button {
             width: 100% !important;
-            height: 45px !important;
+            height: 40px !important;
+            margin-top: 5px !important;
         }
     }
 
     @media (min-width: 769px) {
+        /* 電腦版限制最小寬度以防重疊 */
         div[data-testid="stHorizontalBlock"] {
             min-width: 850px !important;
             flex-wrap: nowrap !important;
         }
-        .mobile-divider { display: none; }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -905,53 +896,49 @@ if "results" in st.session_state:
     end_idx = min(start_idx + rows_per_page, total_rows)
     paged_results = results.iloc[start_idx:end_idx]
 
-    # --- 渲染邏輯：單一路徑響應式介面 (透過 CSS 自動切換表格/卡片) ---
+    # --- 渲染邏輯：單一路徑原生容器 (最穩定方案) ---
     
     # 1. 顯示表頭 (電腦版會顯示，手機版透過 CSS 隱藏)
-    st.markdown('<div class="results-header">', unsafe_allow_html=True)
+    st.markdown('<div class="desktop-header">', unsafe_allow_html=True)
     h_cols = st.columns([1.5, 1, 1, 1, 1, 3.5, 0.5])
     headers = ["股票", "最新價", "位階", "年線乖離", "MA20乖離", "操作建議 (買點/目標/停損)", ""]
     for col, header in zip(h_cols, headers):
         col.write(f"**{header}**")
     st.markdown('</div>', unsafe_allow_html=True)
     
-    # 2. 顯示內容 (透過 CSS 在手機版轉化為卡片)
+    # 2. 顯示內容 (每一家股票一個穩定容器，手機自動轉卡片)
     for index, row in paged_results.iterrows():
-        st.markdown(f'<div class="result-row" id="row-{row["代碼"]}">', unsafe_allow_html=True)
-        cols = st.columns([1.5, 1, 1, 1, 1, 3.5, 0.5])
-        
-        # 欄位一：股票名稱
-        cols[0].write(f"**{row['代碼']}** {row['名稱']}")
-        
-        # 欄位二：最新價 (手機版會標註標籤)
-        price_val = f"{row['最新價格']:.1f}" if row['最新價格'] != 0 else "-"
-        cols[1].markdown(f'<span class="mobile-label">最新價: </span><b>{price_val}</b>', unsafe_allow_html=True)
-        
-        # 欄位三～五：指標
-        cols[2].markdown(f'<span class="mobile-label">位階: </span>{row["一年位階"]}', unsafe_allow_html=True)
-        cols[3].markdown(f'<span class="mobile-label">年線乖離: </span>{row["年線乖離"]}', unsafe_allow_html=True)
-        cols[4].markdown(f'<span class="mobile-label">MA20乖離: </span>{row["MA20乖離"]}', unsafe_allow_html=True)
-        
-        # 欄位六：操作建議
-        cols[5].markdown(f"**`{row['操作建議']}`**")
-        
-        # 欄位七：動作按鈕
-        action_icon = "🗑️" if row['代碼'] in st.session_state.watchlist else "➕"
-        btn_label = action_icon if "is_big_scan" in st.session_state else f"{action_icon} 加入/移除"
-        if cols[6].button(action_icon, key=f"act_{row['代碼']}_{index}", use_container_width=True):
-            if row['代碼'] in st.session_state.watchlist:
-                st.session_state.watchlist.remove(row['代碼'])
-                st.toast(f"已從清單移除 {row['代碼']}")
-            else:
-                st.session_state.watchlist.append(row['代碼'])
-                st.toast(f"已加入追蹤清單 {row['代碼']}")
-            save_watchlist(st.session_state.watchlist)
-            if not st.session_state.get("is_big_scan") and "results" in st.session_state:
-                del st.session_state.results
-            st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
-        if index < len(paged_results) - 1:
-            st.markdown('<hr class="mobile-divider">', unsafe_allow_html=True)
+        with st.container(border=True):
+            cols = st.columns([1.5, 1, 1, 1, 1, 3.5, 0.5])
+            
+            # 欄位一：股票名稱
+            cols[0].write(f"**{row['代碼']}** {row['名稱']}")
+            
+            # 欄位二：最新價 (手機版會標註標籤)
+            price_val = f"{row['最新價格']:.1f}" if row['最新價格'] != 0 else "-"
+            cols[1].markdown(f'<span class="mobile-label">最新價:</span><b>{price_val}</b>', unsafe_allow_html=True)
+            
+            # 欄位三～五：指標
+            cols[2].markdown(f'<span class="mobile-label">一年位階:</span>{row["一年位階"]}', unsafe_allow_html=True)
+            cols[3].markdown(f'<span class="mobile-label">年線乖離:</span>{row["年線乖離"]}', unsafe_allow_html=True)
+            cols[4].markdown(f'<span class="mobile-label">MA20乖離:</span>{row["MA20乖離"]}', unsafe_allow_html=True)
+            
+            # 欄位六：操作建議
+            cols[5].markdown(f"**`{row['操作建議']}`**")
+            
+            # 欄位七：動作按鈕 (唯一 Key，手機電腦版通用同一個元件)
+            action_icon = "🗑️" if row['代碼'] in st.session_state.watchlist else "➕"
+            if cols[6].button(action_icon, key=f"btn_{row['代碼']}_{index}", use_container_width=True):
+                if row['代碼'] in st.session_state.watchlist:
+                    st.session_state.watchlist.remove(row['代碼'])
+                    st.toast(f"已從清單移除 {row['代碼']}")
+                else:
+                    st.session_state.watchlist.append(row['代碼'])
+                    st.toast(f"已加入追蹤清單 {row['代碼']}")
+                save_watchlist(st.session_state.watchlist)
+                if not st.session_state.get("is_big_scan") and "results" in st.session_state:
+                    del st.session_state.results
+                st.rerun()
 
     # --- 分頁導航 ---
     if total_pages > 1:
