@@ -19,6 +19,7 @@ import difflib
 import json
 import requests
 import yfinance as yf
+import math
 
 # --- 全域設定 ---
 CACHE_DIR = "cache"
@@ -271,7 +272,30 @@ if 'resolved_code' not in st.session_state:
     st.session_state.resolved_code = None
 if 'suggestions' not in st.session_state:
     st.session_state.suggestions = []
+if 'defense_weight' not in st.session_state:
+    st.session_state.defense_weight = 0.5
+if 'rows_per_page' not in st.session_state:
+    st.session_state.rows_per_page = 20
+if 'current_page' not in st.session_state:
+    st.session_state.current_page = 0
 
+# --- 側邊欄設定 ---
+st.sidebar.markdown("### ⚙️ 策略與顯示設定")
+# 動態權重滑桿
+st.session_state.defense_weight = st.sidebar.slider(
+    "⚖️ 策略偏好 (成長 vs 防禦)",
+    min_value=0.0, max_value=1.0, value=st.session_state.defense_weight, step=0.05,
+    help="0%: 強勢成長回測 | 100%: 價值防禦守護"
+)
+st.sidebar.caption(f"目前權重: {100-st.session_state.defense_weight*100:.0f}% 成長 / {st.session_state.defense_weight*100:.0f}% 防禦")
+
+# 每頁顯示數量
+st.session_state.rows_per_page = st.sidebar.select_slider(
+    "📄 每頁顯示數量",
+    options=[10, 20, 50, 100],
+    value=st.session_state.rows_per_page
+)
+st.sidebar.divider()
 st.sidebar.header("➕ 新增股票")
 with st.sidebar.form("add_stock_form", clear_on_submit=True):
     new_input = st.text_input("輸入代碼或名稱 (例: 2330 或 台積電)")
@@ -312,7 +336,7 @@ if "last_suggestions" in st.session_state:
 watchlist = st.session_state.watchlist
 
 # --- 核心邏輯 ---
-def fetch_and_analyze(watchlist):
+def fetch_and_analyze(watchlist, defense_weight=0.5):
     data_list = []
     # 儲存所有個股的歷史資料供視覺化使用
     history_data = {}
@@ -480,7 +504,7 @@ def fetch_and_analyze(watchlist):
                 # 儲存到本地快取
                 df.to_csv(cache_file, index=False)
             
-            # --- 核心邏輯：分倉與評選 ---
+            # --- 核心邏輯：雙策略評分 ---
             last_price = df['close'].iloc[-1]
             year_high = df['close'].max()
             year_low = df['close'].min()
@@ -492,6 +516,7 @@ def fetch_and_analyze(watchlist):
             dist_to_ma240 = (last_price / ma240_last - 1) if not np.isnan(ma240_last) else 0
             
             # MACD 狀態
+            is_gold_cross = False
             if len(df) >= 2:
                 last_hist = df['hist'].iloc[-1]
                 prev_hist = df['hist'].iloc[-2]
@@ -503,40 +528,33 @@ def fetch_and_analyze(watchlist):
             # 盈餘動能檢查
             rev_status, is_rev_ok = check_revenue_momentum(code)
             
-            # --- 分享策略判定 ---
-            if last_price > ma240_last and not np.isnan(ma240_last):
-                # 策略 B: 強勢股回測 (Growth Pullback) - 30% 資金
-                # 買點：靠近 MA20，停損：MA20 - 5%，目標：買點 + 15%
-                buy_zone = ma20_last
-                stop_loss = ma20_last * 0.95
-                target = buy_zone * 1.15
-                actionable_str = f"📈強勢 | 買:{buy_zone:.1f} | 標:{target:.1f} | 損:{stop_loss:.1f}"
-                
-                # 分數：回測 20 日線越近分數越高 (加成 50%)，加上 MACD 加分 (50%)
-                pullback_score = (1 - min(abs(dist_to_ma20), 0.1)/0.1) * 50
-                if is_gold_cross: pullback_score += 50
-                final_score = pullback_score
+            # A. 價值防禦分數 (Value Defense)
+            value_buy_zone = min(last_price, ma240_last) if not np.isnan(ma240_last) else last_price
+            value_score = (1 - level_percentile) * 50
+            if -0.05 < dist_to_ma240 < 0.05:
+                value_score += 50
+            
+            # B. 強勢股回測分數 (Growth Pullback)
+            growth_buy_zone = ma20_last if not np.isnan(ma20_last) else last_price
+            pullback_score = (1 - min(abs(dist_to_ma20), 0.1)/0.1) * 50
+            if is_gold_cross: pullback_score += 50
+            
+            # 根據滑桿權重結合分數
+            final_score = (defense_weight * value_score) + ((1 - defense_weight) * pullback_score)
+            
+            # 決定顯示在表格中的操作建議 (依據目前較高分的策略)
+            if pullback_score > value_score:
+                target = growth_buy_zone * 1.15
+                stop_loss = growth_buy_zone * 0.95
+                actionable_str = f"📈強勢 | 買:{growth_buy_zone:.1f} | 標:{target:.1f} | 損:{stop_loss:.1f}"
             else:
-                # 策略 A: 價值防禦 (Value + Level) - 70% 資金
-                # 買點：靠近年線或前低，停損：前低破底，目標：年線 + 20%
-                buy_zone = min(last_price, ma240_last) if not np.isnan(ma240_last) else last_price
+                target = ma240_last * 1.2 if not np.isnan(ma240_last) else value_buy_zone * 1.2
                 stop_loss = year_low * 0.95
-                target = ma240_last * 1.2 if not np.isnan(ma240_last) else buy_zone * 1.2
-                actionable_str = f"🛡價值 | 買:{buy_zone:.1f} | 標:{target:.1f} | 損:{stop_loss:.1f}"
-                
-                # 分數：位階低 (50%) + 年線支撐 (50%)
-                value_score = (1 - level_percentile) * 50
-                if -0.05 < dist_to_ma240 < 0.05:
-                    value_score += 50
-                final_score = value_score
-                
-            # --- 篩選 ---
+                actionable_str = f"🛡價值 | 買:{value_buy_zone:.1f} | 標:{target:.1f} | 損:{stop_loss:.1f}"
+
             # 如果營收衰退，則排到最下面 (分數砍半)
             if not is_rev_ok:
                 final_score *= 0.1
-                
-            # 取得名稱 (已在迴圈開頭取得)
-            # stock_name = code_to_name.get(code, "未知")
             
             data_list.append({
                 "代碼": code,
@@ -563,6 +581,72 @@ def fetch_and_analyze(watchlist):
     
     results_df = pd.DataFrame(data_list).sort_values("綜合評分", ascending=False)
     return results_df, history_data
+
+def rescore_results(history_data, api, defense_weight):
+    """僅重新計算分數，不重新抓取資料 (用於即時回應滑桿切換)"""
+    data_list = []
+    code_to_name = get_stock_name_map(api)
+    
+    for code, df in history_data.items():
+        if df is None or df.empty: continue
+        try:
+            stock_name = code_to_name.get(code, "未知")
+            # --- 雙策略評分 ---
+            last_price = df['close'].iloc[-1]
+            year_high = df['close'].max()
+            year_low = df['close'].min()
+            level_percentile = (last_price - year_low) / (year_high - year_low) if (year_high - year_low) != 0 else 0
+            
+            ma20_last = df['ma20'].iloc[-1]
+            ma240_last = df['ma240'].iloc[-1]
+            dist_to_ma20 = (last_price / ma20_last - 1) if not np.isnan(ma20_last) else 100
+            dist_to_ma240 = (last_price / ma240_last - 1) if not np.isnan(ma240_last) else 0
+            
+            is_gold_cross = False
+            if len(df) >= 2:
+                last_hist = df['hist'].iloc[-1]
+                prev_hist = df['hist'].iloc[-2]
+                is_gold_cross = prev_hist <= 0 and last_hist > 0
+                macd_status = "🚀 金叉發動" if is_gold_cross else "趨勢中"
+            else:
+                macd_status = "資料不足"
+            
+            # 盈餘動能 (目前固定檢查，未來可快取)
+            rev_status, is_rev_ok = check_revenue_momentum(code)
+            
+            # A. 價值防禦
+            value_buy_zone = min(last_price, ma240_last) if not np.isnan(ma240_last) else last_price
+            value_score = (1 - level_percentile) * 50
+            if -0.05 < dist_to_ma240 < 0.05:
+                value_score += 50
+            
+            # B. 強勢股回測
+            growth_buy_zone = ma20_last if not np.isnan(ma20_last) else last_price
+            pullback_score = (1 - min(abs(dist_to_ma20), 0.1)/0.1) * 50
+            if is_gold_cross: pullback_score += 50
+            
+            final_score = (defense_weight * value_score) + ((1 - defense_weight) * pullback_score)
+            
+            if pullback_score > value_score:
+                target = growth_buy_zone * 1.15
+                stop_loss = growth_buy_zone * 0.95
+                actionable_str = f"📈強勢 | 買:{growth_buy_zone:.1f} | 標:{target:.1f} | 損:{stop_loss:.1f}"
+            else:
+                target = ma240_last * 1.2 if not np.isnan(ma240_last) else value_buy_zone * 1.2
+                stop_loss = year_low * 0.95
+                actionable_str = f"🛡價值 | 買:{value_buy_zone:.1f} | 標:{target:.1f} | 損:{stop_loss:.1f}"
+
+            if not is_rev_ok:
+                final_score *= 0.1
+            
+            data_list.append({
+                "代碼": code, "名稱": stock_name, "最新價格": last_price, "操作建議": actionable_str,
+                "一年位階": f"{level_percentile*100:.1f}%", "年線乖離": f"{dist_to_ma240*100:.1f}%",
+                "MA20乖離": f"{dist_to_ma20*100:.1f}%", "MACD狀態": macd_status, "綜合評分": final_score
+            })
+        except: continue
+        
+    return pd.DataFrame(data_list).sort_values("綜合評分", ascending=False)
 
 def plot_financial_charts(df, title):
     # 建立具有兩行子圖的圖表
@@ -622,7 +706,7 @@ if should_sync or scan_btn:
     st.toast("🔍 啟動市場掃描...", icon="🚀")
     with st.spinner('🔄 市場數據分析同步中...'):
         st.session_state.last_watchlist = current_watchlist_key
-        results, history_data = fetch_and_analyze(watchlist)
+        results, history_data = fetch_and_analyze(watchlist, defense_weight=st.session_state.defense_weight)
         st.session_state.results = results
         st.session_state.history_data = history_data
         st.session_state.last_update = datetime.now().strftime("%H:%M:%S")
@@ -638,15 +722,14 @@ elif big_scan_btn:
     st.toast(f"🐘 啟動全市場掃描 ({len(mass_list)} 檔)...", icon="🔍")
     with st.spinner(f'🔄 全市場數據同步中 (共 {len(mass_list)} 檔)...'):
         # 執行全市場分析
-        results, history_data = fetch_and_analyze(mass_list)
+        results, history_data = fetch_and_analyze(mass_list, defense_weight=st.session_state.defense_weight)
         
-        # 只保留前 10 名
         if not results.empty:
-            top_10 = results.head(10).copy()
-            st.session_state.results = top_10
+            st.session_state.results = results
             st.session_state.history_data = history_data
             st.session_state.last_update = datetime.now().strftime("%H:%M:%S")
             st.session_state.is_big_scan = True # 標記為大選股模式
+            st.session_state.current_page = 0   # 重設頁碼
             st.toast("✅ 全市場大選股完成！", icon="🏆")
         else:
             st.error("❌ 全市場掃描未成功取得數據。")
@@ -655,16 +738,21 @@ elif big_scan_btn:
 if "last_update" in st.session_state:
     st.sidebar.caption(f"最後更新時間: {st.session_state.last_update}")
             
-if "results" in st.session_state:
-    results = st.session_state.results
-    history_data = st.session_state.history_data
-    
-    # --- 自動名稱修復機制 ---
-    # 如果目前的結果中有 '未知'，且全域 mapping 已經準備好，則自動補完名稱
+    # --- 自動名稱修復與即時重新計分 ---
+    # 1. 檢查是否需要根據滑桿重新計分
+    if "last_weight" not in st.session_state:
+        st.session_state.last_weight = st.session_state.defense_weight
+        
+    if st.session_state.last_weight != st.session_state.defense_weight:
+        if history_data:
+            results = rescore_results(history_data, api, st.session_state.defense_weight)
+            st.session_state.results = results
+            st.session_state.last_weight = st.session_state.defense_weight
+
+    # 2. 自動補完名稱
     if (results['名稱'] == '未知').any():
         code_map = get_stock_name_map(api)
         if code_map:
-            # 使用列表推導式或 map 來更新名稱，避免直接修改視圖引發警告
             results['名稱'] = results['代碼'].apply(lambda c: code_map.get(c, '未知'))
             st.session_state.results = results
 
@@ -689,8 +777,25 @@ if "results" in st.session_state:
         """)
 
     # --- 自定義列表 ---
-    list_title = "🏆 全市場大選股 TOP 10" if st.session_state.get("is_big_scan") else "📊 目前追蹤清單"
+    is_big = st.session_state.get("is_big_scan", False)
+    list_title = "🏆 全市場大選股排行榜" if is_big else "📊 目前追蹤清單"
     st.markdown(f"### {list_title}")
+    
+    # 分頁計算
+    total_rows = len(results)
+    rows_per_page = st.session_state.rows_per_page
+    total_pages = math.ceil(total_rows / rows_per_page) if total_rows > 0 else 1
+    
+    # 確保頁碼在有效範圍內
+    if st.session_state.current_page >= total_pages:
+        st.session_state.current_page = max(0, total_pages - 1)
+        
+    start_idx = st.session_state.current_page * rows_per_page
+    end_idx = min(start_idx + rows_per_page, total_rows)
+    paged_results = results.iloc[start_idx:end_idx]
+
+    if is_big:
+        st.info(f"📍 目前顯示全市場分析中第 {start_idx+1} 至 {end_idx} 檔 (共 {total_rows} 檔)")
     
     # 表頭 (依照操作建議排版)
     cols = st.columns([1.5, 1, 1, 1, 1, 3.5, 0.5])
@@ -699,7 +804,7 @@ if "results" in st.session_state:
         col.write(f"**{header}**")
     
     # 內容列
-    for index, row in results.iterrows():
+    for index, row in paged_results.iterrows():
         cols = st.columns([1.5, 1, 1, 1, 1, 3.5, 0.5])
         cols[0].write(f"**{row['代碼']}** {row['名稱']}")
         
@@ -713,6 +818,7 @@ if "results" in st.session_state:
         cols[3].write(row['年線乖離'])
         cols[4].write(row['MA20乖離'])
         cols[5].markdown(f"**`{row['操作建議']}`**")
+        
         action_icon = "🗑️" if row['代碼'] in st.session_state.watchlist else "➕"
         if cols[6].button(action_icon, key=f"act_{row['代碼']}"):
             if row['代碼'] in st.session_state.watchlist:
@@ -728,6 +834,20 @@ if "results" in st.session_state:
             if not st.session_state.get("is_big_scan"):
                 if "results" in st.session_state:
                     del st.session_state.results
+            st.rerun()
+
+    # --- 分頁導航 ---
+    if total_pages > 1:
+        st.divider()
+        nav_cols = st.columns([2, 1, 1, 1, 2])
+        if nav_cols[1].button("◀️ 上一頁", disabled=(st.session_state.current_page == 0)):
+            st.session_state.current_page -= 1
+            st.rerun()
+        
+        nav_cols[2].write(f"第 {st.session_state.current_page + 1} / {total_pages} 頁")
+        
+        if nav_cols[3].button("下一頁 ▶️", disabled=(st.session_state.current_page == total_pages - 1)):
+            st.session_state.current_page += 1
             st.rerun()
     
     st.divider()
