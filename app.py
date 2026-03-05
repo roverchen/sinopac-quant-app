@@ -33,11 +33,28 @@ st.set_page_config(page_title="量化選股戰情室", layout="wide")
 # --- 手機版、表格優化與穩定連線 CSS ---
 st.markdown("""
 <style>
-    /* 1. 終極攔截：強制全網頁禁止「任何向外溢出手勢」，杜絕「回上一頁」與「下拉重整」 */
-    html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"], #root {
-        overscroll-behavior: none !important; /* 同時鎖定 X 與 Y 軸的瀏覽器預設手勢 */
-        touch-action: pan-y !important; /* 僅允許單純的垂直捲動 */
+    /* 1. 終極保護 (LIS): 「釘死」底層網頁，杜絕所有瀏覽器預設手勢 (上一頁、下拉重整) */
+    html, body {
+        position: fixed !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        overflow: hidden !important;
+        overscroll-behavior: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    
+    /* 2. 內部獨立捲動：將捲動功能限制在 Streamlit 主內容區，讓手勢困在 App 內 */
+    [data-testid="stMain"], .stApp {
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        overflow-y: auto !important;
         overflow-x: hidden !important;
+        -webkit-overflow-scrolling: touch !important; /* 確保 iOS 捲動依然絲滑 */
+        overscroll-behavior: contain !important;
     }
     
     /* 2. 側邊欄開關強化 (針對手機版明顯化，確保手勢被鎖定後依然能輕鬆開啟) */
