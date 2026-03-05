@@ -33,11 +33,12 @@ st.set_page_config(page_title="量化選股戰情室", layout="wide")
 # --- 手機版、表格優化與穩定連線 CSS ---
 st.markdown("""
 <style>
-    /* 1. 深度鎖定：徹底防止手機瀏覽器橫向手勢干擾 */
-    html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
+    /* 1. 防止手機瀏覽器橫向滑動觸發「上一頁」導致斷線，但保留側邊欄滑動 */
+    html, body {
         overscroll-behavior-x: none !important;
-        overscroll-behavior-y: auto !important;
-        touch-action: pan-y !important;
+    }
+    [data-testid="stMain"] {
+        overscroll-behavior-x: none !important;
     }
     
     /* 2. 響應式佈局：預設隱藏手機版標籤 */
