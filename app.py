@@ -1,5 +1,6 @@
 import streamlit as st
 import os
+import time
 
 # --- Mac SSL 憑證修正 (解決 [SSL: CERTIFICATE_VERIFY_FAILED]) ---
 try:
@@ -363,6 +364,9 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
     # 紀錄是否已經在迴圈中嘗試過重抓合約，避免每檔都重抓
     has_retried_contracts = False
     
+    # 決定是否開啟靜音模式 (當目標數量大於 10 時自動開啟，避免 UI 警告塞車)
+    quiet_mode = len(watchlist) > 10
+    
     # 用於顯示進度的佔位符
     status_placeholder = st.empty()
     
@@ -436,7 +440,9 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
                             st.session_state.last_chance_tried = True
                             
                     if not contract:
-                        st.warning(f"找不到代碼 {code} 的合約，請確認代碼是否正確。")
+                        if not quiet_mode:
+                            st.warning(f"找不到代碼 {code} 的合約，請確認代碼是否正確。")
+                        print(f"[Warning] Contract not found for {code}")
                         data_list.append({
                             "代碼": code, "名稱": stock_name, "最新價格": 0, "操作建議": status_msg,
                             "一年位階": "-", "年線乖離": "-", "MA20乖離": "-", "MACD狀態": "-", "綜合評分": -1
@@ -449,7 +455,9 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
                         df = pd.DataFrame({**kbars})
                         source = "☁️ 雲端"
                     except Exception as e:
-                        st.warning(f"無法取得台股 {code} 的 K 線資料: {e}")
+                        if not quiet_mode:
+                            st.warning(f"無法取得台股 {code} 的 K 線資料: {e}")
+                        print(f"[Error] Failed to fetch kbars for {code}: {e}")
                         data_list.append({
                             "代碼": code, "名稱": stock_name, "最新價格": 0, "操作建議": "❌ 無法取得K線",
                             "一年位階": "-", "年線乖離": "-", "MA20乖離": "-", "MACD狀態": "-", "綜合評分": -1
@@ -469,7 +477,9 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
                             df = df[['ts', 'open', 'high', 'low', 'close', 'volume']]
                             source = "🌐 Yahoo"
                         else:
-                            st.warning(f"Yahoo Finance 查無代碼 {code} 的歷史資料")
+                            if not quiet_mode:
+                                st.warning(f"Yahoo Finance 查無代碼 {code} 的歷史資料")
+                            print(f"[Warning] No yfinance data for {code}")
                             data_list.append({
                                 "代碼": code, "名稱": stock_name, "最新價格": 0, "操作建議": "❌ 無美股數據",
                                 "一年位階": "-", "年線乖離": "-", "MA20乖離": "-", "MACD狀態": "-", "綜合評分": -1
@@ -485,7 +495,8 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
                 
                 # 確認資料有效性
                 if df is None or df.empty:
-                    st.warning(f"代碼 {code} 無法獲取有效資料")
+                    if not quiet_mode:
+                        st.warning(f"代碼 {code} 無法獲取有效資料")
                     continue
 
                 df.columns = [c.lower() for c in df.columns]
@@ -570,8 +581,14 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
             
             history_data[code] = df
             
+            # --- 頻率保護：如果是大選股，加入微小延遲防止被封鎖 ---
+            if quiet_mode:
+                time.sleep(0.01)
+            
         except Exception as e:
-            st.warning(f"無法取得 {code} 的資料: {str(e)}")
+            if not quiet_mode:
+                st.warning(f"無法取得 {code} 的資料: {str(e)}")
+            print(f"[Critical Error] {code}: {str(e)}")
             
     if not data_list:
         return pd.DataFrame(columns=["代碼", "名稱", "最新價格", "操作建議", "一年位階", "年線乖離", "MA20乖離", "MACD狀態", "綜合評分"]), {}
