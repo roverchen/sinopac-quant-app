@@ -145,6 +145,14 @@ st.markdown("""
         }
     }
 </style>
+
+<script>
+    /* 核心心跳 (Heartbeat): 每 30 秒向伺服器發送一次微弱訊號，防止手機瀏覽器因閒置斷開 Websocket */
+    setInterval(function() {
+        console.log("Streamlit Heartbeat: Keeping the connection alive...");
+        window.parent.postMessage({type: 'streamlit:heartbeat'}, '*');
+    }, 30000);
+</script>
 """, unsafe_allow_html=True)
 
 st.title("📈 台美股量化選股系統")
@@ -460,8 +468,6 @@ watchlist = st.session_state.watchlist
 # --- 核心邏輯 ---
 def fetch_and_analyze(watchlist, defense_weight=0.5):
     data_list = []
-    # 儲存所有個股的歷史資料供視覺化使用
-    history_data = {}
     
     # 擴大歷史長度至 365 天 (以計算年線 MA240 與一年高低位階)
     start_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
@@ -710,8 +716,6 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
                 "_ma240": ma240_last,
                 "_y_low": year_low
             })
-            
-            history_data[code] = df
             
             # --- 頻率保護：如果是大選股，加入微小延遲防止被封鎖 ---
             if quiet_mode:
