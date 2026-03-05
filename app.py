@@ -849,43 +849,43 @@ if "results" in st.session_state:
     # 使用容器包裹表格以支援手機版橫向捲動
     with st.container():
         # 表頭 (依照操作建議排版)
-    cols = st.columns([1.5, 1, 1, 1, 1, 3.5, 0.5])
-    headers = ["股票", "最新價", "位階", "年線乖離", "MA20乖離", "操作建議 (買點/目標/停損)", ""]
-    for col, header in zip(cols, headers):
-        col.write(f"**{header}**")
-    
-    # 內容列
-    for index, row in paged_results.iterrows():
         cols = st.columns([1.5, 1, 1, 1, 1, 3.5, 0.5])
-        cols[0].write(f"**{row['代碼']}** {row['名稱']}")
+        headers = ["股票", "最新價", "位階", "年線乖離", "MA20乖離", "操作建議 (買點/目標/停損)", ""]
+        for col, header in zip(cols, headers):
+            col.write(f"**{header}**")
         
-        # 處理載入失敗的數值顯示
-        if row['最新價格'] == 0:
-            cols[1].write("-")
-        else:
-            cols[1].write(f"{row['最新價格']:.1f}")
+        # 內容列
+        for index, row in paged_results.iterrows():
+            cols = st.columns([1.5, 1, 1, 1, 1, 3.5, 0.5])
+            cols[0].write(f"**{row['代碼']}** {row['名稱']}")
             
-        cols[2].write(row['一年位階'])
-        cols[3].write(row['年線乖離'])
-        cols[4].write(row['MA20乖離'])
-        cols[5].markdown(f"**`{row['操作建議']}`**")
-        
-        action_icon = "🗑️" if row['代碼'] in st.session_state.watchlist else "➕"
-        if cols[6].button(action_icon, key=f"act_{row['代碼']}"):
-            if row['代碼'] in st.session_state.watchlist:
-                st.session_state.watchlist.remove(row['代碼'])
-                st.toast(f"已從清單移除 {row['代碼']}")
+            # 處理載入失敗的數值顯示
+            if row['最新價格'] == 0:
+                cols[1].write("-")
             else:
-                st.session_state.watchlist.append(row['代碼'])
-                st.toast(f"已加入追蹤清單 {row['代碼']}")
+                cols[1].write(f"{row['最新價格']:.1f}")
+                
+            cols[2].write(row['一年位階'])
+            cols[3].write(row['年線乖離'])
+            cols[4].write(row['MA20乖離'])
+            cols[5].markdown(f"**`{row['操作建議']}`**")
             
-            save_watchlist(st.session_state.watchlist)
-            
-            # 若為一般模式，移除 results 以觸發重新計算；大選股模式則保留結果
-            if not st.session_state.get("is_big_scan"):
-                if "results" in st.session_state:
-                    del st.session_state.results
-            st.rerun()
+            action_icon = "🗑️" if row['代碼'] in st.session_state.watchlist else "➕"
+            if cols[6].button(action_icon, key=f"act_{row['代碼']}"):
+                if row['代碼'] in st.session_state.watchlist:
+                    st.session_state.watchlist.remove(row['代碼'])
+                    st.toast(f"已從清單移除 {row['代碼']}")
+                else:
+                    st.session_state.watchlist.append(row['代碼'])
+                    st.toast(f"已加入追蹤清單 {row['代碼']}")
+                
+                save_watchlist(st.session_state.watchlist)
+                
+                # 若為一般模式，移除 results 以觸發重新計算；大選股模式則保留結果
+                if not st.session_state.get("is_big_scan"):
+                    if "results" in st.session_state:
+                        del st.session_state.results
+                st.rerun()
 
     # --- 分頁導航 ---
     if total_pages > 1:
