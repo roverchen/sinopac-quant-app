@@ -33,13 +33,10 @@ st.set_page_config(page_title="量化選股戰情室", layout="wide")
 # --- 手機版、表格優化與穩定連線 CSS ---
 st.markdown("""
 <style>
-    /* 1. 穩定連線與捲動平衡：攔截瀏覽器導航手勢，但保留內部捲動自由 */
-    html, body {
-        overscroll-behavior: none !important; /* 核心：禁止瀏覽器級別的「下拉重整」與「左右翻頁」 */
-    }
-    
-    [data-testid="stMain"] {
-        overscroll-behavior: contain !important; /* 讓捲動事件停留在 App 容器內 */
+    /* 1. 深度攔截：強制全網頁禁止「任何向外溢出手勢」，並鎖定水平滑動 */
+    html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"], #root {
+        overscroll-behavior: none !important; 
+        touch-action: pan-y !important; /* 核心：禁止瀏覽器解釋任何水平滑動 */
         overflow-x: hidden !important;
     }
     
@@ -85,6 +82,12 @@ st.markdown("""
     .mobile-label { display: none; }
 
     @media (max-width: 768px) {
+        /* 邊緣盾牌 (Edge Buffer)：增加左右間距，防止手指點到螢幕最邊緣觸發瀏覽器「下一頁/上一頁」 */
+        [data-testid="stAppViewContainer"], .stApp {
+            padding-left: 15px !important;
+            padding-right: 15px !important;
+        }
+        
         /* 只隱藏 Header 的背景與其他雜項，保留側邊欄按鈕按鈕 */
         [data-testid="stHeader"] { 
             background: transparent !important;
