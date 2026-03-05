@@ -190,6 +190,22 @@ def init_api():
 # 側邊欄：API 狀態
 api = init_api()
 
+# 檢查連線健康度
+is_mock = hasattr(api, 'list_accounts') and len(api.list_accounts()) == 0 and not hasattr(api, 'Contracts')
+conn_status = "🔴 連線衝突 (唯讀模式)" if is_mock else "🟢 API 連線正常"
+
+st.sidebar.markdown(f"### 📡 系統狀態: {conn_status}")
+if st.sidebar.button("🛑 深度清空並重置", use_container_width=True, help="清除所有暫存與登入狀態，修復重啟死循環"):
+    # 1. 清除 Session State
+    for key in list(st.session_state.keys()):
+        del st.session_state[key]
+    # 2. 刪除磁碟快取
+    if os.path.exists(RESULTS_CACHE_FILE):
+        os.remove(RESULTS_CACHE_FILE)
+    st.rerun()
+
+st.sidebar.divider()
+
 # 確保合約在登入後只抓一次 (強制下載模式)
 if not st.session_state.get('contracts_fetched', False):
     try:
@@ -443,7 +459,7 @@ st.sidebar.caption(f"目前權重: {100-st.session_state.defense_weight*100:.0f}
 
 # 每頁顯示數量 (預設 10 檔以減輕手機負載)
 st.session_state.rows_per_page = st.sidebar.select_slider(
-    "📄 每頁顯示數量 (手機建議 10)",
+    "📄 每頁顯示數量",
     options=[10, 20, 50, 100],
     value=st.session_state.rows_per_page
 )
