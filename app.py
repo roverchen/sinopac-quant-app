@@ -697,7 +697,15 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
                 "年線乖離": f"{dist_to_ma240*100:.1f}%",
                 "MA20乖離": f"{dist_to_ma20*100:.1f}%",
                 "MACD狀態": macd_status,
-                "綜合評分": final_score
+                "綜合評分": final_score,
+                # 隱藏欄位：供即時重新計分使用 (不顯示在 UI)
+                "_v_score": value_score,
+                "_p_score": pullback_score,
+                "_is_rev_ok": is_rev_ok,
+                "_v_buy": value_buy_zone,
+                "_g_buy": growth_buy_zone,
+                "_ma240": ma240_last,
+                "_y_low": year_low
             })
             
             history_data[code] = df
@@ -712,83 +720,49 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
             print(f"[Critical Error] {code}: {str(e)}")
             
     if not data_list:
-        return pd.DataFrame(columns=["代碼", "名稱", "最新價格", "操作建議", "一年位階", "年線乖離", "MA20乖離", "MACD狀態", "綜合評分"]), {}
+        return pd.DataFrame(columns=["代碼", "名稱", "最新價格", "操作建議", "一年位階", "年線乖離", "MA20乖離", "MACD狀態", "綜合評分"])
         
     # 清除進度顯示
     status_placeholder.empty()
     
     results_df = pd.DataFrame(data_list).sort_values("綜合評分", ascending=False)
-    return results_df, history_data
+    return results_df
 
-def rescore_results(history_data, api, defense_weight):
-    """僅重新計算分數，不重新抓取資料 (用於即時回應滑桿切換)"""
-    data_list = []
-    code_to_name = get_stock_name_map(api)
+def rescore_results(results_df, defense_weight):
+    """僅重新計算分數，不重新抓取資料 (直接使用 DataFrame 內的預分析資料，極速回應)"""
+    if results_df.empty: return results_df
     
-    for code, df in history_data.items():
-        if df is None or df.empty: continue
-        try:
-            stock_name = code_to_name.get(code, "未知")
-            # --- 雙策略評分 ---
-            last_price = df['close'].iloc[-1]
-            year_high = df['close'].max()
-            year_low = df['close'].min()
-            level_percentile = (last_price - year_low) / (year_high - year_low) if (year_high - year_low) != 0 else 0
-            
-            ma20_last = df['ma20'].iloc[-1]
-            ma240_last = df['ma240'].iloc[-1]
-            dist_to_ma20 = (last_price / ma20_last - 1) if not np.isnan(ma20_last) else 100
-            dist_to_ma240 = (last_price / ma240_last - 1) if not np.isnan(ma240_last) else 0
-            
-            is_gold_cross = False
-            if len(df) >= 2:
-                last_hist = df['hist'].iloc[-1]
-                prev_hist = df['hist'].iloc[-2]
-                is_gold_cross = prev_hist <= 0 and last_hist > 0
-                macd_status = "🚀 金叉發動" if is_gold_cross else "趨勢中"
-            else:
-                macd_status = "資料不足"
-            
-            # 盈餘動能 (目前固定檢查，未來可快取)
-            rev_status, is_rev_ok = check_revenue_momentum(code)
-            
-            # A. 價值防禦
-            value_buy_zone = min(last_price, ma240_last) if not np.isnan(ma240_last) else last_price
-            value_score = (1 - level_percentile) * 50
-            if -0.05 < dist_to_ma240 < 0.05:
-                value_score += 50
-            
-            # B. 強勢股回測
-            growth_buy_zone = ma20_last if not np.isnan(ma20_last) else last_price
-            pullback_score = (1 - min(abs(dist_to_ma20), 0.1)/0.1) * 50
-            if is_gold_cross: pullback_score += 50
-            
-            final_score = (defense_weight * value_score) + ((1 - defense_weight) * pullback_score)
-            
-            # 雙策略加權比拼標籤
-            weighted_value_score = defense_weight * value_score
-            weighted_pullback_score = (1 - defense_weight) * pullback_score
-            
-            if weighted_pullback_score >= weighted_value_score:
-                target = growth_buy_zone * 1.15
-                stop_loss = growth_buy_zone * 0.95
-                actionable_str = f"📈強勢 | 買:{growth_buy_zone:.1f} | 標:{target:.1f} | 損:{stop_loss:.1f} | 評分：{final_score:.1f}"
-            else:
-                target = ma240_last * 1.2 if not np.isnan(ma240_last) else value_buy_zone * 1.2
-                stop_loss = year_low * 0.95
-                actionable_str = f"🛡價值 | 買:{value_buy_zone:.1f} | 標:{target:.1f} | 損:{stop_loss:.1f} | 評分：{final_score:.1f}"
-
-            if not is_rev_ok:
-                final_score *= 0.1
-            
-            data_list.append({
-                "代碼": code, "名稱": stock_name, "最新價格": last_price, "操作建議": actionable_str,
-                "一年位階": f"{level_percentile*100:.1f}%", "年線乖離": f"{dist_to_ma240*100:.1f}%",
-                "MA20乖離": f"{dist_to_ma20*100:.1f}%", "MACD狀態": macd_status, "綜合評分": final_score
-            })
-        except: continue
+    # 複製一份避免警告
+    df = results_df.copy()
+    
+    # 使用向量運算重新計算綜合評分
+    df['綜合評分'] = (defense_weight * df['_v_score']) + ((1 - defense_weight) * df['_p_score'])
+    
+    # 營收衰退懲罰
+    df.loc[~df['_is_rev_ok'], '綜合評分'] *= 0.1
+    
+    # 重新產生操作建議文字
+    def build_action(row):
+        v_w = defense_weight * row['_v_score']
+        p_w = (1 - defense_weight) * row['_p_score']
+        score = row['綜合評分']
         
-    return pd.DataFrame(data_list).sort_values("綜合評分", ascending=False)
+        if p_w >= v_w:
+            g_buy = row['_g_buy']
+            target = g_buy * 1.15
+            stop = g_buy * 0.95
+            return f"📈強勢 | 買:{g_buy:.1f} | 標:{target:.1f} | 損:{stop:.1f} | 評分：{score:.1f}"
+        else:
+            v_buy = row['_v_buy']
+            ma240 = row['_ma240']
+            target = ma240 * 1.2 if not np.isnan(ma240) else v_buy * 1.2
+            stop = row['_y_low'] * 0.95
+            return f"🛡價值 | 買:{v_buy:.1f} | 標:{target:.1f} | 損:{stop:.1f} | 評分：{score:.1f}"
+
+    df['操作建議'] = df.apply(build_action, axis=1)
+    
+    # 重新排序
+    return df.sort_values("綜合評分", ascending=False)
 
 def plot_financial_charts(df, title):
     # 建立具有兩行子圖的圖表
@@ -848,9 +822,8 @@ if should_sync or scan_btn:
     st.toast("🔍 啟動市場掃描...", icon="🚀")
     with st.spinner('🔄 市場數據分析同步中...'):
         st.session_state.last_watchlist = current_watchlist_key
-        results, history_data = fetch_and_analyze(watchlist, defense_weight=st.session_state.defense_weight)
+        results = fetch_and_analyze(watchlist, defense_weight=st.session_state.defense_weight)
         st.session_state.results = results
-        st.session_state.history_data = history_data
         st.session_state.last_update = datetime.now().strftime("%H:%M:%S")
         st.session_state.is_big_scan = False # 標記為一般掃描
         
@@ -864,11 +837,10 @@ elif big_scan_btn:
     st.toast(f"🐘 啟動全市場掃描 ({len(mass_list)} 檔)...", icon="🔍")
     with st.spinner(f'🔄 全市場數據同步中 (共 {len(mass_list)} 檔)...'):
         # 執行全市場分析
-        results, history_data = fetch_and_analyze(mass_list, defense_weight=st.session_state.defense_weight)
+        results = fetch_and_analyze(mass_list, defense_weight=st.session_state.defense_weight)
         
         if not results.empty:
             st.session_state.results = results
-            st.session_state.history_data = history_data
             st.session_state.last_update = datetime.now().strftime("%H:%M:%S")
             st.session_state.is_big_scan = True # 標記為大選股模式
             st.session_state.current_page = 0   # 重設頁碼
@@ -879,21 +851,19 @@ elif big_scan_btn:
 # 顯示最後更新時間與結果
 if "results" in st.session_state:
     results = st.session_state.results
-    history_data = st.session_state.get("history_data", {})
     
     if "last_update" in st.session_state:
         st.sidebar.caption(f"最後更新時間: {st.session_state.last_update}")
             
     # --- 自動名稱修復與即時重新計分 ---
-    # 1. 檢查是否需要根據滑桿重新計分
+    # 1. 檢查是否需要根據滑桿重新計分 (極速向量運算)
     if "last_weight" not in st.session_state:
         st.session_state.last_weight = st.session_state.defense_weight
         
     if st.session_state.last_weight != st.session_state.defense_weight:
-        if history_data:
-            results = rescore_results(history_data, api, st.session_state.defense_weight)
-            st.session_state.results = results
-            st.session_state.last_weight = st.session_state.defense_weight
+        results = rescore_results(results, st.session_state.defense_weight)
+        st.session_state.results = results
+        st.session_state.last_weight = st.session_state.defense_weight
 
     # 2. 自動補完名稱
     if (results['名稱'] == '未知').any():
@@ -1002,10 +972,16 @@ if "results" in st.session_state:
     
     st.divider()
     
-    # 互動式圖表選擇
+    # 互動式圖表選擇 (按需讀取快取，極速流暢)
     selected_code = st.selectbox("選擇要查看詳情的股票", results['代碼'].tolist())
     
-    if selected_code in history_data:
-        plot_financial_charts(history_data[selected_code], selected_code)
+    if selected_code:
+        cache_file = os.path.join(CACHE_DIR, f"{selected_code}.csv")
+        if os.path.exists(cache_file):
+            df_selected = pd.read_csv(cache_file)
+            df_selected['ts'] = pd.to_datetime(df_selected['ts'])
+            plot_financial_charts(df_selected, selected_code)
+        else:
+            st.warning(f"⚠️ 找不到 {selected_code} 的快取資料，請重新掃描。")
 else:
     st.info("🔄 正在初始化市場數據，或請點擊左側「🚀 手動重新掃描數據」。")
