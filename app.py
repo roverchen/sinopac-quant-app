@@ -33,15 +33,17 @@ st.set_page_config(page_title="量化選股戰情室", layout="wide")
 # --- 手機版、表格優化與穩定連線 CSS ---
 st.markdown("""
 <style>
-    /* 1. 深度攔截：強制全網頁禁止「任何向外溢出手勢」，並鎖定水平滑動 */
-    html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"], #root {
+    /* 1. 穩定手勢：禁止瀏覽器級別的「下拉重整」與「左右翻頁」 */
+    html, body {
         overscroll-behavior: none !important; 
-        touch-action: pan-y !important; /* 核心：禁止瀏覽器解釋任何水平滑動 */
+        touch-action: pan-y !important;
         overflow-x: hidden !important;
     }
     
-    /* 2. 側邊欄開關強化 (針對手機版明顯化，確保手勢被鎖定後依然能輕鬆開啟) */
-    
+    [data-testid="stMain"] {
+        overscroll-behavior: contain !important;
+    }
+
     /* 2. 側邊欄開關強化 (針對手機版明顯化) */
     @media (max-width: 768px) {
         [data-testid="stSidebarCollapsedControl"] {
@@ -78,16 +80,10 @@ st.markdown("""
         .mobile-hint { display: none !important; }
     }
     
-    /* 2. 響應式佈局：預設隱藏手機版標籤 */
+    /* 3. 響應式佈局：預設隱藏手機版標籤 */
     .mobile-label { display: none; }
 
     @media (max-width: 768px) {
-        /* 邊緣盾牌 (Edge Buffer)：增加左右間距，防止手指點到螢幕最邊緣觸發瀏覽器「下一頁/上一頁」 */
-        [data-testid="stAppViewContainer"], .stApp {
-            padding-left: 15px !important;
-            padding-right: 15px !important;
-        }
-        
         /* 只隱藏 Header 的背景與其他雜項，保留側邊欄按鈕按鈕 */
         [data-testid="stHeader"] { 
             background: transparent !important;
@@ -146,42 +142,6 @@ st.markdown("""
     }
 </style>
 
-<script>
-    /* 1. 深度手勢攔截器 (Last Line of Defense) */
-    (function() {
-        let touchStartX = 0;
-        let touchStartY = 0;
-
-        // 監聽觸碰開始
-        window.addEventListener('touchstart', function(e) {
-            touchStartX = e.changedTouches[0].screenX;
-            touchStartY = e.changedTouches[0].screenY;
-        }, { passive: false });
-
-        // 監聽觸碰移動
-        window.addEventListener('touchmove', function(e) {
-            let touchMoveX = e.changedTouches[0].screenX;
-            let touchMoveY = e.changedTouches[0].screenY;
-            
-            let dx = Math.abs(touchMoveX - touchStartX);
-            let dy = Math.abs(touchMoveY - touchStartY);
-
-            // 如果水平移動明顯大於垂直移動，且在螢幕邊緣附近，強制攔截
-            // 這能有效防止 Safari/Chrome 的「側滑回上一頁」功能
-            if (dx > dy && dx > 5) {
-                if (touchStartX < 40 || touchStartX > window.innerWidth - 40) {
-                    e.preventDefault();
-                    console.log("Gesture Blocked: Horizontal Navigation Avoided");
-                }
-            }
-        }, { passive: false });
-
-        /* 2. 核心心跳 (Heartbeat): 每 30 秒向伺服器發送一次微弱訊號，防止手機瀏覽器因閒置斷開 Websocket */
-        setInterval(function() {
-            window.parent.postMessage({type: 'streamlit:heartbeat'}, '*');
-        }, 30000);
-    })();
-</script>
 """, unsafe_allow_html=True)
 
 st.title("📈 台美股量化選股系統")
