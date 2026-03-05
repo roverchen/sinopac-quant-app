@@ -978,12 +978,17 @@ if "results" in st.session_state:
     # --- 渲染邏輯：單一路徑原生容器 (最穩定方案) ---
     
     # 1. 顯示表頭 (電腦版會顯示，手機版透過 CSS 隱藏)
-    st.markdown('<div class="desktop-header">', unsafe_allow_html=True)
-    h_cols = st.columns([1.5, 1, 1, 1, 1, 3.5, 0.5])
-    headers = ["股票", "最新價", "位階", "年線乖離", "MA20乖離", "操作建議 (買點/目標/停損)", ""]
-    for col, header in zip(h_cols, headers):
-        col.write(f"**{header}**")
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown("""
+        <div class="desktop-header" style="display: flex; flex-direction: row; font-weight: bold; padding: 10px 0; border-bottom: 1px solid #444; margin-bottom: 5px;">
+            <div style="flex: 1.5; padding-left: 5px;">股票</div>
+            <div style="flex: 1;">最新價</div>
+            <div style="flex: 1;">位階</div>
+            <div style="flex: 1;">年線乖離</div>
+            <div style="flex: 1;">MA20乖離</div>
+            <div style="flex: 3.5;">操作建議 (買點/目標/停損)</div>
+            <div style="flex: 0.5;"></div>
+        </div>
+    """, unsafe_allow_html=True)
     
     # 2. 顯示內容 (每一家股票一個穩定容器，手機自動轉卡片)
     for index, row in paged_results.iterrows():
