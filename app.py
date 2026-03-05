@@ -30,20 +30,33 @@ if not os.path.exists(CACHE_DIR):
 # --- 頁面設定 ---
 st.set_page_config(page_title="量化選股戰情室", layout="wide")
 
-# --- 手機版與表格優化 CSS ---
+# --- 手機版、表格優化與穩定連線 CSS ---
 st.markdown("""
 <style>
-    /* 表格容器支援橫向捲動 */
-    .stTableContainer {
-        overflow-x: auto !important;
-    }
-    /* 防止手機橫向滑動觸發瀏覽器上一頁/重新整理 */
+    /* 1. 全域鎖定：防止手機瀏覽器橫向滑動觸發「上一頁/重新整理」導致斷線 */
     html, body, [data-testid="stAppViewContainer"] {
         overscroll-behavior-x: none !important;
+        overscroll-behavior-y: auto !important;
     }
-    /* 讓表格內容更緊湊以適配手機 */
-    div[data-testid="stHorizontalBlock"] {
-        min-width: 600px;
+    
+    /* 2. 讓主容器支援橫向溢出，這樣寬表格才能捲動 */
+    [data-testid="stAppViewBlockContainer"] {
+        max-width: 100vw !important;
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+        overflow-x: auto !important;
+    }
+
+    /* 3. 強制所有橫向區塊（表格列）保持最小寬度，避免在手機上縮成一團 */
+    [data-testid="stHorizontalBlock"] {
+        min-width: 850px !important; 
+        white-space: nowrap !important;
+        flex-wrap: nowrap !important;
+    }
+    
+    /* 4. 優化欄位間距 */
+    [data-testid="column"] {
+        min-width: 50px !important;
     }
 </style>
 """, unsafe_allow_html=True)
