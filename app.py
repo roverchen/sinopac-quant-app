@@ -21,9 +21,13 @@ import json
 import requests
 import yfinance as yf
 import math
+import pickle
 
-# --- 全域設定 ---
+# --- 常數設定 ---
+WATCHLIST_FILE = "watchlist.json"
 CACHE_DIR = "cache"
+RESULTS_CACHE_FILE = os.path.join(CACHE_DIR, "results_cache.pkl")
+
 if not os.path.exists(CACHE_DIR):
     os.makedirs(CACHE_DIR)
 
@@ -171,9 +175,14 @@ def init_api():
     except Exception as e:
         error_msg = str(e)
         if "451" in error_msg or "Too Many Connections" in error_msg:
-            st.error("⚠️ **API 連線數已達上限 (Error 451)**")
-            st.warning("這是永豐金證券伺服器的限制，通常是因為短時間內重複登入/清除快取導致。")
-            st.info("💡 **請等待 3-5 分鐘後再重新整理頁面**，期間請避免點擊「重連 API」或「深度清除」。")
+            st.sidebar.error("⚠️ **API 連線衝突**")
+            st.sidebar.warning("目前有其他分頁正連線中，或剛才重啟過於頻繁。")
+            st.sidebar.info("💡 系統已鎖定，5 分鐘內請勿頻繁重新整理。")
+            # 在全連線衝突時，建立一個空的 mock api 對象避免後續程式當掉
+            class MockApi:
+                def list_accounts(self): return []
+                def fetch_contracts(self, **kwargs): pass
+            return MockApi()
         else:
             st.error(f"API 登入失敗: {e}")
     return api
@@ -189,7 +198,31 @@ if not st.session_state.get('contracts_fetched', False):
             api.fetch_contracts(contract_download=True)
         st.session_state.contracts_fetched = True
     except:
-        pass
+        return []
+
+# --- 結果暫存 (Persistence) 邏輯 ---
+def save_results_cache(df, is_big_scan=False):
+    """將掃描結果存入磁碟，防止手機重新整理後消失"""
+    try:
+        data = {
+            "df": df,
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "is_big_scan": is_big_scan
+        }
+        with open(RESULTS_CACHE_FILE, "wb") as f:
+            pickle.dump(data, f)
+    except Exception as e:
+        print(f"快取存檔失敗: {e}")
+
+def load_results_cache():
+    """從磁碟載入上一次的掃描結果"""
+    if os.path.exists(RESULTS_CACHE_FILE):
+        try:
+            with open(RESULTS_CACHE_FILE, "rb") as f:
+                return pickle.load(f)
+        except:
+            pass
+    return None
 
 @st.cache_data(show_spinner=False)
 def get_stock_name_map(_api):
@@ -802,12 +835,24 @@ def plot_financial_charts(df, title):
 current_watchlist_key = ",".join(watchlist)
 should_sync = False
 
+# --- 啟動時優先從磁碟載入快取 (行動端穩定性關鍵) ---
 if "results" not in st.session_state:
-    # 第一次啟動時，若沒有建議清單正在顯示，則自動啟動
-    if "last_suggestions" not in st.session_state:
-        should_sync = True
+    cache_data = load_results_cache()
+    if cache_data:
+        st.session_state.results = cache_data["df"]
+        st.session_state.last_update = cache_data["timestamp"]
+        st.session_state.is_big_scan = cache_data.get("is_big_scan", False)
+        st.session_state.last_watchlist = current_watchlist_key
+        st.toast("💾 已從快取恢復上次數據", icon="📥")
+    else:
+        # 完全沒快取時，才考慮是否自動啟動 (謹慎觸發)
+        if "last_suggestions" not in st.session_state:
+            # 只有在 watchlist 不為空時才執行
+            if watchlist:
+                should_sync = True
+
 elif st.session_state.get("last_watchlist") != current_watchlist_key:
-    # 清單有變動，必定同步
+    # 只有當追蹤清單「內容改變」時，才自動觸發同步
     should_sync = True
 
 # 執行同步
@@ -826,6 +871,8 @@ if should_sync or scan_btn:
         if results.empty:
             st.warning("⚠️ 掃描完成，但在現有清單中找不到可分析的有效數據。")
         else:
+            # 存入磁碟快取
+            save_results_cache(results, is_big_scan=False)
             st.toast("✅ 數據同步完成！", icon="📉")
 
 elif big_scan_btn:
@@ -840,6 +887,9 @@ elif big_scan_btn:
             st.session_state.last_update = datetime.now().strftime("%H:%M:%S")
             st.session_state.is_big_scan = True # 標記為大選股模式
             st.session_state.current_page = 0   # 重設頁碼
+            
+            # 存入磁碟快取
+            save_results_cache(results, is_big_scan=True)
             st.toast("✅ 全市場大選股完成！", icon="🏆")
         else:
             st.error("❌ 全市場掃描未成功取得數據。")
