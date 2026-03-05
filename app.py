@@ -147,11 +147,40 @@ st.markdown("""
 </style>
 
 <script>
-    /* 核心心跳 (Heartbeat): 每 30 秒向伺服器發送一次微弱訊號，防止手機瀏覽器因閒置斷開 Websocket */
-    setInterval(function() {
-        console.log("Streamlit Heartbeat: Keeping the connection alive...");
-        window.parent.postMessage({type: 'streamlit:heartbeat'}, '*');
-    }, 30000);
+    /* 1. 深度手勢攔截器 (Last Line of Defense) */
+    (function() {
+        let touchStartX = 0;
+        let touchStartY = 0;
+
+        // 監聽觸碰開始
+        window.addEventListener('touchstart', function(e) {
+            touchStartX = e.changedTouches[0].screenX;
+            touchStartY = e.changedTouches[0].screenY;
+        }, { passive: false });
+
+        // 監聽觸碰移動
+        window.addEventListener('touchmove', function(e) {
+            let touchMoveX = e.changedTouches[0].screenX;
+            let touchMoveY = e.changedTouches[0].screenY;
+            
+            let dx = Math.abs(touchMoveX - touchStartX);
+            let dy = Math.abs(touchMoveY - touchStartY);
+
+            // 如果水平移動明顯大於垂直移動，且在螢幕邊緣附近，強制攔截
+            // 這能有效防止 Safari/Chrome 的「側滑回上一頁」功能
+            if (dx > dy && dx > 5) {
+                if (touchStartX < 40 || touchStartX > window.innerWidth - 40) {
+                    e.preventDefault();
+                    console.log("Gesture Blocked: Horizontal Navigation Avoided");
+                }
+            }
+        }, { passive: false });
+
+        /* 2. 核心心跳 (Heartbeat): 每 30 秒向伺服器發送一次微弱訊號，防止手機瀏覽器因閒置斷開 Websocket */
+        setInterval(function() {
+            window.parent.postMessage({type: 'streamlit:heartbeat'}, '*');
+        }, 30000);
+    })();
 </script>
 """, unsafe_allow_html=True)
 
