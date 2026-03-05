@@ -287,19 +287,6 @@ def get_stock_name_map(_api):
 
     return code_to_name
 
-# --- 診斷與 UI 回饋 ---
-try:
-    current_map = get_stock_name_map(api)
-    map_size = len(current_map)
-    st.sidebar.caption(f"📊 已載入標的: {map_size} 檔")
-    
-    # 檢查函式庫是否受限於台股
-    from shioaji.constant import Exchange
-    if not hasattr(Exchange, "US"):
-        st.sidebar.warning("⚠️ 偵測到函式庫版本受限 (僅支援台股)")
-        st.sidebar.caption("💡 已啟用跨市場備用清單，NVDA 等美股仍可搜尋。")
-except Exception as e:
-    st.sidebar.caption(f"📊 標的載入中...")
 
 # --- 輔助函式 ---
 WATCHLIST_FILE = "watchlist.json"
