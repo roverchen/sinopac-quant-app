@@ -780,7 +780,7 @@ if "results" in st.session_state:
     # 顯示首選
     if not results.empty:
         top_pick = results.iloc[0]
-        st.success(f"🛡️ 今日最值得佈局：**{top_pick['代碼']} {top_pick['名稱']}** ( {top_pick['操作建議']} | 評分：{top_pick['綜合評分']:.1f})")
+        st.success(f"🛡️ 今日最值得佈局：**{top_pick['代碼']} {top_pick['名稱']}** ({top_pick['操作建議']})")
     else:
         st.warning("⚠️ 目前清單中尚無有效的分析結果，請點擊「🚀 重新掃描」。")
     
