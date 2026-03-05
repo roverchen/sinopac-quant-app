@@ -33,30 +33,56 @@ st.set_page_config(page_title="量化選股戰情室", layout="wide")
 # --- 手機版、表格優化與穩定連線 CSS ---
 st.markdown("""
 <style>
-    /* 1. 全域鎖定：防止手機瀏覽器橫向滑動觸發「上一頁/重新整理」導致斷線 */
-    html, body, [data-testid="stAppViewContainer"] {
+    /* 1. 深度鎖定：徹底防止手機瀏覽器橫向滑動觸發「上一頁/重新整理」導致斷線 */
+    html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
         overscroll-behavior-x: none !important;
         overscroll-behavior-y: auto !important;
+        touch-action: pan-y !important; /* 僅允許垂直滑動 */
     }
     
-    /* 2. 讓主容器支援橫向溢出，這樣寬表格才能捲動 */
+    /* 2. 版面容器優化 */
     [data-testid="stAppViewBlockContainer"] {
         max-width: 100vw !important;
-        padding-left: 1rem !important;
-        padding-right: 1rem !important;
-        overflow-x: auto !important;
+        padding-left: 0.5rem !important;
+        padding-right: 0.5rem !important;
     }
 
-    /* 3. 強制所有橫向區塊（表格列）保持最小寬度，避免在手機上縮成一團 */
-    [data-testid="stHorizontalBlock"] {
-        min-width: 850px !important; 
-        white-space: nowrap !important;
-        flex-wrap: nowrap !important;
+    /* 3. 響應式切換邏輯 (CSS Media Queries) */
+    /* 手機版 (小於 768px) 隱藏電腦表格 */
+    @media (max-width: 768px) {
+        .desktop-only { display: none !important; }
+        .mobile-only { display: block !important; }
     }
-    
-    /* 4. 優化欄位間距 */
-    [data-testid="column"] {
-        min-width: 50px !important;
+    /* 電腦版 (大於 769px) 隱藏手機卡片 */
+    @media (min-width: 769px) {
+        .desktop-only { display: block !important; }
+        .mobile-only { display: none !important; }
+        div[data-testid="stHorizontalBlock"] {
+            min-width: 850px !important;
+            flex-wrap: nowrap !important;
+        }
+    }
+
+    /* 4. 手機卡片樣式 */
+    .mobile-card {
+        background-color: #1e1e1e;
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 12px;
+        border-left: 5px solid #00d4ff;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    }
+    .mobile-card h4 { margin: 0 0 8px 0; color: #fff; }
+    .mobile-info { font-size: 0.9rem; color: #ccc; margin: 4px 0; }
+    .mobile-strategy { 
+        background-color: #333; 
+        padding: 8px; 
+        border-radius: 6px; 
+        margin: 10px 0;
+        font-family: monospace;
+        color: #00ff00;
+        display: inline-block;
+        width: 100%;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -859,46 +885,67 @@ if "results" in st.session_state:
     if is_big:
         st.info(f"📍 目前顯示全市場分析中第 {start_idx+1} 至 {end_idx} 檔 (共 {total_rows} 檔)")
     
-    # 使用容器包裹表格以支援手機版橫向捲動
+    # --- 渲染邏輯：電腦版表格與手機版卡片分流 ---
+    
+    # A. 電腦版表格 (Desktop Only)
+    st.markdown('<div class="desktop-only">', unsafe_allow_html=True)
     with st.container():
-        # 表頭 (依照操作建議排版)
         cols = st.columns([1.5, 1, 1, 1, 1, 3.5, 0.5])
         headers = ["股票", "最新價", "位階", "年線乖離", "MA20乖離", "操作建議 (買點/目標/停損)", ""]
         for col, header in zip(cols, headers):
             col.write(f"**{header}**")
         
-        # 內容列
         for index, row in paged_results.iterrows():
             cols = st.columns([1.5, 1, 1, 1, 1, 3.5, 0.5])
             cols[0].write(f"**{row['代碼']}** {row['名稱']}")
-            
-            # 處理載入失敗的數值顯示
-            if row['最新價格'] == 0:
-                cols[1].write("-")
-            else:
-                cols[1].write(f"{row['最新價格']:.1f}")
-                
+            cols[1].write(f"{row['最新價格']:.1f}" if row['最新價格'] != 0 else "-")
             cols[2].write(row['一年位階'])
             cols[3].write(row['年線乖離'])
             cols[4].write(row['MA20乖離'])
             cols[5].markdown(f"**`{row['操作建議']}`**")
             
             action_icon = "🗑️" if row['代碼'] in st.session_state.watchlist else "➕"
-            if cols[6].button(action_icon, key=f"act_{row['代碼']}"):
+            if cols[6].button(action_icon, key=f"d_act_{row['代碼']}"):
                 if row['代碼'] in st.session_state.watchlist:
                     st.session_state.watchlist.remove(row['代碼'])
-                    st.toast(f"已從清單移除 {row['代碼']}")
                 else:
                     st.session_state.watchlist.append(row['代碼'])
-                    st.toast(f"已加入追蹤清單 {row['代碼']}")
-                
                 save_watchlist(st.session_state.watchlist)
-                
-                # 若為一般模式，移除 results 以觸發重新計算；大選股模式則保留結果
-                if not st.session_state.get("is_big_scan"):
-                    if "results" in st.session_state:
-                        del st.session_state.results
+                if not st.session_state.get("is_big_scan") and "results" in st.session_state:
+                    del st.session_state.results
                 st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # B. 手機版卡片 (Mobile Only)
+    st.markdown('<div class="mobile-only">', unsafe_allow_html=True)
+    for index, row in paged_results.iterrows():
+        with st.container():
+            # 使用自定義 HTML 模擬漂亮卡片
+            st.markdown(f"""
+            <div class="mobile-card">
+                <h4>{row['代碼']} {row['名稱']}</h4>
+                <div class="mobile-info">最新價格: <b>{row['最新價格']:.1f}</b> | 位階: <b>{row['一年位階']}</b></div>
+                <div class="mobile-info">年線乖離: {row['年線乖離']} | MA20乖離: {row['MA20乖離']}</div>
+                <div class="mobile-strategy">
+                    {row['操作建議']}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # 手機版的加減按鈕需獨立放置並加寬
+            m_col1, m_col2 = st.columns([4, 1])
+            action_label = "從清單移除 🗑️" if row['代碼'] in st.session_state.watchlist else "加入追蹤清單 ➕"
+            if m_col1.button(action_label, key=f"m_act_{row['代碼']}", use_container_width=True):
+                if row['代碼'] in st.session_state.watchlist:
+                    st.session_state.watchlist.remove(row['代碼'])
+                else:
+                    st.session_state.watchlist.append(row['代碼'])
+                save_watchlist(st.session_state.watchlist)
+                if not st.session_state.get("is_big_scan") and "results" in st.session_state:
+                    del st.session_state.results
+                st.rerun()
+            st.divider()
+    st.markdown('</div>', unsafe_allow_html=True)
 
     # --- 分頁導航 ---
     if total_pages > 1:
