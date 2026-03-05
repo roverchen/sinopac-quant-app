@@ -120,6 +120,16 @@ st.markdown("""
             height: 40px !important;
             margin-top: 5px !important;
         }
+
+        /* 列表中的股票按鈕優化 */
+        [data-testid="column"] .stButton button {
+            text-align: left !important;
+            border: none !important;
+            background: rgba(0, 212, 255, 0.1) !important;
+            color: #00d4ff !important;
+            font-size: 1rem !important;
+            padding: 8px !important;
+        }
     }
 
     @media (min-width: 769px) {
@@ -127,6 +137,16 @@ st.markdown("""
         div[data-testid="stHorizontalBlock"] {
             min-width: 850px !important;
             flex-wrap: nowrap !important;
+        }
+        /* 電腦清單內的按鈕樣式 */
+        [data-testid="column"] .stButton button {
+            background: transparent !important;
+            border: none !important;
+            color: #00d4ff !important;
+            text-align: left !important;
+            text-decoration: underline !important;
+            font-weight: bold !important;
+            padding: 0 !important;
         }
     }
 </style>
@@ -179,6 +199,10 @@ is_mock = hasattr(api, 'list_accounts') and len(api.list_accounts()) == 0 and no
 conn_status = "🔴 連線衝突 (唯讀模式)" if is_mock else "🟢 API 連線正常"
 
 st.sidebar.markdown(f"### 📡 系統狀態: {conn_status}")
+
+# 顯示最後一筆模擬訂單 (如果有)
+if "last_order" in st.session_state:
+    st.sidebar.success(f"📌 **模擬委託回報**\n\n{st.session_state.last_order}")
 if st.sidebar.button("🛑 深度清空並重置", use_container_width=True, help="清除所有暫存與登入狀態，修復重啟死循環"):
     # 1. 清除 Session State
     for key in list(st.session_state.keys()):
@@ -1019,13 +1043,47 @@ if "results" in st.session_state:
         </div>
     """, unsafe_allow_html=True)
     
+    # --- [NEW] 下單對話框 ---
+    @st.dialog("📝 下單確認 (模擬預覽)")
+    def show_order_dialog(row):
+        st.markdown(f"### 🎯 準備委託: **{row['代碼']} {row['名稱']}**")
+        
+        # 提取建議買價
+        try:
+            # 解析建議字串: "📈強勢 | 買:1255.0 | 標:1443.2 | 損:1192.2"
+            action_parts = row['操作建議'].split('|')
+            buy_price = float(action_parts[1].split(':')[1].strip())
+        except:
+            buy_price = row['最新價格']
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("建議買價", f"{buy_price:.1f}")
+        with col2:
+            qty = st.number_input("委託張數", min_value=1, value=1, step=1)
+            
+        st.success(f"💡 預估委託金額: **{buy_price * qty * 1000:,.0f}** 元")
+        
+        st.divider()
+        c1, c2 = st.columns(2)
+        if c1.button("✅ 執行模擬下單", use_container_width=True, type="primary"):
+            st.toast(f"🚀 已錄入 {row['代碼']} 模擬委託！", icon="✅")
+            st.session_state.last_order = f"{datetime.now().strftime('%H:%M:%S')} - 已模擬買入 {row['代碼']} {qty}張"
+            st.rerun()
+            
+        c2.link_button("🌐 永豐金 Web 下單", 
+                      "https://shweb.sinopac.com.tw/SinoPacSettlement/Trade/Order", 
+                      use_container_width=True,
+                      help="跳轉至官方網頁介面進行真實下單")
+
     # 2. 顯示內容 (每一家股票一個穩定容器，手機自動轉卡片)
     for index, row in paged_results.iterrows():
         with st.container(border=True):
             cols = st.columns([1.5, 1, 1, 1, 1, 3.5, 0.5])
             
-            # 欄位一：股票名稱
-            cols[0].write(f"**{row['代碼']}** {row['名稱']}")
+            # 欄位一：股票名稱 (轉為按鈕連結)
+            if cols[0].button(f"🛒 {row['代碼']} {row['名稱']}", key=f"t_{row['代碼']}", use_container_width=True):
+                show_order_dialog(row)
             
             # 欄位二：最新價 (手機版會標註標籤)
             price_val = f"{row['最新價格']:.1f}" if row['最新價格'] != 0 else "-"
