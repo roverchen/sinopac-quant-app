@@ -133,12 +133,7 @@ st.markdown("""
     }
 
     @media (min-width: 769px) {
-        /* 電腦版限制最小寬度以防重疊 */
-        div[data-testid="stHorizontalBlock"] {
-            min-width: 850px !important;
-            flex-wrap: nowrap !important;
-        }
-        /* 電腦清單內的按鈕樣式 */
+        /* 電腦版清單內的按鈕樣式 - 確保高度與文字一致 */
         [data-testid="column"] .stButton button {
             background: transparent !important;
             border: none !important;
@@ -147,6 +142,15 @@ st.markdown("""
             text-decoration: underline !important;
             font-weight: bold !important;
             padding: 0 !important;
+            line-height: inherit !important;
+            height: auto !important;
+            min-height: 0 !important;
+        }
+        /* 隱藏表頭容器的邊框，僅保留對齊用的內距 */
+        .header-container [data-testid="stVerticalBlockBorderWrapper"] {
+            border: none !important;
+            background: transparent !important;
+            padding-bottom: 0 !important;
         }
     }
 </style>
@@ -198,19 +202,28 @@ api = init_api()
 is_mock = hasattr(api, 'list_accounts') and len(api.list_accounts()) == 0 and not hasattr(api, 'Contracts')
 conn_status = "🔴 連線衝突 (唯讀模式)" if is_mock else "🟢 API 連線正常"
 
-st.sidebar.markdown(f"### 📡 系統狀態: {conn_status}")
+# --- [NEW] 憑證交易設定 ---
+st.sidebar.markdown("---")
+st.sidebar.subheader("🔒 交易憑證設定")
+person_id = st.sidebar.text_input("身分證字號", value=st.secrets.get("PERSON_ID", ""), type="default", help="啟動憑證所需")
+ca_passwd = st.sidebar.text_input("憑證密碼", value=st.secrets.get("CA_PASSWD", ""), type="password", help="Sinopac.pfx 的保護密碼")
+ca_path = os.path.join(os.getcwd(), "Sinopac.pfx")
+
+ca_active = False
+if person_id and ca_passwd and os.path.exists(ca_path):
+    try:
+        if not is_mock:
+            api.activate_ca(ca_path=ca_path, ca_passwd=ca_passwd, person_id=person_id)
+            st.sidebar.success("🔑 憑證已啟動 (可執行實盤)")
+            ca_active = True
+        else:
+            st.sidebar.warning("⚠️ 唯讀模式下無法啟動憑證")
+    except Exception as e:
+        st.sidebar.error(f"❌ 憑證啟動失敗: {str(e)[:50]}...")
 
 # 顯示最後一筆模擬訂單 (如果有)
 if "last_order" in st.session_state:
-    st.sidebar.success(f"📌 **模擬委託回報**\n\n{st.session_state.last_order}")
-if st.sidebar.button("🛑 深度清空並重置", use_container_width=True, help="清除所有暫存與登入狀態，修復重啟死循環"):
-    # 1. 清除 Session State
-    for key in list(st.session_state.keys()):
-        del st.session_state[key]
-    # 2. 刪除磁碟快取
-    if os.path.exists(RESULTS_CACHE_FILE):
-        os.remove(RESULTS_CACHE_FILE)
-    st.rerun()
+    st.sidebar.success(f"📌 **交易回報**\n\n{st.session_state.last_order}")
 
 st.sidebar.divider()
 
@@ -328,30 +341,47 @@ def save_watchlist(watchlist):
     with open(WATCHLIST_FILE, "w") as f:
         json.dump(watchlist, f)
 
-@st.cache_data
+@st.cache_data(ttl=86400)
 def check_revenue_momentum(code):
-    """檢查近三個月營收是否連續 YoY 年減 (僅限台股)"""
-    if not code.isdigit(): return "N/A", True # 美股目前跳過營收檢查或回傳 OK
+    """
+    優化後的營收檢查：改採「近三個月 YoY 趨勢」邏輯。
+    如果連續三個月 YoY 遞減且最新一月年減 > 10%，則視為真衰退。
+    若最新一月已轉正或止跌，則給予轉機空間。
+    """
+    if not code.isdigit(): return "N/A", True
     try:
         # 使用 FinMind 開放 API
         url = "https://api.finmindtrade.com/api/v4/data"
         params = {
             "dataset": "TaiwanStockMonthRevenue",
             "data_id": code,
-            "start_date": (datetime.now() - timedelta(days=150)).strftime("%Y-%m-%d")
+            "start_date": (datetime.now() - timedelta(days=200)).strftime("%Y-%m-%d")
         }
         res = requests.get(url, params=params, timeout=5)
         data = res.json().get('data', [])
-        if len(data) >= 3:
-            # 取得最近三筆資料
-            recent_yoy = [d.get('revenue_month_year_comparison', 0) for d in data[-3:]]
-            # 如果三個月都小於 0，則為營收衰退
-            if all(y < 0 for y in recent_yoy):
-                return "❌ 連續三月衰退", False
-            return "✅ 營收動能正常", True
+        if len(data) < 3: return "數據不足", True
+        
+        # 取得近三個月的 YoY
+        # 不同版本 API 欄位可能不同，嘗試常見名稱
+        yoy_list = []
+        for d in data[-3:]:
+            yoy = d.get('revenue_month_year_comparison') or d.get('revenue_percentage_change_year') or 0
+            yoy_list.append(yoy)
+            
+        latest_yoy = yoy_list[-1]
+        prev_yoy = yoy_list[-2]
+        is_trending_down = all(yoy_list[i] > yoy_list[i+1] for i in range(len(yoy_list)-1))
+        
+        if latest_yoy > 0:
+            return f"📈 成長({latest_yoy:.1f}%)", True
+        if latest_yoy > prev_yoy:
+            return f"🔄 轉機({latest_yoy:.1f}%)", True
+        if is_trending_down and latest_yoy < -10:
+            return f"⚠️ 衰退({latest_yoy:.1f}%)", False
+            
+        return f"偏弱({latest_yoy:.1f}%)", True
     except:
-        pass
-    return "💡 無法取得營收", True
+        return "無法取得", True
 
 
 def resolve_stock_code(input_str, api):
@@ -727,15 +757,42 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
             defense_base = ma240_last if has_ma240 else ma60_last
             dist_to_defense = (last_price / defense_base - 1) if not np.isnan(defense_base) else 0
             
-            # MACD 狀態
+            # MACD 狀態優化：加入 0 軸偏向過濾器
             is_gold_cross = False
-            if len(df) >= 2:
+            if len(df) >= 30:
+                # 0軸過濾器：快線與慢線都在 0 以上為「強勢區」，以下為「弱勢區」
+                is_above_zero = df['macd'].iloc[-1] > 0 and df['macdsignal'].iloc[-1] > 0
+                zone_prefix = "🎯強勢" if is_above_zero else "🩹弱勢"
+                
                 last_hist = df['hist'].iloc[-1]
                 prev_hist = df['hist'].iloc[-2]
-                is_gold_cross = prev_hist <= 0 and last_hist > 0
-                macd_status = "🚀 金叉發動" if is_gold_cross else "趨勢中"
+                if prev_hist <= 0 and last_hist > 0:
+                    macd_status = f"{zone_prefix}金叉"
+                    is_gold_cross = True
+                elif prev_hist >= 0 and last_hist < 0:
+                    macd_status = f"{zone_prefix}死叉"
+                else:
+                    macd_status = f"{zone_prefix}整理" if is_above_zero else "低檔盤整"
             else:
                 macd_status = "資料不足"
+            
+            # --- [NEW] 計算 ATR (真實波幅) 用於動態停損 ---
+            if len(df) > 20:
+                high_low = df['high'] - df['low']
+                high_cp = np.abs(df['high'] - df['close'].shift())
+                low_cp = np.abs(df['low'] - df['close'].shift())
+                tr = pd.concat([high_low, high_cp, low_cp], axis=1).max(axis=1)
+                atr = tr.rolling(14).mean().iloc[-1]
+            else:
+                atr = last_price * 0.03
+            
+            # --- [NEW] 價值防禦「動能觸發」 (Volume and MA5) ---
+            if len(df) > 5:
+                ma5 = df['close'].rolling(5).mean().iloc[-1]
+                vol_ma5 = df['volume'].rolling(5).mean().iloc[-1]
+                has_momentum = (last_price > ma5) and (df['volume'].iloc[-1] > vol_ma5 * 1.2)
+            else:
+                has_momentum = False
             
             # 盈餘動能檢查
             rev_status, is_rev_ok = check_revenue_momentum(code)
@@ -744,13 +801,17 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
             value_buy_zone = min(last_price, defense_base) if not np.isnan(defense_base) else last_price
             value_score = (1 - level_percentile) * 50
             if -0.05 < dist_to_defense < 0.05:
-                # 越接近支撐線分數越高
-                value_score += 50
+                value_score += 30 # 貼近年線基礎分
+            if has_momentum:
+                value_score += 20 # 動能加成 (避免資金卡死)
             
             # B. 強勢股回測分數 (Growth Pullback)
             growth_buy_zone = ma20_last if not np.isnan(ma20_last) else last_price
             pullback_score = (1 - min(abs(dist_to_ma20), 0.1)/0.1) * 50
-            if is_gold_cross: pullback_score += 50
+            if is_gold_cross: 
+                # 加上 0 軸濾鏡加成
+                bonus = 50 if "強勢" in macd_status else 30
+                pullback_score += bonus
             
             # 根據滑桿權重結合分數
             final_score = (defense_weight * value_score) + ((1 - defense_weight) * pullback_score)
@@ -760,13 +821,15 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
             weighted_pullback_score = (1 - defense_weight) * pullback_score
             
             if weighted_pullback_score >= weighted_value_score:
-                target = growth_buy_zone * 1.15
-                stop_loss = growth_buy_zone * 0.95
+                # 強勢追蹤策略：使用 ATR 動態停損 (預設 2.5 倍 ATR，美股高波自動拉開)
+                stop_loss = last_price - (2.5 * atr) 
+                target = last_price + (last_price - stop_loss) * 3 # 1:3 風報比
                 actionable_str = f"📈強勢 | 買:{growth_buy_zone:.1f} | 標:{target:.1f} | 損:{stop_loss:.1f} | 評分：{final_score:.1f}"
             else:
                 target = ma240_last * 1.2 if not np.isnan(ma240_last) else value_buy_zone * 1.2
                 stop_loss = year_low * 0.95
-                actionable_str = f"🛡價值 | 買:{value_buy_zone:.1f} | 標:{target:.1f} | 損:{stop_loss:.1f} | 評分：{final_score:.1f}"
+                m_tag = "⚡" if has_momentum else "" # 動能標記
+                actionable_str = f"🛡價值{m_tag} | 買:{value_buy_zone:.1f} | 標:{target:.1f} | 損:{stop_loss:.1f} | 評分：{final_score:.1f}"
 
             # 如果營收衰退，則排到最下面 (分數砍半)
             if not is_rev_ok:
@@ -790,7 +853,10 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
                 "_g_buy": growth_buy_zone,
                 "_ma_base": defense_base,
                 "_has_ma240": has_ma240,
-                "_y_low": year_low
+                "_y_low": year_low,
+                "_atr": atr,
+                "_has_momentum": has_momentum,
+                "_macd_status": macd_status
             })
             
             # --- 頻率保護：如果是大選股，加入微小延遲防止被封鎖 ---
@@ -1031,17 +1097,17 @@ if "results" in st.session_state:
     # --- 渲染邏輯：單一路徑原生容器 (最穩定方案) ---
     
     # 1. 顯示表頭 (電腦版會顯示，手機版透過 CSS 隱藏)
-    st.markdown("""
-        <div class="desktop-header" style="display: flex; flex-direction: row; font-weight: bold; padding: 10px 0; border-bottom: 1px solid #444; margin-bottom: 5px;">
-            <div style="flex: 1.5; padding-left: 5px;">股票</div>
-            <div style="flex: 1;">最新價</div>
-            <div style="flex: 1;">位階</div>
-            <div style="flex: 1;">年線乖離</div>
-            <div style="flex: 1;">MA20乖離</div>
-            <div style="flex: 3.5;">操作建議 (買點/目標/停損)</div>
-            <div style="flex: 0.5;"></div>
-        </div>
-    """, unsafe_allow_html=True)
+    # 1. 顯示表頭 (使用 st.columns 並包裹在容器內以確保內距對其)
+    with st.container(border=True):
+        st.markdown('<div class="header-container">', unsafe_allow_html=True)
+        h_cols = st.columns([1.5, 1, 1, 1, 1, 3.5, 0.5])
+        h_cols[0].markdown("**股票**")
+        h_cols[1].markdown("**最新價**")
+        h_cols[2].markdown("**位階**")
+        h_cols[3].markdown("**年線乖離**")
+        h_cols[4].markdown("**MA20乖離**")
+        h_cols[5].markdown("**操作建議**")
+        st.markdown('</div>', unsafe_allow_html=True)
     
     # --- [NEW] 下單對話框 ---
     @st.dialog("📝 下單確認 (模擬預覽)")
@@ -1060,21 +1126,58 @@ if "results" in st.session_state:
         with col1:
             st.metric("建議買價", f"{buy_price:.1f}")
         with col2:
-            qty = st.number_input("委託張數", min_value=1, value=1, step=1)
+            qty = st.number_input("委託股數", min_value=1, value=1000, step=100)
             
-        st.success(f"💡 預估委託金額: **{buy_price * qty * 1000:,.0f}** 元")
+        st.success(f"💡 預估委託金額: **{buy_price * qty:,.0f}** 元")
         
         st.divider()
         c1, c2 = st.columns(2)
-        if c1.button("✅ 執行模擬下單", use_container_width=True, type="primary"):
+        # 按鈕 1: 模擬下單 (永遠可用)
+        if c1.button("🧪 執行模擬下單", use_container_width=True):
             st.toast(f"🚀 已錄入 {row['代碼']} 模擬委託！", icon="✅")
-            st.session_state.last_order = f"{datetime.now().strftime('%H:%M:%S')} - 已模擬買入 {row['代碼']} {qty}張"
+            st.session_state.last_order = f"{datetime.now().strftime('%H:%M:%S')} - 已模擬買入 {row['代碼']} {qty}股"
             st.rerun()
             
-        c2.link_button("🌐 永豐金 Web 下單", 
-                      "https://shweb.sinopac.com.tw/SinoPacSettlement/Trade/Order", 
-                      use_container_width=True,
-                      help="跳轉至官方網頁介面進行真實下單")
+        # 按鈕 2: 實盤下單 (需憑證啟動)
+        if ca_active:
+            if c2.button("💰 API 實盤下單", use_container_width=True, type="primary"):
+                try:
+                    # 1. 取得合約
+                    contract = None
+                    for mk in ["TSE", "OTC"]:
+                        try:
+                            contract = getattr(api.Contracts.Stocks, mk)[row['代碼']]
+                            if contract: break
+                        except: continue
+                    
+                    if not contract:
+                        st.error("❌ 找不到該標的合約，無法下單。")
+                    else:
+                        # 2. 建立訂單 (預設為市價或最接近建議價)
+                        # 注意：此處僅為展示架構，實際下單需處理 Order 對象
+                        from shioaji import Order
+                        from shioaji.constant import Action, PriceType, OrderType
+                        
+                        order = Order(
+                            price=buy_price,
+                            quantity=qty,
+                            action=Action.Buy,
+                            price_type=PriceType.LMT, # 限價
+                            order_type=OrderType.ROD, # 當日有效
+                            account=api.list_accounts()[0] # 預設取第一個帳號
+                        )
+                        
+                        trade = api.place_order(contract, order)
+                        st.session_state.last_order = f"{datetime.now().strftime('%H:%M:%S')} - API 已送出 {row['代碼']} {qty}股 (限價:{buy_price})"
+                        st.toast("✅ API 委託已送出！", icon="🚀")
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"❌ API 下單失敗: {e}")
+        else:
+            c2.link_button("🌐 官網開啟下單", 
+                         "https://www.sinotrade.com.tw/newweb/goOrder/?nav=0", 
+                         use_container_width=True,
+                         help="憑證未啟動，請手動至官網下單")
 
     # 2. 顯示內容 (每一家股票一個穩定容器，手機自動轉卡片)
     for index, row in paged_results.iterrows():
