@@ -198,7 +198,7 @@ if not st.session_state.get('contracts_fetched', False):
             api.fetch_contracts(contract_download=True)
         st.session_state.contracts_fetched = True
     except:
-        return []
+        pass
 
 # --- 結果暫存 (Persistence) 邏輯 ---
 def save_results_cache(df, is_big_scan=False):
