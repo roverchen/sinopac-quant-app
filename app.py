@@ -27,6 +27,7 @@ import pickle
 WATCHLIST_FILE = "watchlist.json"
 CACHE_DIR = "cache"
 RESULTS_CACHE_FILE = os.path.join(CACHE_DIR, "results_cache.pkl")
+NAME_MAP_CACHE_FILE = os.path.join(CACHE_DIR, "name_map.pkl")
 
 if not os.path.exists(CACHE_DIR):
     os.makedirs(CACHE_DIR)
@@ -246,7 +247,6 @@ def get_stock_name_map(_api):
     code_to_name = {}
     
     # --- 🇺🇸 美股備用清單 (針對函式庫版本限制的補全) ---
-    # 這裡包含 S&P 500 與主要龍頭，確保搜尋 "nvida" 或 "NVDA" 必中
     US_STOCK_FALLBACK = {
         "NVDA": "NVIDIA Corp (US)", "AAPL": "Apple Inc (US)", "MSFT": "Microsoft Corp (US)",
         "GOOGL": "Alphabet Inc A (US)", "AMZN": "Amazon.com Inc (US)", "TSLA": "Tesla Inc (US)",
@@ -258,11 +258,12 @@ def get_stock_name_map(_api):
         "JPM": "JPMorgan (US)", "V": "Visa (US)", "MA": "Mastercard (US)",
         "BRK.B": "Berkshire B (US)", "LLY": "Eli Lilly (US)", "XOM": "Exxon Mobil (US)"
     }
-    # 預載備用清單
     code_to_name.update(US_STOCK_FALLBACK)
 
-    # 如果有 API 合約資訊，則進行深度補完
-    if hasattr(_api, "Contracts") and hasattr(_api.Contracts, "Stocks"):
+    # 檢查是否為 MockApi (連線衝突模式)
+    is_mock = hasattr(_api, 'list_accounts') and len(_api.list_accounts()) == 0 and not hasattr(_api, 'Contracts')
+
+    if not is_mock and hasattr(_api, "Contracts") and hasattr(_api.Contracts, "Stocks"):
         stocks = _api.Contracts.Stocks
         def recursive_scan(item, depth=0):
             if depth > 5: return
@@ -273,17 +274,34 @@ def get_stock_name_map(_api):
                     if hasattr(val, '_code2contract'):
                         for c, contract in val._code2contract.items():
                             c_code = str(c).upper()
-                            # 不要覆蓋已有的備用清單名稱 (保留 (US) 標記)
                             if c_code not in code_to_name:
                                 code_to_name[c_code] = getattr(contract, 'name', 'Unknown')
                     elif hasattr(val, '__slots__') or hasattr(val, 'get'):
                         recursive_scan(val, depth + 1)
                 except: continue
         recursive_scan(stocks)
+        
+        # 成功抓取後，存入磁碟快取供離線使用
+        if len(code_to_name) > 1000:
+            try:
+                with open(NAME_MAP_CACHE_FILE, "wb") as f:
+                    pickle.dump(code_to_name, f)
+            except: pass
+    else:
+        # 如果是 MockApi 或抓取失敗，嘗試從磁碟載入
+        if os.path.exists(NAME_MAP_CACHE_FILE):
+            try:
+                with open(NAME_MAP_CACHE_FILE, "rb") as f:
+                    cached_map = pickle.load(f)
+                    code_to_name.update(cached_map)
+            except: pass
 
-    # 驗證機制 (台股預期萬檔以上，若不足則僅警告不崩潰)
-    if len(code_to_name) < 1000:
+    # 驗證機制
+    if is_mock:
+        st.sidebar.info("💡 目前處於「離線恢復模式」，名稱解析來自上次快取資料。")
+    elif len(code_to_name) < 1000:
         st.warning(f"⚠️ 股票清單載入不完全 (僅 {len(code_to_name)} 檔)，部分代碼可能暫時無法解析名稱。")
+
     return code_to_name
 
 # --- 診斷與 UI 回饋 ---
