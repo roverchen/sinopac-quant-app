@@ -607,6 +607,24 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
                         kbars = api.kbars(contract, start=start_date)
                         df = pd.DataFrame({**kbars})
                         source = "☁️ 雲端"
+                        
+                        # --- [修正] 如果 Shioaji 回傳空資料 (常見於新股 7717)，嘗試切換到 yfinance 備援 ---
+                        if df.empty:
+                            print(f"[Fallback] Shioaji no data for {code}, trying yfinance...")
+                            for suffix in ['.TW', '.TWO']:
+                                try:
+                                    t = yf.Ticker(code + suffix)
+                                    df_yf = t.history(period="1y", interval="1d")
+                                    if not df_yf.empty:
+                                        df = df_yf.reset_index()
+                                        df.columns = [c.lower() for c in df.columns]
+                                        if 'date' in df.columns:
+                                            df = df.rename(columns={'date': 'ts'})
+                                        df['ts'] = pd.to_datetime(df['ts'])
+                                        df = df[['ts', 'open', 'high', 'low', 'close', 'volume']]
+                                        source = f"🌐 Yahoo({suffix})"
+                                        break
+                                except: continue
                     except Exception as e:
                         if not quiet_mode:
                             st.warning(f"無法取得台股 {code} 的 K 線資料: {e}")
@@ -668,16 +686,22 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
                 # 儲存到本地快取
                 df.to_csv(cache_file, index=False)
             
-            # --- 核心邏輯：雙策略評分 ---
+            # --- 核心邏輯：雙策略評分 (新股彈性優化) ---
             last_price = df['close'].iloc[-1]
             year_high = df['close'].max()
             year_low = df['close'].min()
             level_percentile = (last_price - year_low) / (year_high - year_low) if (year_high - year_low) != 0 else 0
             
             ma20_last = df['ma20'].iloc[-1]
+            ma60_last = df['ma60'].iloc[-1]
             ma240_last = df['ma240'].iloc[-1]
+            
             dist_to_ma20 = (last_price / ma20_last - 1) if not np.isnan(ma20_last) else 100
-            dist_to_ma240 = (last_price / ma240_last - 1) if not np.isnan(ma240_last) else 0
+            
+            # --- [修正] IPO 彈性防護：若無年線 (MA240)，改用季線 (MA60) 作為防禦基準 ---
+            has_ma240 = not np.isnan(ma240_last)
+            defense_base = ma240_last if has_ma240 else ma60_last
+            dist_to_defense = (last_price / defense_base - 1) if not np.isnan(defense_base) else 0
             
             # MACD 狀態
             is_gold_cross = False
@@ -693,9 +717,10 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
             rev_status, is_rev_ok = check_revenue_momentum(code)
             
             # A. 價值防禦分數 (Value Defense)
-            value_buy_zone = min(last_price, ma240_last) if not np.isnan(ma240_last) else last_price
+            value_buy_zone = min(last_price, defense_base) if not np.isnan(defense_base) else last_price
             value_score = (1 - level_percentile) * 50
-            if -0.05 < dist_to_ma240 < 0.05:
+            if -0.05 < dist_to_defense < 0.05:
+                # 越接近支撐線分數越高
                 value_score += 50
             
             # B. 強勢股回測分數 (Growth Pullback)
@@ -729,7 +754,7 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
                 "最新價格": last_price,
                 "操作建議": actionable_str,
                 "一年位階": f"{level_percentile*100:.1f}%",
-                "年線乖離": f"{dist_to_ma240*100:.1f}%",
+                "年線乖離": f"{dist_to_defense*100:.1f}%" if has_ma240 else f"{dist_to_defense*100:.1f}%(季)",
                 "MA20乖離": f"{dist_to_ma20*100:.1f}%",
                 "MACD狀態": macd_status,
                 "綜合評分": final_score,
@@ -739,7 +764,8 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
                 "_is_rev_ok": is_rev_ok,
                 "_v_buy": value_buy_zone,
                 "_g_buy": growth_buy_zone,
-                "_ma240": ma240_last,
+                "_ma_base": defense_base,
+                "_has_ma240": has_ma240,
                 "_y_low": year_low
             })
             
@@ -787,10 +813,11 @@ def rescore_results(results_df, defense_weight):
             return f"📈強勢 | 買:{g_buy:.1f} | 標:{target:.1f} | 損:{stop:.1f} | 評分：{score:.1f}"
         else:
             v_buy = row['_v_buy']
-            ma240 = row['_ma240']
-            target = ma240 * 1.2 if not np.isnan(ma240) else v_buy * 1.2
+            ma_base = row['_ma_base']
+            target = ma_base * 1.2 if not np.isnan(ma_base) else v_buy * 1.2
             stop = row['_y_low'] * 0.95
-            return f"🛡價值 | 買:{v_buy:.1f} | 標:{target:.1f} | 損:{stop:.1f} | 評分：{score:.1f}"
+            label = "🛡價值" if row['_has_ma240'] else "🐣新股"
+            return f"{label} | 買:{v_buy:.1f} | 標:{target:.1f} | 損:{stop:.1f} | 評分：{score:.1f}"
 
     df['操作建議'] = df.apply(build_action, axis=1)
     
