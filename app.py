@@ -734,9 +734,13 @@ elif big_scan_btn:
         else:
             st.error("❌ 全市場掃描未成功取得數據。")
 
-# 顯示最後更新時間
-if "last_update" in st.session_state:
-    st.sidebar.caption(f"最後更新時間: {st.session_state.last_update}")
+# 顯示最後更新時間與結果
+if "results" in st.session_state:
+    results = st.session_state.results
+    history_data = st.session_state.get("history_data", {})
+    
+    if "last_update" in st.session_state:
+        st.sidebar.caption(f"最後更新時間: {st.session_state.last_update}")
             
     # --- 自動名稱修復與即時重新計分 ---
     # 1. 檢查是否需要根據滑桿重新計分
