@@ -557,11 +557,11 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
             if pullback_score > value_score:
                 target = growth_buy_zone * 1.15
                 stop_loss = growth_buy_zone * 0.95
-                actionable_str = f"📈強勢 | 買:{growth_buy_zone:.1f} | 標:{target:.1f} | 損:{stop_loss:.1f}"
+                actionable_str = f"📈強勢 | 買:{growth_buy_zone:.1f} | 標:{target:.1f} | 損:{stop_loss:.1f} | 評分：{final_score:.1f}"
             else:
                 target = ma240_last * 1.2 if not np.isnan(ma240_last) else value_buy_zone * 1.2
                 stop_loss = year_low * 0.95
-                actionable_str = f"🛡價值 | 買:{value_buy_zone:.1f} | 標:{target:.1f} | 損:{stop_loss:.1f}"
+                actionable_str = f"🛡價值 | 買:{value_buy_zone:.1f} | 標:{target:.1f} | 損:{stop_loss:.1f} | 評分：{final_score:.1f}"
 
             # 如果營收衰退，則排到最下面 (分數砍半)
             if not is_rev_ok:
@@ -647,11 +647,11 @@ def rescore_results(history_data, api, defense_weight):
             if pullback_score > value_score:
                 target = growth_buy_zone * 1.15
                 stop_loss = growth_buy_zone * 0.95
-                actionable_str = f"📈強勢 | 買:{growth_buy_zone:.1f} | 標:{target:.1f} | 損:{stop_loss:.1f}"
+                actionable_str = f"📈強勢 | 買:{growth_buy_zone:.1f} | 標:{target:.1f} | 損:{stop_loss:.1f} | 評分：{final_score:.1f}"
             else:
                 target = ma240_last * 1.2 if not np.isnan(ma240_last) else value_buy_zone * 1.2
                 stop_loss = year_low * 0.95
-                actionable_str = f"🛡價值 | 買:{value_buy_zone:.1f} | 標:{target:.1f} | 損:{stop_loss:.1f}"
+                actionable_str = f"🛡價值 | 買:{value_buy_zone:.1f} | 標:{target:.1f} | 損:{stop_loss:.1f} | 評分：{final_score:.1f}"
 
             if not is_rev_ok:
                 final_score *= 0.1
