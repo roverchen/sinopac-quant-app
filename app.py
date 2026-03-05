@@ -67,22 +67,6 @@ st.markdown("""
             width: 30px !important;
             height: 30px !important;
         }
-        /* 側邊欄頂部提示文字 */
-        .mobile-hint {
-            background: linear-gradient(90deg, #007bff, #00d4ff);
-            color: white;
-            padding: 10px;
-            border-radius: 8px;
-            text-align: center;
-            font-weight: bold;
-            margin-bottom: 15px;
-            font-size: 0.9rem;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
-        }
-    }
-    /* 電腦版隱藏提示 */
-    @media (min-width: 769px) {
-        .mobile-hint { display: none !important; }
     }
     
     /* 3. 響應式佈局：預設隱藏手機版標籤 */
@@ -152,7 +136,6 @@ st.markdown("""
 st.title("📈 台美股量化選股系統")
 
 # --- 手機版側邊欄提示 ---
-st.markdown('<div class="mobile-hint">💡 點擊左上角 ☰ 符號即可調整策略比重</div>', unsafe_allow_html=True)
 
 # --- 初始化 API ---
 @st.cache_resource
