@@ -33,11 +33,18 @@ st.set_page_config(page_title="量化選股戰情室", layout="wide")
 # --- 手機版、表格優化與穩定連線 CSS ---
 st.markdown("""
 <style>
-    /* 1. 深度鎖定：徹底防止手機瀏覽器橫向手勢干擾，確保連線穩定 */
-    html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
+    /* 1. 核心鎖定：鎖定極限水平滑動，防止 iOS/Android 觸發「上一頁」 */
+    html, body {
         overscroll-behavior-x: none !important;
-        overscroll-behavior-y: auto !important;
-        touch-action: pan-y !important;
+        position: fixed;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+    }
+    [data-testid="stMain"] {
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+        -webkit-overflow-scrolling: touch;
     }
     
     /* 2. 側邊欄開關強化 (針對手機版明顯化) */
@@ -80,8 +87,10 @@ st.markdown("""
     .mobile-label { display: none; }
 
     @media (max-width: 768px) {
-        /* 隱藏電腦版表頭提示 */
-        [data-testid="stHeader"] { display: none; }
+        /* 只隱藏 Header 的背景與其他雜項，保留側邊欄按鈕按鈕 */
+        [data-testid="stHeader"] { 
+            background: transparent !important;
+        }
         .desktop-header { display: none !important; }
         
         /* 強制所有欄位垂直堆疊 (關鍵：針對 st.columns 內部容器) */
