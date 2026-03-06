@@ -1224,6 +1224,17 @@ if "results" in st.session_state:
                          use_container_width=True,
                          help="憑證未啟動，請手動至官網下單")
 
+        # --- [NEW] 在對話框內顯示 K 線與 MACD 指標 ---
+        st.divider()
+        st.markdown(f"#### 📊 {row['代碼']} {row['名稱']} 技術圖表")
+        cache_file = os.path.join(CACHE_DIR, f"{row['代碼']}.csv")
+        if os.path.exists(cache_file):
+            df_selected = pd.read_csv(cache_file)
+            df_selected['ts'] = pd.to_datetime(df_selected['ts'])
+            plot_financial_charts(df_selected, row['代碼'])
+        else:
+            st.warning(f"⚠️ 找不到 {row['代碼']} 的快取資料。")
+
     # 2. 顯示內容 (每一家股票一個穩定容器，手機自動轉卡片)
     for index, row in paged_results.iterrows():
         with st.container(border=True):
@@ -1281,16 +1292,7 @@ if "results" in st.session_state:
     
     st.divider()
     
-    # 互動式圖表選擇 (按需讀取快取，極速流暢)
-    selected_code = st.selectbox("選擇要查看詳情的股票", results['代碼'].tolist())
-    
-    if selected_code:
-        cache_file = os.path.join(CACHE_DIR, f"{selected_code}.csv")
-        if os.path.exists(cache_file):
-            df_selected = pd.read_csv(cache_file)
-            df_selected['ts'] = pd.to_datetime(df_selected['ts'])
-            plot_financial_charts(df_selected, selected_code)
-        else:
-            st.warning(f"⚠️ 找不到 {selected_code} 的快取資料，請重新掃描。")
+    # 互動式圖表已移至「下單確認」對話框內，此處保持簡潔
+    pass
 else:
     st.info("🔄 正在初始化市場數據，或請點擊左側「🚀 手動重新掃描數據」。")
