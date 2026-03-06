@@ -1139,20 +1139,22 @@ if "results" in st.session_state:
 
     # --- 渲染邏輯：單一路徑原生容器 (最穩定方案) ---
     
-    # 1. 顯示表頭 (使用 .desktop-only 包裹，在手機版隱藏)
-    with st.container():
-        st.markdown('<div class="desktop-only">', unsafe_allow_html=True)
-        with st.container(border=True):
-            h_cols = st.columns([1.5, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 3.5, 0.5])
-            h_cols[0].markdown("**股票**")
-            h_cols[1].markdown("**最新價**")
-            h_cols[2].markdown("**位階**")
-            h_cols[3].markdown("**年線乖離**")
-            h_cols[4].markdown("**MA20乖離**")
-            h_cols[5].markdown("**MA20價**")
-            h_cols[6].markdown("**ATR停損**")
-            h_cols[7].markdown("**操作建議**")
-        st.markdown('</div>', unsafe_allow_html=True)
+    # 1. 顯示表頭 (直接使用 HTML 以確保 .desktop-only 隱藏完全生效)
+    st.markdown("""
+    <div class="desktop-only">
+        <div style="display: flex; border: 1px solid #444; border-radius: 8px; padding: 10px; background: #262730; margin-bottom: 10px; font-weight: bold; align-items: center;">
+            <div style="flex: 1.5;">股票</div>
+            <div style="flex: 0.8;">最新價</div>
+            <div style="flex: 0.8;">位階</div>
+            <div style="flex: 0.8;">年線乖離</div>
+            <div style="flex: 0.8;">MA20乖離</div>
+            <div style="flex: 0.8;">MA20價</div>
+            <div style="flex: 0.8;">ATR停損</div>
+            <div style="flex: 3.5;">操作建議</div>
+            <div style="flex: 0.5;"></div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
     
     # --- [NEW] 下單對話框 ---
     @st.dialog("📝 下單確認 (模擬預覽)")
