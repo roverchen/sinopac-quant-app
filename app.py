@@ -79,6 +79,11 @@ st.markdown("""
         }
         .desktop-header { display: none !important; }
         
+        /* 隱藏表頭區塊 (手機版) - 使用 :has 穿透 st.container 產生的多層 div */
+        div[data-testid="stVerticalBlock"]:has(#mobile-header-to-hide) {
+            display: none !important;
+        }
+        
         /* 強制所有欄位垂直堆疊 (關鍵：針對 st.columns 內部容器) */
         [data-testid="column"] {
             width: 100% !important;
@@ -130,6 +135,10 @@ st.markdown("""
             font-size: 1rem !important;
             padding: 8px !important;
         }
+        /* 隱藏特定按鈕 (手機版專用) - 隱藏包含此標記的整區塊 */
+        div[data-testid="stVerticalBlock"]:has(.hide-mobile-scan) {
+            display: none !important;
+        }
     }
 
     @media (min-width: 769px) {
@@ -146,8 +155,8 @@ st.markdown("""
             height: auto !important;
             min-height: 0 !important;
         }
-        /* 隱藏表頭容器的邊框，僅保留對齊用的內距 */
-        .header-container [data-testid="stVerticalBlockBorderWrapper"] {
+        /* 確保電腦版表頭容器內距正確 */
+        div[data-testid="stVerticalBlock"]:has(#mobile-header-to-hide) [data-testid="stVerticalBlockBorderWrapper"] {
             border: none !important;
             background: transparent !important;
             padding-bottom: 0 !important;
@@ -203,7 +212,6 @@ is_mock = hasattr(api, 'list_accounts') and len(api.list_accounts()) == 0 and no
 conn_status = "🔴 連線衝突 (唯讀模式)" if is_mock else "🟢 API 連線正常"
 
 # --- [NEW] 憑證交易設定 ---
-st.sidebar.markdown("---")
 st.sidebar.subheader("🔒 交易憑證設定")
 person_id = st.sidebar.text_input("身分證字號", value=st.secrets.get("PERSON_ID", ""), type="default", help="啟動憑證所需")
 ca_passwd = st.sidebar.text_input("憑證密碼", value=st.secrets.get("CA_PASSWD", ""), type="password", help="Sinopac.pfx 的保護密碼")
@@ -595,6 +603,9 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
                     df = pd.read_csv(cache_file)
                     df['ts'] = pd.to_datetime(df['ts']) # 讀取 CSV 後轉換時間格式
                     source = "💾 本地"
+                    # --- [NEW] 安全檢查：若快取缺少必要的指標欄位，強制重算 ---
+                    if 'signal' not in df.columns or 'macd' not in df.columns:
+                        df = None # 強制進入下方的抓取與計算邏輯
 
             if df is None:
                 # 取得合約物件 (支援台股與美股備用機制)
@@ -761,7 +772,7 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
             is_gold_cross = False
             if len(df) >= 30:
                 # 0軸過濾器：快線與慢線都在 0 以上為「強勢區」，以下為「弱勢區」
-                is_above_zero = df['macd'].iloc[-1] > 0 and df['macdsignal'].iloc[-1] > 0
+                is_above_zero = df['macd'].iloc[-1] > 0 and df['signal'].iloc[-1] > 0
                 zone_prefix = "🎯強勢" if is_above_zero else "🩹弱勢"
                 
                 last_hist = df['hist'].iloc[-1]
@@ -846,6 +857,13 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
                 "MACD狀態": macd_status,
                 "綜合評分": final_score,
                 # 隱藏欄位：供即時重新計分使用 (不顯示在 UI)
+                "_v_score": value_score,
+                "_p_score": pullback_score,
+                "_is_rev_ok": is_rev_ok,
+                "_v_buy": value_buy_zone,
+                "_g_buy": growth_buy_zone,
+                "_ma_base": defense_base,
+                "_has_ma240": has_ma240,
                 "_y_low": year_low,
                 "_atr": atr,
                 "_has_momentum": has_momentum,
@@ -897,18 +915,21 @@ def rescore_results(results_df, defense_weight):
         p_w = (1 - defense_weight) * row['_p_score']
         score = row['綜合評分']
         
+        # 取得指標
+        atr = row.get('_atr', row['最新價格'] * 0.03)
+        has_momentum = row.get('_has_momentum', False)
+        
         if p_w >= v_w:
-            g_buy = row['_g_buy']
-            target = g_buy * 1.15
-            stop = g_buy * 0.95
-            return f"📈強勢 | 買:{g_buy:.1f} | 標:{target:.1f} | 損:{stop:.1f} | 評分：{score:.1f}"
+            # 強勢追蹤逻辑 (ATR 停損)
+            stop_loss = row['最新價格'] - (2.5 * atr)
+            target = row['最新價格'] + (row['最新價格'] - stop_loss) * 3
+            return f"📈強勢 | 買:{row['_g_buy']:.1f} | 標:{target:.1f} | 損:{stop_loss:.1f} | 評分：{score:.1f}"
         else:
-            v_buy = row['_v_buy']
-            ma_base = row['_ma_base']
-            target = ma_base * 1.2 if not np.isnan(ma_base) else v_buy * 1.2
-            stop = row['_y_low'] * 0.95
-            label = "🛡價值" if row['_has_ma240'] else "🐣新股"
-            return f"{label} | 買:{v_buy:.1f} | 標:{target:.1f} | 損:{stop:.1f} | 評分：{score:.1f}"
+            # 價值防禦逻辑 (動能標記)
+            target = row['_ma_base'] * 1.2 if row['_has_ma240'] else row['_v_buy'] * 1.2
+            stop_loss = row['_y_low'] * 0.95
+            m_tag = "⚡" if has_momentum else ""
+            return f"🛡價值{m_tag} | 買:{row['_v_buy']:.1f} | 標:{target:.1f} | 損:{stop_loss:.1f} | 評分：{score:.1f}"
 
     df['操作建議'] = df.apply(build_action, axis=1)
     
@@ -987,7 +1008,11 @@ elif st.session_state.get("last_watchlist") != current_watchlist_key:
 
 # 執行同步
 scan_btn = st.sidebar.button("🚀 重新掃描目前清單", use_container_width=True, type="primary")
-big_scan_btn = st.sidebar.button("🔍 執行「全市場」大選股", use_container_width=True)
+
+# 手機版隱藏大選股按鈕 (避免誤觸導致伺服器壓力)
+with st.sidebar.container():
+    st.markdown('<div class="hide-mobile-scan"></div>', unsafe_allow_html=True)
+    big_scan_btn = st.button("🔍 執行「全市場」大選股", use_container_width=True)
 
 if should_sync or scan_btn:
     st.toast("🔍 啟動市場掃描...", icon="🚀")
@@ -1091,9 +1116,8 @@ if "results" in st.session_state:
     # --- 渲染邏輯：單一路徑原生容器 (最穩定方案) ---
     
     # 1. 顯示表頭 (電腦版會顯示，手機版透過 CSS 隱藏)
-    # 1. 顯示表頭 (使用 st.columns 並包裹在容器內以確保內距對其)
+    st.markdown('<div id="mobile-header-to-hide"></div>', unsafe_allow_html=True)
     with st.container(border=True):
-        st.markdown('<div class="header-container">', unsafe_allow_html=True)
         h_cols = st.columns([1.5, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 3.5, 0.5])
         h_cols[0].markdown("**股票**")
         h_cols[1].markdown("**最新價**")
@@ -1103,7 +1127,6 @@ if "results" in st.session_state:
         h_cols[5].markdown("**MA20價**")
         h_cols[6].markdown("**ATR停損**")
         h_cols[7].markdown("**操作建議**")
-        st.markdown('</div>', unsafe_allow_html=True)
     
     # --- [NEW] 下單對話框 ---
     @st.dialog("📝 下單確認 (模擬預覽)")
