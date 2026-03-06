@@ -846,17 +846,11 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
                 "MACD狀態": macd_status,
                 "綜合評分": final_score,
                 # 隱藏欄位：供即時重新計分使用 (不顯示在 UI)
-                "_v_score": value_score,
-                "_p_score": pullback_score,
-                "_is_rev_ok": is_rev_ok,
-                "_v_buy": value_buy_zone,
-                "_g_buy": growth_buy_zone,
-                "_ma_base": defense_base,
-                "_has_ma240": has_ma240,
                 "_y_low": year_low,
                 "_atr": atr,
                 "_has_momentum": has_momentum,
-                "_macd_status": macd_status
+                "_macd_status": macd_status,
+                "_ma20": ma20_last
             })
             
             # --- 頻率保護：如果是大選股，加入微小延遲防止被封鎖 ---
@@ -1066,14 +1060,14 @@ if "results" in st.session_state:
     w_gro = 100 - w_def
     with st.expander(f"💡 投資策略與操作建議 ({w_def}% 價值防禦 + {w_gro}% 強勢回測)"):
         st.markdown(f"""
-        本系統目前採用 **「{w_def}/{w_gro} 權重配置」** 策略，並自動剔除營收衰退標的，計算出最具勝算的行動點位：
+        本系統目前採用 **「{w_def}/{w_gro} 權重動態配置」** 策略，並透過「營收趨勢」與「波動率 (ATR)」計算精確點位：
         - **🛡️ 價值防禦 ({w_def}% 資金權重)**：
-            - **適用**：長線有撐的穩健股 (股價低位階或具年線保護)。
-            - **操作**：建議在**靠近年線或前低**時買進，不破底就續抱，中長線目標看**年線之上 20%**。
+            - **適用**：長線有撐的穩健股。標註 `⚡` 代表具備 **「量增 + 站回5日線」** 的動能觸發訊號。
+            - **操作**：建議在**靠近年線**且具備動能時買進，目標看年線之上 20%，停損設於前波低點 (-5%)。
         - **📈 強勢回測 ({w_gro}% 資金權重)**：
-            - **適用**：多頭趨勢中、回測支撐的成長股 (如台積電、美股巨頭，股價在年線之上)。
-            - **操作**：建議在**靠近 20 日線 (MA20)** 動能轉強時買進，跌破 MA20 停損 (-5%)，短波段停利抓 **+15%**。
-        - **MACD 狀態**：`🚀 金叉發動` 代表短線動能剛由空轉多。
+            - **適用**：多頭趨勢成長股。採用 **ATR 動態停損**，自動適應市場波動，降低被掃出場的機率。
+            - **操作**：回測支撐時買進，停損設為 **2.5倍 ATR**，停利採 **1:3 風報比** 鎖定利潤。
+        - **MACD 狀態**：`🎯強勢金叉` (0軸上) 代表噴發力較強；`🩹弱勢金叉` (0軸下) 視為低檔技術性反彈。
         """)
 
     # --- 自定義列表 ---
@@ -1100,13 +1094,15 @@ if "results" in st.session_state:
     # 1. 顯示表頭 (使用 st.columns 並包裹在容器內以確保內距對其)
     with st.container(border=True):
         st.markdown('<div class="header-container">', unsafe_allow_html=True)
-        h_cols = st.columns([1.5, 1, 1, 1, 1, 3.5, 0.5])
+        h_cols = st.columns([1.5, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 3.5, 0.5])
         h_cols[0].markdown("**股票**")
         h_cols[1].markdown("**最新價**")
         h_cols[2].markdown("**位階**")
         h_cols[3].markdown("**年線乖離**")
         h_cols[4].markdown("**MA20乖離**")
-        h_cols[5].markdown("**操作建議**")
+        h_cols[5].markdown("**MA20價**")
+        h_cols[6].markdown("**ATR停損**")
+        h_cols[7].markdown("**操作建議**")
         st.markdown('</div>', unsafe_allow_html=True)
     
     # --- [NEW] 下單對話框 ---
@@ -1182,10 +1178,10 @@ if "results" in st.session_state:
     # 2. 顯示內容 (每一家股票一個穩定容器，手機自動轉卡片)
     for index, row in paged_results.iterrows():
         with st.container(border=True):
-            cols = st.columns([1.5, 1, 1, 1, 1, 3.5, 0.5])
+            cols = st.columns([1.5, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 3.5, 0.5])
             
             # 欄位一：股票名稱 (轉為按鈕連結)
-            if cols[0].button(f"🛒 {row['代碼']} {row['名稱']}", key=f"t_{row['代碼']}", use_container_width=True):
+            if cols[0].button(f"🛒 {row['代碼']} {row['名稱']}", key=f"t_{row['代碼']}_{index}", use_container_width=True):
                 show_order_dialog(row)
             
             # 欄位二：最新價 (手機版會標註標籤)
@@ -1197,12 +1193,18 @@ if "results" in st.session_state:
             cols[3].markdown(f'<span class="mobile-label">年線乖離:</span>{row["年線乖離"]}', unsafe_allow_html=True)
             cols[4].markdown(f'<span class="mobile-label">MA20乖離:</span>{row["MA20乖離"]}', unsafe_allow_html=True)
             
-            # 欄位六：操作建議
-            cols[5].markdown(f"**`{row['操作建議']}`**")
+            # 欄位六～七：新增的 MA20 價 與 ATR 停損
+            ma20_val = f"{row.get('_ma20', 0):.1f}"
+            atr_stop = f"{row['最新價格'] - (2.5 * row.get('_atr', 0)):.1f}"
+            cols[5].markdown(f'<span class="mobile-label">MA20價:</span>{ma20_val}', unsafe_allow_html=True)
+            cols[6].markdown(f'<span class="mobile-label">ATR停損:</span>{atr_stop}', unsafe_allow_html=True)
             
-            # 欄位七：動作按鈕 (唯一 Key，手機電腦版通用同一個元件)
+            # 欄位八：操作建議
+            cols[7].markdown(f"**`{row['操作建議']}`**")
+            
+            # 欄位九：動作按鈕 (唯一 Key)
             action_icon = "🗑️" if row['代碼'] in st.session_state.watchlist else "➕"
-            if cols[6].button(action_icon, key=f"btn_{row['代碼']}_{index}", use_container_width=True):
+            if cols[8].button(action_icon, key=f"btn_{row['代碼']}_{index}", use_container_width=True):
                 if row['代碼'] in st.session_state.watchlist:
                     st.session_state.watchlist.remove(row['代碼'])
                     st.toast(f"已從清單移除 {row['代碼']}")
