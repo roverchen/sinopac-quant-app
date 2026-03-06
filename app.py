@@ -18,16 +18,25 @@ import plotly.graph_objects as go
 try:
     from zoneinfo import ZoneInfo
     TZ = ZoneInfo('Asia/Taipei')
-except ImportError:
-    import pytz
-    TZ = pytz.timezone('Asia/Taipei')
+except Exception:
+    try:
+        import pytz
+        TZ = pytz.timezone('Asia/Taipei')
+    except Exception:
+        # 最終備援：手動設定 UTC+8 偏移量 (對 K 線計算最穩定)
+        from datetime import timezone
+        TZ = timezone(timedelta(hours=8))
 
 def get_now():
     return datetime.now(TZ).replace(tzinfo=None)
 
 def get_file_time(path):
     ts = os.path.getmtime(path)
-    return datetime.fromtimestamp(ts, tz=timezone.utc).astimezone(TZ).replace(tzinfo=None)
+    # 讀取檔案時間並轉為目標時區，去除 tzinfo 以便與 naive datetime 比較
+    try:
+        return datetime.fromtimestamp(ts, tz=timezone.utc).astimezone(TZ).replace(tzinfo=None)
+    except Exception:
+        return datetime.fromtimestamp(ts)
 from plotly.subplots import make_subplots
 import os
 import difflib
@@ -93,8 +102,8 @@ st.markdown("""
         }
         .desktop-header { display: none !important; }
         
-        /* 隱藏表頭區塊 (手機版) - 使用 :has 穿透 st.container 產生的多層 div */
-        div[data-testid="stVerticalBlock"]:has(#mobile-header-to-hide) {
+        /* 隱藏表頭區塊 (手機版) - 增加 .main 限制範圍，避免誤傷側邊欄或根容器 */
+        .main [data-testid="stVerticalBlock"]:has(#mobile-header-to-hide) {
             display: none !important;
         }
         
@@ -149,8 +158,8 @@ st.markdown("""
             font-size: 1rem !important;
             padding: 8px !important;
         }
-        /* 隱藏特定按鈕 (手機版專用) - 隱藏包含此標記的整區塊 */
-        div[data-testid="stVerticalBlock"]:has(.hide-mobile-scan) {
+        /* 隱藏特定按鈕 (手機版專用) - 限制在側邊欄範圍 */
+        [data-testid="stSidebar"] div[data-testid="stVerticalBlock"]:has(.hide-mobile-scan) {
             display: none !important;
         }
     }
