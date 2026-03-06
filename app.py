@@ -12,8 +12,22 @@ except ImportError:
 import shioaji as sj
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import plotly.graph_objects as go
+
+try:
+    from zoneinfo import ZoneInfo
+    TZ = ZoneInfo('Asia/Taipei')
+except ImportError:
+    import pytz
+    TZ = pytz.timezone('Asia/Taipei')
+
+def get_now():
+    return datetime.now(TZ).replace(tzinfo=None)
+
+def get_file_time(path):
+    ts = os.path.getmtime(path)
+    return datetime.fromtimestamp(ts, tz=timezone.utc).astimezone(TZ).replace(tzinfo=None)
 from plotly.subplots import make_subplots
 import os
 import difflib
@@ -251,7 +265,7 @@ def save_results_cache(df, is_big_scan=False):
     try:
         data = {
             "df": df,
-            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "timestamp": get_now().strftime("%Y-%m-%d %H:%M:%S"),
             "is_big_scan": is_big_scan
         }
         with open(RESULTS_CACHE_FILE, "wb") as f:
@@ -363,7 +377,7 @@ def check_revenue_momentum(code):
         params = {
             "dataset": "TaiwanStockMonthRevenue",
             "data_id": code,
-            "start_date": (datetime.now() - timedelta(days=200)).strftime("%Y-%m-%d")
+            "start_date": (get_now() - timedelta(days=200)).strftime("%Y-%m-%d")
         }
         res = requests.get(url, params=params, timeout=5)
         data = res.json().get('data', [])
@@ -562,7 +576,7 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
         st.session_state.auto_reconnected = False
         
     # 擴大歷史長度至 365 天 (以計算年線 MA240 與一年高低位階)
-    start_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
+    start_date = (get_now() - timedelta(days=365)).strftime("%Y-%m-%d")
     
     # 預先建立 代碼 -> 名稱 映射
     try:
@@ -602,8 +616,8 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
 
             # 檢查快取是否存在且為「今日」更新
             if os.path.exists(cache_file):
-                file_time = datetime.fromtimestamp(os.path.getmtime(cache_file))
-                if file_time.date() == datetime.now().date():
+                file_time = get_file_time(cache_file)
+                if file_time.date() == get_now().date():
                     df = pd.read_csv(cache_file)
                     df['ts'] = pd.to_datetime(df['ts']) # 讀取 CSV 後轉換時間格式
                     source = "💾 本地"
@@ -1037,7 +1051,7 @@ if should_sync or scan_btn:
         st.session_state.last_watchlist = current_watchlist_key
         results = fetch_and_analyze(watchlist, defense_weight=st.session_state.defense_weight)
         st.session_state.results = results
-        st.session_state.last_update = datetime.now().strftime("%H:%M:%S")
+        st.session_state.last_update = get_now().strftime("%H:%M:%S")
         st.session_state.is_big_scan = False # 標記為一般掃描
         
         if results.empty:
@@ -1056,7 +1070,7 @@ elif big_scan_btn:
         
         if not results.empty:
             st.session_state.results = results
-            st.session_state.last_update = datetime.now().strftime("%H:%M:%S")
+            st.session_state.last_update = get_now().strftime("%H:%M:%S")
             st.session_state.is_big_scan = True # 標記為大選股模式
             st.session_state.current_page = 0   # 重設頁碼
             
@@ -1171,7 +1185,7 @@ if "results" in st.session_state:
         # 按鈕 1: 模擬下單 (永遠可用)
         if c1.button("🧪 執行模擬下單", use_container_width=True):
             st.toast(f"🚀 已錄入 {row['代碼']} 模擬委託！", icon="✅")
-            st.session_state.last_order = f"{datetime.now().strftime('%H:%M:%S')} - 已模擬買入 {row['代碼']} {qty}股"
+            st.session_state.last_order = f"{get_now().strftime('%H:%M:%S')} - 已模擬買入 {row['代碼']} {qty}股"
             st.rerun()
             
         # 按鈕 2: 實盤下單 (需憑證啟動)
@@ -1204,7 +1218,7 @@ if "results" in st.session_state:
                         )
                         
                         trade = api.place_order(contract, order)
-                        st.session_state.last_order = f"{datetime.now().strftime('%H:%M:%S')} - API 已送出 {row['代碼']} {qty}股 (限價:{buy_price})"
+                        st.session_state.last_order = f"{get_now().strftime('%H:%M:%S')} - API 已送出 {row['代碼']} {qty}股 (限價:{buy_price})"
                         st.toast("✅ API 委託已送出！", icon="🚀")
                         st.rerun()
                 except Exception as e:
