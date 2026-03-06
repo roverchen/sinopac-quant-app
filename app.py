@@ -476,6 +476,8 @@ if 'resolved_code' not in st.session_state:
     st.session_state.resolved_code = None
 if 'suggestions' not in st.session_state:
     st.session_state.suggestions = []
+if 'defense_weight' not in st.session_state:
+    st.session_state.defense_weight = 0.5
 if 'rows_per_page' not in st.session_state:
     st.session_state.rows_per_page = 5
 if 'current_page' not in st.session_state:
