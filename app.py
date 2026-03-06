@@ -557,6 +557,10 @@ watchlist = st.session_state.watchlist
 def fetch_and_analyze(watchlist, defense_weight=0.5):
     data_list = []
     
+    # 每次新掃描前，重置自動重連標記，以便未來再次觸發時能重連
+    if 'auto_reconnected' in st.session_state:
+        st.session_state.auto_reconnected = False
+        
     # 擴大歷史長度至 365 天 (以計算年線 MA240 與一年高低位階)
     start_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
     
@@ -691,6 +695,19 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
                                         break
                                 except: continue
                     except Exception as e:
+                        error_msg = str(e)
+                        # --- [Auto-Reconnect] 捕捉 Token 過期或連線中斷引發的 Timeout ---
+                        if "api/v1/data/kbars" in error_msg:
+                            if not st.session_state.get('auto_reconnected', False):
+                                st.warning("⚠️ API 連線逾時或 Token 已過期，系統正在自動重新連線...")
+                                st.session_state.auto_reconnected = True
+                                st.cache_resource.clear()
+                                time.sleep(1) # 讓舊連線稍微冷卻釋放
+                                st.rerun()
+                            else:
+                                if not quiet_mode:
+                                    st.error("❌ 自動重連後仍無法取得資料，請手動點擊「🔄 重連 API」。")
+                        
                         if not quiet_mode:
                             st.warning(f"無法取得台股 {code} 的 K 線資料: {e}")
                         print(f"[Error] Failed to fetch kbars for {code}: {e}")
