@@ -158,8 +158,8 @@ st.markdown("""
             font-size: 1rem !important;
             padding: 8px !important;
         }
-        /* 隱藏特定按鈕 (手機版專用) - 限制在側邊欄範圍 */
-        [data-testid="stSidebar"] div[data-testid="stVerticalBlock"]:has(.hide-mobile-scan) {
+        /* 隱藏特定按鈕 (手機版專用) */
+        .mobile-hide {
             display: none !important;
         }
     }
@@ -1051,8 +1051,9 @@ scan_btn = st.sidebar.button("🚀 重新掃描目前清單", use_container_widt
 
 # 手機版隱藏大選股按鈕 (避免誤觸導致伺服器壓力)
 with st.sidebar.container():
-    st.markdown('<div class="hide-mobile-scan"></div>', unsafe_allow_html=True)
+    st.markdown('<div class="mobile-hide">', unsafe_allow_html=True)
     big_scan_btn = st.button("🔍 執行「全市場」大選股", use_container_width=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
 if should_sync or scan_btn:
     st.toast("🔍 啟動市場掃描...", icon="🚀")
