@@ -210,13 +210,15 @@ if not st.session_state.get('contracts_fetched', False):
         pass
 
 # --- 結果暫存 (Persistence) 邏輯 ---
-def save_results_cache(df, is_big_scan=False):
+# --- 結果暫存 (Persistence) 邏輯 ---
+def save_results_cache(df, is_big_scan=False, market=None):
     """將掃描結果存入磁碟，防止手機重新整理後消失"""
     try:
         data = {
             "df": df,
             "timestamp": get_now().strftime("%Y-%m-%d %H:%M:%S"),
-            "is_big_scan": is_big_scan
+            "is_big_scan": is_big_scan,
+            "scan_market": market
         }
         with open(RESULTS_CACHE_FILE, "wb") as f:
             pickle.dump(data, f)
@@ -433,18 +435,25 @@ def resolve_stock_code(input_str, api):
             
     return None, []
 
-def get_mass_scan_list(api):
-    """從 4.6 萬檔合約中過濾出真正的股票 (台股 4 碼, 美股字母代碼)"""
+def get_mass_scan_list(api, market='TW'):
+    """從 4.6 萬檔合約中過濾出真正的股票
+    market='TW': 台股 4 碼數字
+    market='US': 美股純字母代碼
+    """
     all_map = get_stock_name_map(api)
     filtered = []
     for code in all_map.keys():
-        # 台股：4 碼數字 (排除 6 碼權證)
-        if code.isdigit() and len(code) == 4:
-            filtered.append(code)
-        # 美股：純字母 (排除含有點號或數字的衍生標的)
-        elif code.isalpha():
-            filtered.append(code)
-    return filtered
+        if market == 'TW':
+            # 台股：4 碼數字 (排除 6 碼權證)
+            if code.isdigit() and len(code) == 4:
+                filtered.append(code)
+        elif market == 'US':
+            # 美股：純字母 (排除含有點號或數字的衍生標的)
+            if code.isalpha():
+                filtered.append(code)
+    
+    # 排序：台股按數字、美股按字母
+    return sorted(filtered)
 
 # --- 側邊欄設定 ---
 # 1. 優先處理搜尋與新增邏輯
@@ -462,6 +471,8 @@ if 'current_page' not in st.session_state:
     st.session_state.current_page = 0
 if 'is_big_scan' not in st.session_state:
     st.session_state.is_big_scan = False
+if 'scan_market' not in st.session_state:
+    st.session_state.scan_market = None
 
 # --- [NEW] 側邊欄：功能入口置頂 ---
 st.sidebar.markdown("### 🚀 快速功能")
@@ -469,8 +480,10 @@ st.sidebar.markdown("### 🚀 快速功能")
 # 1. 台灣股票海選 (使用 .desktop-only 包裹，在手機版隱藏)
 with st.sidebar.container():
     st.markdown('<div class="desktop-only">', unsafe_allow_html=True)
-    big_scan_btn = st.sidebar.button("🔍 台灣股票海選", use_container_width=True, 
-                                     type="primary" if st.session_state.is_big_scan else "secondary")
+    big_scan_tw_btn = st.sidebar.button("🔍 台灣股票海選", use_container_width=True, 
+                                        type="primary" if st.session_state.get("scan_market") == "TW" else "secondary")
+    big_scan_us_btn = st.sidebar.button("🔎 美國股票海選", use_container_width=True,
+                                        type="primary" if st.session_state.get("scan_market") == "US" else "secondary")
     st.markdown('</div>', unsafe_allow_html=True)
 
 # 2. 重新掃描目前清單 (僅在非大選股模式且非手機版顯示)
@@ -1016,6 +1029,7 @@ if "results" not in st.session_state:
             st.session_state.results = cache_df
             st.session_state.last_update = cache_data["timestamp"]
             st.session_state.is_big_scan = cache_data.get("is_big_scan", False)
+            st.session_state.scan_market = cache_data.get("scan_market")
             st.session_state.last_watchlist = current_watchlist_key
             st.toast("💾 已從快取恢復上次數據", icon="📥")
         else:
@@ -1038,40 +1052,43 @@ elif st.session_state.get("last_watchlist") != current_watchlist_key:
 # scan_btn = st.sidebar.button("🚀 重新掃描目前清單", ...)
 # big_scan_btn = st.button("🔍 執行「全市場」大選股", ...)
 
-if should_sync or scan_btn:
-    st.toast("🔍 啟動市場掃描...", icon="🚀")
+# --- 掃描執行邏輯 ---
+if big_scan_tw_btn or big_scan_us_btn or scan_btn or should_sync or st.session_state.get("force_rescan"):
+    # 1. 決定市場與名單
+    if big_scan_tw_btn or big_scan_us_btn:
+        m_type = 'TW' if big_scan_tw_btn else 'US'
+        m_label = "台灣" if m_type == 'TW' else "美國"
+        st.session_state.is_big_scan = True
+        st.session_state.scan_market = m_type
+        scan_list = get_mass_scan_list(api, market=m_type)
+        toast_msg = f"🚀 開始 {m_label} 股票大平原掃描 (共 {len(scan_list)} 檔)..."
+    else:
+        st.session_state.is_big_scan = False
+        st.session_state.scan_market = None
+        scan_list = watchlist
+        toast_msg = "🔍 啟動市場掃描..."
+
+    # 2. 執行分析
+    st.toast(toast_msg, icon="🚀")
     with st.spinner('🔄 市場數據分析同步中...'):
         st.session_state.last_watchlist = current_watchlist_key
-        results = fetch_and_analyze(watchlist, defense_weight=st.session_state.defense_weight)
-        st.session_state.results = results
-        st.session_state.last_update = get_now().strftime("%H:%M:%S")
-        st.session_state.is_big_scan = False # 標記為一般掃描
+        st.session_state.force_rescan = False
         
-        if results.empty:
-            st.warning("⚠️ 掃描完成，但在現有清單中找不到可分析的有效數據。")
-        else:
-            # 存入磁碟快取
-            save_results_cache(results, is_big_scan=False)
-            st.toast("✅ 數據同步完成！", icon="📉")
-
-elif big_scan_btn:
-    mass_list = get_mass_scan_list(api)
-    st.toast(f"🐘 啟動全市場掃描 ({len(mass_list)} 檔)...", icon="🔍")
-    with st.spinner(f'🔄 全市場數據同步中 (共 {len(mass_list)} 檔)...'):
-        # 執行全市場分析
-        results = fetch_and_analyze(mass_list, defense_weight=st.session_state.defense_weight)
+        results = fetch_and_analyze(scan_list, defense_weight=st.session_state.defense_weight)
         
         if not results.empty:
             st.session_state.results = results
             st.session_state.last_update = get_now().strftime("%H:%M:%S")
-            st.session_state.is_big_scan = True # 標記為大選股模式
-            st.session_state.current_page = 0   # 重設頁碼
+            st.session_state.current_page = 0 # 重設頁碼
             
             # 存入磁碟快取
-            save_results_cache(results, is_big_scan=True)
-            st.toast("✅ 全市場大選股完成！", icon="🏆")
+            save_results_cache(results, is_big_scan=st.session_state.is_big_scan, market=st.session_state.scan_market)
+            st.toast("✅ 數據同步完成！", icon="📉")
         else:
-            st.error("❌ 全市場掃描未成功取得數據。")
+            if st.session_state.is_big_scan:
+                st.error("❌ 全市場掃描未成功取得數據。")
+            else:
+                st.warning("⚠️ 掃描完成，但在現有清單中找不到可分析的有效數據。")
 
 # 顯示最後更新時間與結果
 if "results" in st.session_state:
