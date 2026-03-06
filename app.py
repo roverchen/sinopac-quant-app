@@ -531,8 +531,22 @@ if 'rows_per_page' not in st.session_state:
     st.session_state.rows_per_page = 10
 if 'current_page' not in st.session_state:
     st.session_state.current_page = 0
+if 'is_big_scan' not in st.session_state:
+    st.session_state.is_big_scan = False
 
-# --- 側邊欄設定 ---
+# --- [NEW] 側邊欄：功能入口置頂 ---
+st.sidebar.markdown("### 🚀 快速功能")
+
+# 1. 台灣股票海選 (一律顯示，但在大選股模式下樣式微調)
+big_scan_btn = st.sidebar.button("🔍 台灣股票海選", use_container_width=True, 
+                                 type="primary" if st.session_state.is_big_scan else "secondary")
+
+# 2. 重新掃描目前清單 (僅在非大選股模式顯示)
+scan_btn = False
+if not st.session_state.get("is_big_scan", False):
+    scan_btn = st.sidebar.button("🔄 重新掃描目前清單", use_container_width=True)
+
+st.sidebar.divider()
 st.sidebar.markdown("### ⚙️ 策略與顯示設定")
 # 動態權重滑桿
 st.session_state.defense_weight = st.sidebar.slider(
@@ -554,43 +568,44 @@ else:
             value=st.session_state.rows_per_page
         )
         st.markdown('</div>', unsafe_allow_html=True)
-st.sidebar.divider()
-st.sidebar.header("➕ 新增股票")
-with st.sidebar.form("add_stock_form", clear_on_submit=True):
-    new_input = st.text_input("輸入代碼或名稱 (例: 2330 或 台積電)")
-    submitted = st.form_submit_button("新增到清單")
-    if submitted and new_input:
-        # 先進行代碼檢索，暫不觸發全域掃描
-        resolved_code, suggestions = resolve_stock_code(new_input, api)
-        if resolved_code:
-            if resolved_code not in st.session_state.watchlist:
-                st.session_state.watchlist.append(resolved_code)
-                save_watchlist(st.session_state.watchlist)
-                # 成功找到代碼，清除建議並準備同步
+# 3. 新增股票 (僅在「目前追蹤清單」模式下顯示)
+if not st.session_state.get("is_big_scan", False):
+    st.sidebar.header("➕ 新增股票")
+    with st.sidebar.form("add_stock_form", clear_on_submit=True):
+        new_input = st.text_input("輸入代碼或名稱 (例: 2330 或 台積電)")
+        submitted = st.form_submit_button("新增到清單")
+        if submitted and new_input:
+            # 先進行代碼檢索，暫不觸發全域掃描
+            resolved_code, suggestions = resolve_stock_code(new_input, api)
+            if resolved_code:
+                if resolved_code not in st.session_state.watchlist:
+                    st.session_state.watchlist.append(resolved_code)
+                    save_watchlist(st.session_state.watchlist)
+                    # 成功找到代碼，清除建議並準備同步
+                    if "last_suggestions" in st.session_state:
+                        del st.session_state.last_suggestions
+                    st.rerun()
+                else:
+                    st.sidebar.warning(f"⚠️ {resolved_code} 已在清單中")
+            elif suggestions:
+                # 沒找到精確代碼，存下建議
+                st.session_state.last_suggestions = (new_input, suggestions)
+            else:
+                st.sidebar.error(f"❌ 找不到與「{new_input}」相符的股票")
                 if "last_suggestions" in st.session_state:
                     del st.session_state.last_suggestions
-                st.rerun()
-            else:
-                st.sidebar.warning(f"⚠️ {resolved_code} 已在清單中")
-        elif suggestions:
-            # 沒找到精確代碼，存下建議
-            st.session_state.last_suggestions = (new_input, suggestions)
-        else:
-            st.sidebar.error(f"❌ 找不到與「{new_input}」相符的股票")
-            if "last_suggestions" in st.session_state:
-                del st.session_state.last_suggestions
 
-# 2. 顯示建議清單 (如果有的話)
-if "last_suggestions" in st.session_state:
-    orig_input, suggestions = st.session_state.last_suggestions
-    st.sidebar.info(f"🤔 找不到「{orig_input}」，您指的可能是：")
-    for name, code in suggestions:
-        if st.sidebar.button(f"{name} ({code})", key=f"suggest_{code}"):
-            if code not in st.session_state.watchlist:
-                st.session_state.watchlist.append(code)
-                save_watchlist(st.session_state.watchlist)
-                del st.session_state.last_suggestions
-                st.rerun()
+    # 顯示建議清單 (如果有的話)
+    if "last_suggestions" in st.session_state:
+        orig_input, suggestions = st.session_state.last_suggestions
+        st.sidebar.info(f"🤔 找不到「{orig_input}」，您指的可能是：")
+        for name, code in suggestions:
+            if st.sidebar.button(f"{name} ({code})", key=f"suggest_{code}"):
+                if code not in st.session_state.watchlist:
+                    st.session_state.watchlist.append(code)
+                    save_watchlist(st.session_state.watchlist)
+                    del st.session_state.last_suggestions
+                    st.rerun()
 
 watchlist = st.session_state.watchlist
 
@@ -1064,16 +1079,9 @@ elif st.session_state.get("last_watchlist") != current_watchlist_key:
     # 只有當追蹤清單「內容改變」時，才自動觸發同步
     should_sync = True
 
-# 執行同步
-scan_btn = st.sidebar.button("🚀 重新掃描目前清單", use_container_width=True, type="primary")
-
-# 手機版隱藏大選股按鈕 (避免誤觸導致伺服器壓力)
-if not is_mobile:
-    with st.sidebar.container():
-        st.markdown('<div class="hide-mobile-scan"></div>', unsafe_allow_html=True)
-        big_scan_btn = st.button("🔍 執行「全市場」大選股", use_container_width=True)
-else:
-    big_scan_btn = False
+# 移除原本位置的掃描按鈕 (已移至側邊欄最上方)
+# scan_btn = st.sidebar.button("🚀 重新掃描目前清單", ...)
+# big_scan_btn = st.button("🔍 執行「全市場」大選股", ...)
 
 if should_sync or scan_btn:
     st.toast("🔍 啟動市場掃描...", icon="🚀")
