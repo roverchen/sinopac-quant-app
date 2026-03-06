@@ -613,6 +613,39 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
     # 用於顯示進度的佔位符
     status_placeholder = st.empty()
     
+    # --- [NEW] 混合模式：如果是海選（大量名單），採用 Yahoo 批次下載以達閃電速度 ---
+    use_batch = len(watchlist) > 100
+    if use_batch:
+        status_placeholder.info(f"⚡ 啟動閃電海選模式 (批次下載 {len(watchlist)} 檔)...")
+        # 1. 將 4 碼轉為 Yahoo 格式 (上市 .TW, 上櫃 .TWO)
+        # 這裡簡化處理：先嘗試 .TW，失敗再點擊詳情時會由 Shioaji 修正。
+        # 更準確做法應是查詢 api.Contracts，但為了極速先假設大部分為 .TW/.TWO 混合批次抓取
+        tickers = []
+        for c in watchlist:
+            if c.isdigit():
+                tickers.append(f"{c}.TW")
+                tickers.append(f"{c}.TWO")
+            else:
+                tickers.append(c)
+        
+        # 2. 執行批次下載 (Yahoo 支援一次抓多檔)
+        try:
+            # 分段下載以防超出 URL 長度限制 (每 50 檔一組)
+            all_dfs = {}
+            chunk_size = 50
+            for k in range(0, len(tickers), chunk_size):
+                chunk = tickers[k:k+chunk_size]
+                status_placeholder.info(f"📥 正在批次下載數據 ({k//2}/{len(watchlist)})...")
+                batch_data = yf.download(chunk, start=start_date, group_by='ticker', threads=True, progress=False)
+                for ticker in chunk:
+                    try:
+                        if ticker in batch_data and not batch_data[ticker].dropna().empty:
+                            all_dfs[ticker.split('.')[0]] = batch_data[ticker].dropna()
+                    except: continue
+        except Exception as e:
+            st.error(f"批次下載失敗: {e}")
+            use_batch = False # 失敗則退回傳統逐筆模式
+
     for i, code in enumerate(watchlist):
         progress_info = f"🕒 正在分析 ({i+1}/{len(watchlist)}): {code} ..."
         status_placeholder.info(progress_info)
@@ -623,6 +656,13 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
             cache_file = os.path.join(CACHE_DIR, f"{code}.csv")
             df = None
             source = "☁️ 雲端"
+
+            # 混合模式：優先檢查剛才批次抓取的結果
+            if use_batch and code in all_dfs:
+                df = all_dfs[code].reset_index()
+                df.columns = [c.lower() for c in df.columns]
+                if 'date' in df.columns: df = df.rename(columns={'date': 'ts'})
+                source = "⚡ 閃電"
 
             # 檢查快取是否存在且為「今日」更新
             if os.path.exists(cache_file):
@@ -846,8 +886,11 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
             else:
                 has_momentum = False
             
-            # 盈餘動能檢查
-            rev_status, is_rev_ok = check_revenue_momentum(code)
+            # 盈餘動能檢查 (海選模式下跳過以節省時間)
+            if use_batch or len(watchlist) > 100:
+                rev_status, is_rev_ok = "跳過(海選)", True
+            else:
+                rev_status, is_rev_ok = check_revenue_momentum(code)
             
             # A. 價值防禦分數 (Value Defense)
             value_buy_zone = min(last_price, defense_base) if not np.isnan(defense_base) else last_price
