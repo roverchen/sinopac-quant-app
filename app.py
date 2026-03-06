@@ -197,29 +197,7 @@ api = init_api()
 is_mock = hasattr(api, 'list_accounts') and len(api.list_accounts()) == 0 and not hasattr(api, 'Contracts')
 conn_status = "🔴 連線衝突 (唯讀模式)" if is_mock else "🟢 API 連線正常"
 
-# --- [NEW] 憑證交易設定 ---
-st.sidebar.subheader("🔒 交易憑證設定")
-person_id = st.sidebar.text_input("身分證字號", value=st.secrets.get("PERSON_ID", ""), type="default", help="啟動憑證所需")
-ca_passwd = st.sidebar.text_input("憑證密碼", value=st.secrets.get("CA_PASSWD", ""), type="password", help="Sinopac.pfx 的保護密碼")
-ca_path = os.path.join(os.getcwd(), "Sinopac.pfx")
-
-ca_active = False
-if person_id and ca_passwd and os.path.exists(ca_path):
-    try:
-        if not is_mock:
-            api.activate_ca(ca_path=ca_path, ca_passwd=ca_passwd, person_id=person_id)
-            st.sidebar.success("🔑 憑證已啟動 (可執行實盤)")
-            ca_active = True
-        else:
-            st.sidebar.warning("⚠️ 唯讀模式下無法啟動憑證")
-    except Exception as e:
-        st.sidebar.error(f"❌ 憑證啟動失敗: {str(e)[:50]}...")
-
-# 顯示最後一筆模擬訂單 (如果有)
-if "last_order" in st.session_state:
-    st.sidebar.success(f"📌 **交易回報**\n\n{st.session_state.last_order}")
-
-st.sidebar.divider()
+# --- 憑證交易與背景邏輯 ---
 
 # 確保合約在登入後只抓一次 (強制下載模式)
 if not st.session_state.get('contracts_fetched', False):
@@ -560,6 +538,29 @@ if not st.session_state.get("is_big_scan", False):
                     save_watchlist(st.session_state.watchlist)
                     del st.session_state.last_suggestions
                     st.rerun()
+
+# 4. 交易憑證設定 (移至側邊欄最下方)
+st.sidebar.divider()
+st.sidebar.subheader("🔒 交易憑證設定")
+person_id = st.sidebar.text_input("身分證字號", value=st.secrets.get("PERSON_ID", ""), type="default", help="啟動憑證所需")
+ca_passwd = st.sidebar.text_input("憑證密碼", value=st.secrets.get("CA_PASSWD", ""), type="password", help="Sinopac.pfx 的保護密碼")
+ca_path = os.path.join(os.getcwd(), "Sinopac.pfx")
+
+ca_active = False
+if person_id and ca_passwd and os.path.exists(ca_path):
+    try:
+        if not is_mock:
+            api.activate_ca(ca_path=ca_path, ca_passwd=ca_passwd, person_id=person_id)
+            st.sidebar.success("🔑 憑證已啟動 (可執行實盤)")
+            ca_active = True
+        else:
+            st.sidebar.warning("⚠️ 唯讀模式下無法啟動憑證")
+    except Exception as e:
+        st.sidebar.error(f"❌ 憑證啟動失敗: {str(e)[:50]}...")
+
+# 顯示最後一筆模擬訂單 (如果有)
+if "last_order" in st.session_state:
+    st.sidebar.success(f"📌 **交易回報**\n\n{st.session_state.last_order}")
 
 watchlist = st.session_state.watchlist
 
