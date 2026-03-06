@@ -187,7 +187,19 @@ st.markdown("""
     }
 </style>
 
+<script>
+    // 偵測是否為手機版，並將結果存入 query_params
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    const urlParams = new URLSearchParams(window.location.search);
+    if (isMobile && urlParams.get('mobile') !== 'true') {
+        urlParams.set('mobile', 'true');
+        window.location.search = urlParams.toString();
+    }
+</script>
 """, unsafe_allow_html=True)
+
+# 獲取偵測結果
+is_mobile = st.query_params.get("mobile") == "true"
 
 st.title("📈 台美股量化選股系統")
 
@@ -531,11 +543,17 @@ st.session_state.defense_weight = st.sidebar.slider(
 st.sidebar.caption(f"目前權重: {100-st.session_state.defense_weight*100:.0f}% 成長 / {st.session_state.defense_weight*100:.0f}% 防禦")
 
 # 每頁顯示數量 (預設 10 檔以減輕手機負載)
-st.session_state.rows_per_page = st.sidebar.select_slider(
-    "📄 每頁顯示數量",
-    options=[10, 20, 50, 100],
-    value=st.session_state.rows_per_page
-)
+if is_mobile:
+    st.session_state.rows_per_page = 3
+else:
+    with st.sidebar.container():
+        st.markdown('<div class="desktop-only">', unsafe_allow_html=True)
+        st.session_state.rows_per_page = st.sidebar.select_slider(
+            "📄 每頁顯示數量",
+            options=[10, 20, 50, 100],
+            value=st.session_state.rows_per_page
+        )
+        st.markdown('</div>', unsafe_allow_html=True)
 st.sidebar.divider()
 st.sidebar.header("➕ 新增股票")
 with st.sidebar.form("add_stock_form", clear_on_submit=True):
@@ -1050,10 +1068,12 @@ elif st.session_state.get("last_watchlist") != current_watchlist_key:
 scan_btn = st.sidebar.button("🚀 重新掃描目前清單", use_container_width=True, type="primary")
 
 # 手機版隱藏大選股按鈕 (避免誤觸導致伺服器壓力)
-with st.sidebar.container():
-    st.markdown('<div class="mobile-hide">', unsafe_allow_html=True)
-    big_scan_btn = st.button("🔍 執行「全市場」大選股", use_container_width=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+if not is_mobile:
+    with st.sidebar.container():
+        st.markdown('<div class="hide-mobile-scan"></div>', unsafe_allow_html=True)
+        big_scan_btn = st.button("🔍 執行「全市場」大選股", use_container_width=True)
+else:
+    big_scan_btn = False
 
 if should_sync or scan_btn:
     st.toast("🔍 啟動市場掃描...", icon="🚀")
@@ -1157,17 +1177,18 @@ if "results" in st.session_state:
     # --- 渲染邏輯：單一路徑原生容器 (最穩定方案) ---
     
     # 1. 顯示表頭 (電腦版會顯示，手機版透過 CSS 隱藏)
-    st.markdown('<div id="mobile-header-to-hide"></div>', unsafe_allow_html=True)
-    with st.container(border=True):
-        h_cols = st.columns([1.5, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 3.5, 0.5])
-        h_cols[0].markdown("**股票**")
-        h_cols[1].markdown("**最新價**")
-        h_cols[2].markdown("**位階**")
-        h_cols[3].markdown("**年線乖離**")
-        h_cols[4].markdown("**MA20乖離**")
-        h_cols[5].markdown("**MA20價**")
-        h_cols[6].markdown("**ATR停損**")
-        h_cols[7].markdown("**操作建議**")
+    if not is_mobile:
+        st.markdown('<div id="mobile-header-to-hide"></div>', unsafe_allow_html=True)
+        with st.container(border=True):
+            h_cols = st.columns([1.5, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 3.5, 0.5])
+            h_cols[0].markdown("**股票**")
+            h_cols[1].markdown("**最新價**")
+            h_cols[2].markdown("**位階**")
+            h_cols[3].markdown("**年線乖離**")
+            h_cols[4].markdown("**MA20乖離**")
+            h_cols[5].markdown("**MA20價**")
+            h_cols[6].markdown("**ATR停損**")
+            h_cols[7].markdown("**操作建議**")
     
     # --- [NEW] 下單對話框 ---
     @st.dialog("📝 下單確認 (模擬預覽)")
