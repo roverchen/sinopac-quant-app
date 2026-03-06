@@ -61,59 +61,31 @@ st.set_page_config(page_title="量化選股戰情室", layout="wide")
 # --- 手機版、表格優化與穩定連線 CSS ---
 st.markdown("""
 <style>
-    /* 1. 穩定手勢：禁止瀏覽器級別的「下拉重整」與「左右翻頁」 */
-    html, body {
-        overscroll-behavior: none !important; 
-        touch-action: pan-y !important;
-        overflow-x: hidden !important;
-    }
-    
-    [data-testid="stMain"] {
-        overscroll-behavior: contain !important;
-    }
-
-    /* 2. 側邊欄開關強化 (針對手機版明顯化) */
-    @media (max-width: 768px) {
-        [data-testid="stSidebarCollapsedControl"] {
-            background-color: #007bff !important;
-            border-radius: 50% !important;
-            padding: 5px !important;
-            box-shadow: 0 0 15px rgba(0, 123, 255, 0.8) !important;
-            left: 10px !important;
-            top: 10px !important;
-            width: 45px !important;
-            height: 45px !important;
-            z-index: 999999 !important;
-        }
-        [data-testid="stSidebarCollapsedControl"] svg {
-            color: white !important;
-            width: 30px !important;
-            height: 30px !important;
-        }
-    }
-    
-    /* 3. 響應式佈局：預設隱藏手機版標籤 */
-    .mobile-label { display: none; }
-
-    @media (max-width: 768px) {
-        /* 只隱藏 Header 的背景與其他雜項，保留側邊欄按鈕按鈕 */
-        [data-testid="stHeader"] { 
-            background: transparent !important;
-        }
-        .desktop-header { display: none !important; }
-        
-        /* 隱藏表頭區塊 (手機版) - 增加 .main 限制範圍，避免誤傷側邊欄或根容器 */
-        .main [data-testid="stVerticalBlock"]:has(#mobile-header-to-hide) {
-            display: none !important;
+        /* 穩定手勢：禁止瀏覽器級別的「下拉重整」與「左右翻頁」 */
+        html, body {
+            overscroll-behavior: none !important; 
+            touch-action: pan-y !important;
         }
         
-        /* 強制所有欄位垂直堆疊 (關鍵：針對 st.columns 內部容器) */
-        [data-testid="column"] {
-            width: 100% !important;
-            flex: 1 1 100% !important;
-            min-width: 100% !important;
-            margin-bottom: 2px !important;
+        [data-testid="stMain"] {
+            overscroll-behavior: contain !important;
         }
+
+        /* 移除所有不穩定的 :has 選擇器，改用單純的 class 控制 */
+        .desktop-only { display: block; }
+        .mobile-only { display: none; }
+
+        @media (max-width: 768px) {
+            .desktop-only { display: none !important; }
+            .mobile-only { display: block !important; }
+            
+            /* 強制所有欄位垂直堆疊 */
+            [data-testid="column"] {
+                width: 100% !important;
+                flex: 1 1 100% !important;
+                min-width: 100% !important;
+                margin-bottom: 2px !important;
+            }
         
         /* 讓原生容器變成漂亮的卡片樣式 */
         [data-testid="stVerticalBlockBorderWrapper"] {
@@ -158,49 +130,28 @@ st.markdown("""
             font-size: 1rem !important;
             padding: 8px !important;
         }
-        /* 隱藏特定按鈕 (手機版專用) */
-        .mobile-hide {
-            display: none !important;
-        }
-    }
-
-    @media (min-width: 769px) {
-        /* 電腦版清單內的按鈕樣式 - 確保高度與文字一致 */
-        [data-testid="column"] .stButton button {
-            background: transparent !important;
-            border: none !important;
+        /* 側邊欄按鈕按鈕樣式 (手機版) */
+        .stButton button {
+            width: 100% !important;
+            height: 40px !important;
+            margin-top: 5px !important;
+            background: rgba(0, 212, 255, 0.1) !important;
             color: #00d4ff !important;
-            text-align: left !important;
-            text-decoration: underline !important;
-            font-weight: bold !important;
-            padding: 0 !important;
-            line-height: inherit !important;
-            height: auto !important;
-            min-height: 0 !important;
+            border: 1px solid rgba(0, 212, 255, 0.3) !important;
         }
-        /* 確保電腦版表頭容器內距正確 */
-        div[data-testid="stVerticalBlock"]:has(#mobile-header-to-hide) [data-testid="stVerticalBlockBorderWrapper"] {
-            border: none !important;
-            background: transparent !important;
-            padding-bottom: 0 !important;
+        
+        /* 隱藏不想在手機顯示的元素 */
+        .desktop-only { display: none !important; }
+        .mobile-only { display: block !important; }
+        
+        [data-testid="stSidebarCollapsedControl"] {
+            z-index: 99999 !important;
         }
     }
 </style>
-
-<script>
-    // 偵測是否為手機版，並將結果存入 query_params
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    const urlParams = new URLSearchParams(window.location.search);
-    if (isMobile && urlParams.get('mobile') !== 'true') {
-        urlParams.set('mobile', 'true');
-        window.location.search = urlParams.toString();
-    }
-</script>
 """, unsafe_allow_html=True)
 
-# 獲取偵測結果
-is_mobile = st.query_params.get("mobile") == "true"
-
+# 預設時區工具
 st.title("📈 台美股量化選股系統")
 
 # --- 手機版側邊欄提示 ---
@@ -525,10 +476,8 @@ if 'resolved_code' not in st.session_state:
     st.session_state.resolved_code = None
 if 'suggestions' not in st.session_state:
     st.session_state.suggestions = []
-if 'defense_weight' not in st.session_state:
-    st.session_state.defense_weight = 0.5
 if 'rows_per_page' not in st.session_state:
-    st.session_state.rows_per_page = 10
+    st.session_state.rows_per_page = 5
 if 'current_page' not in st.session_state:
     st.session_state.current_page = 0
 if 'is_big_scan' not in st.session_state:
@@ -537,14 +486,20 @@ if 'is_big_scan' not in st.session_state:
 # --- [NEW] 側邊欄：功能入口置頂 ---
 st.sidebar.markdown("### 🚀 快速功能")
 
-# 1. 台灣股票海選 (一律顯示，但在大選股模式下樣式微調)
-big_scan_btn = st.sidebar.button("🔍 台灣股票海選", use_container_width=True, 
-                                 type="primary" if st.session_state.is_big_scan else "secondary")
+# 1. 台灣股票海選 (使用 .desktop-only 包裹，在手機版隱藏)
+with st.sidebar.container():
+    st.markdown('<div class="desktop-only">', unsafe_allow_html=True)
+    big_scan_btn = st.sidebar.button("🔍 台灣股票海選", use_container_width=True, 
+                                     type="primary" if st.session_state.is_big_scan else "secondary")
+    st.markdown('</div>', unsafe_allow_html=True)
 
-# 2. 重新掃描目前清單 (僅在非大選股模式顯示)
+# 2. 重新掃描目前清單 (僅在非大選股模式且非手機版顯示)
 scan_btn = False
 if not st.session_state.get("is_big_scan", False):
-    scan_btn = st.sidebar.button("🔄 重新掃描目前清單", use_container_width=True)
+    with st.sidebar.container():
+        st.markdown('<div class="desktop-only">', unsafe_allow_html=True)
+        scan_btn = st.sidebar.button("🔄 重新掃描目前清單", use_container_width=True)
+        st.markdown('</div>', unsafe_allow_html=True)
 
 st.sidebar.divider()
 st.sidebar.markdown("### ⚙️ 策略與顯示設定")
@@ -556,18 +511,15 @@ st.session_state.defense_weight = st.sidebar.slider(
 )
 st.sidebar.caption(f"目前權重: {100-st.session_state.defense_weight*100:.0f}% 成長 / {st.session_state.defense_weight*100:.0f}% 防禦")
 
-# 每頁顯示數量 (預設 10 檔以減輕手機負載)
-if is_mobile:
-    st.session_state.rows_per_page = 3
-else:
-    with st.sidebar.container():
-        st.markdown('<div class="desktop-only">', unsafe_allow_html=True)
-        st.session_state.rows_per_page = st.sidebar.select_slider(
-            "📄 每頁顯示數量",
-            options=[10, 20, 50, 100],
-            value=st.session_state.rows_per_page
-        )
-        st.markdown('</div>', unsafe_allow_html=True)
+# 每頁顯示數量 (使用 .desktop-only 包裹，在手機版隱藏)
+with st.sidebar.container():
+    st.markdown('<div class="desktop-only">', unsafe_allow_html=True)
+    st.session_state.rows_per_page = st.sidebar.select_slider(
+        "📄 每頁顯示數量",
+        options=[5, 10, 20, 50, 100],
+        value=st.session_state.rows_per_page
+    )
+    st.markdown('</div>', unsafe_allow_html=True)
 # 3. 新增股票 (僅在「目前追蹤清單」模式下顯示)
 if not st.session_state.get("is_big_scan", False):
     st.sidebar.header("➕ 新增股票")
@@ -1184,9 +1136,9 @@ if "results" in st.session_state:
 
     # --- 渲染邏輯：單一路徑原生容器 (最穩定方案) ---
     
-    # 1. 顯示表頭 (電腦版會顯示，手機版透過 CSS 隱藏)
-    if not is_mobile:
-        st.markdown('<div id="mobile-header-to-hide"></div>', unsafe_allow_html=True)
+    # 1. 顯示表頭 (使用 .desktop-only 包裹，在手機版隱藏)
+    with st.container():
+        st.markdown('<div class="desktop-only">', unsafe_allow_html=True)
         with st.container(border=True):
             h_cols = st.columns([1.5, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 3.5, 0.5])
             h_cols[0].markdown("**股票**")
@@ -1197,6 +1149,7 @@ if "results" in st.session_state:
             h_cols[5].markdown("**MA20價**")
             h_cols[6].markdown("**ATR停損**")
             h_cols[7].markdown("**操作建議**")
+        st.markdown('</div>', unsafe_allow_html=True)
     
     # --- [NEW] 下單對話框 ---
     @st.dialog("📝 下單確認 (模擬預覽)")
