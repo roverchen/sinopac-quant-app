@@ -619,6 +619,17 @@ def get_mass_scan_list(api, market='TW'):
     market='TW': 台股 4 碼數字
     market='US': 美股純字母代碼
     """
+    if market == 'CRYPTO':
+        # 加密貨幣：自定義主流幣清單 (Yahoo Finance 格式)
+        return [
+            "BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "XRP-USD", 
+            "ADA-USD", "DOGE-USD", "AVAX-USD", "DOT-USD", "TRX-USD",
+            "LINK-USD", "MATIC-USD", "NEAR-USD", "LTC-USD", "BCH-USD",
+            "SHIB-USD", "DAI-USD", "UNI-USD", "LEO-USD", "APT-USD",
+            "STX-USD", "OKB-USD", "ATOM-USD", "IMX-USD", "WHBAR-USD",
+            "KAS-USD", "ETC-USD", "RENDER-USD", "FIL-USD", "LDO-USD"
+        ]
+
     all_map = get_stock_name_map(api)
     filtered = []
     for code, name in all_map.items():
@@ -638,16 +649,6 @@ def get_mass_scan_list(api, market='TW'):
             # 美股：字母開頭 (排除純數字台股及帶點號的特殊標的)
             if code and code[0].isalpha() and not (code.endswith('.TW') or code.endswith('.TWO')):
                 filtered.append(code)
-        elif market == 'CRYPTO':
-            # 加密貨幣：自定義主流幣清單 (Yahoo Finance 格式)
-            return [
-                "BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "XRP-USD", 
-                "ADA-USD", "DOGE-USD", "AVAX-USD", "DOT-USD", "TRX-USD",
-                "LINK-USD", "MATIC-USD", "NEAR-USD", "LTC-USD", "BCH-USD",
-                "SHIB-USD", "DAI-USD", "UNI-USD", "LEO-USD", "APT-USD",
-                "STX-USD", "OKB-USD", "ATOM-USD", "IMX-USD", "WHBAR-USD",
-                "KAS-USD", "ETC-USD", "RENDER-USD", "FIL-USD", "LDO-USD"
-            ]
     
     # 排序：台股按數字、美股按字母
     return sorted(filtered)
@@ -1270,7 +1271,7 @@ elif st.session_state.get("last_watchlist") != current_watchlist_key:
 # big_scan_btn = st.button("🔍 執行「全市場」大選股", ...)
 
 # --- 掃描執行邏輯 ---
-if big_scan_tw_btn or big_scan_us_btn or scan_btn or should_sync or st.session_state.get("force_rescan"):
+if big_scan_tw_btn or big_scan_us_btn or big_scan_crypto_btn or scan_btn or should_sync or st.session_state.get("force_rescan"):
     # 1. 決定市場與名單
     if big_scan_tw_btn or big_scan_us_btn or big_scan_crypto_btn:
         if big_scan_tw_btn: m_type = 'TW'
