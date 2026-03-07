@@ -90,18 +90,37 @@ st.markdown("""
         .mobile-label { display: none; }
 
         @media (max-width: 768px) {
-            /* 移除強制垂直堆疊，維持水平排版 */
-            [data-testid="column"] {
-                margin-bottom: 0px !important;
+            .desktop-only { display: none !important; }
+            .mobile-only { display: block !important; }
+            .mobile-label { display: inline-block !important; color: #888; font-size: 0.8rem; margin-right: 6px; width: 70px; }
+
+            /* 強制股票卡片內部的欄位垂直堆疊 */
+            [data-testid="stVerticalBlockBorderWrapper"] [data-testid="column"] {
+                width: 100% !important;
+                flex: 1 1 100% !important;
+                min-width: 100% !important;
+                margin-bottom: 2px !important;
             }
             
-            /* 縮小手機版字體大小以適應水平排版 */
-            .stButton button, p, span, b, div {
-                font-size: 0.85rem !important;
+            /* 讓分頁按鈕維持水平排版 (覆蓋上面的垂直堆疊) */
+            .pagination-row [data-testid="column"] {
+                width: auto !important;
+                flex: 1 1 0% !important;
+                min-width: 0px !important;
             }
 
-            /* 手機版隱藏某些較不重要的欄位以節省空間 (可由使用者決定) */
-            /* 暫時保持全部顯示以符合使用者「與 Desktop 一樣」的要求 */
+            /* 恢復卡片樣式 */
+            [data-testid="stVerticalBlockBorderWrapper"] {
+                border-left: 5px solid #00d4ff !important;
+                background-color: #1e1e1e !important;
+                border-radius: 12px !important;
+                margin-bottom: 12px !important;
+                padding: 10px !important;
+            }
+            
+            .stButton button {
+                font-size: 0.9rem !important;
+            }
         }
 </style>
 """, unsafe_allow_html=True)
@@ -1381,18 +1400,20 @@ if "results" in st.session_state:
 
     # --- 渲染邏輯：單一路徑原生容器 (最穩定方案) ---
     
-    # 1. 顯示表頭 (移除 desktop-only，讓手機也能看到)
+    # 1. 顯示表頭 (僅在電腦版顯示)
     st.markdown("""
-    <div style="display: flex; border: 1px solid #444; border-radius: 8px; padding: 10px; background: #262730; margin-bottom: 10px; font-weight: bold; align-items: center; font-size: 0.85rem;">
-        <div style="flex: 1.5;">股票</div>
-        <div style="flex: 0.8;">最新價</div>
-        <div style="flex: 0.8;">位階</div>
-        <div style="flex: 0.8;">年線乖離</div>
-        <div style="flex: 0.8;">MA20乖離</div>
-        <div style="flex: 0.8;">MA20價</div>
-        <div style="flex: 0.8;">ATR停損</div>
-        <div style="flex: 3.5;">操作建議</div>
-        <div style="flex: 0.5;"></div>
+    <div class="desktop-only">
+        <div style="display: flex; border: 1px solid #444; border-radius: 8px; padding: 10px; background: #262730; margin-bottom: 10px; font-weight: bold; align-items: center; font-size: 0.85rem;">
+            <div style="flex: 1.5;">股票</div>
+            <div style="flex: 0.8;">最新價</div>
+            <div style="flex: 0.8;">位階</div>
+            <div style="flex: 0.8;">年線乖離</div>
+            <div style="flex: 0.8;">MA20乖離</div>
+            <div style="flex: 0.8;">MA20價</div>
+            <div style="flex: 0.8;">ATR停損</div>
+            <div style="flex: 3.5;">操作建議</div>
+            <div style="flex: 0.5;"></div>
+        </div>
     </div>
     """, unsafe_allow_html=True)
     
@@ -1521,6 +1542,7 @@ if "results" in st.session_state:
     # --- 分頁導航 ---
     if total_pages > 1:
         st.divider()
+        st.markdown('<div class="pagination-row">', unsafe_allow_html=True)
         nav_cols = st.columns([2, 1, 1, 1, 2])
         if nav_cols[1].button("◀️ 上一頁", disabled=(st.session_state.current_page == 0)):
             st.session_state.current_page -= 1
@@ -1531,6 +1553,7 @@ if "results" in st.session_state:
         if nav_cols[3].button("下一頁 ▶️", disabled=(st.session_state.current_page == total_pages - 1)):
             st.session_state.current_page += 1
             st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
     
     st.divider()
     
