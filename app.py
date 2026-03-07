@@ -242,15 +242,34 @@ def get_stock_name_map(_api):
     
     # --- 🇺🇸 美股備用清單 (針對函式庫版本限制的補全) ---
     US_STOCK_FALLBACK = {
-        "NVDA": "NVIDIA Corp (US)", "AAPL": "Apple Inc (US)", "MSFT": "Microsoft Corp (US)",
-        "GOOGL": "Alphabet Inc A (US)", "AMZN": "Amazon.com Inc (US)", "TSLA": "Tesla Inc (US)",
-        "META": "Meta Platforms (US)", "AMD": "AMD (US)", "INTC": "Intel (US)",
-        "NFLX": "Netflix (US)", "DIS": "Disney (US)", "NKE": "NIKE (US)",
-        "MCD": "McDonald's (US)", "KO": "Coca-Cola (US)", "PEP": "PepsiCo (US)",
-        "COST": "Costco (US)", "PYPL": "PayPal (US)", "BABA": "Alibaba (US)",
-        "T": "AT&T (US)", "VZ": "Verizon (US)", "PFE": "Pfizer (US)",
-        "JPM": "JPMorgan (US)", "V": "Visa (US)", "MA": "Mastercard (US)",
-        "BRK.B": "Berkshire B (US)", "LLY": "Eli Lilly (US)", "XOM": "Exxon Mobil (US)"
+        "NVDA": "NVIDIA", "AAPL": "Apple", "MSFT": "Microsoft",
+        "GOOGL": "Alphabet", "AMZN": "Amazon", "TSLA": "Tesla",
+        "META": "Meta", "AMD": "AMD", "INTC": "Intel",
+        "NFLX": "Netflix", "DIS": "Disney", "NKE": "NIKE",
+        "MCD": "McDonald's", "KO": "Coca-Cola", "PEP": "PepsiCo",
+        "COST": "Costco", "PYPL": "PayPal", "BABA": "Alibaba",
+        "T": "AT&T", "VZ": "Verizon", "PFE": "Pfizer",
+        "JPM": "JPMorgan", "V": "Visa", "MA": "Mastercard",
+        "BRK.B": "Berkshire", "LLY": "Eli Lilly", "XOM": "Exxon",
+        "AVGO": "Broadcom", "ORCL": "Oracle", "CRM": "Salesforce",
+        "ADBE": "Adobe", "CSCO": "Cisco", "CVX": "Chevron",
+        "MRK": "Merck", "ABBV": "AbbVie", "ACN": "Accenture",
+        "PEP": "PepsiCo", "LIN": "Linde", "BAC": "BofA",
+        "ABT": "Abbott", "TMUS": "T-Mobile", "WMT": "Walmart",
+        "TXN": "Texas Inst", "DHR": "Danaher", "NEE": "NextEra",
+        "RTX": "Raytheon", "LOW": "Lowe's", "UNP": "Union Pacific",
+        "AMAT": "Applied Mat", "HON": "Honeywell", "SPGI": "S&P Global",
+        "PGR": "Progressive", "GS": "Goldman Sachs", "CAT": "Caterpillar",
+        "INTU": "Intuit", "QCOM": "Qualcomm", "IBM": "IBM",
+        "SBUX": "Starbucks", "GE": "GE", "TJX": "TJX Cos",
+        "MDLZ": "Mondelez", "BLK": "BlackRock", "NOW": "ServiceNow",
+        "ISRG": "Intuitive Surg", "PLTR": "Palantir", "SMCI": "SMCI",
+        "COIN": "Coinbase", "U": "Unity", "SE": "Sea Ltd",
+        "SQ": "Square", "PYPL": "PayPal", "SHOP": "Shopify",
+        "SNOW": "Snowflake", "MSTR": "MicroStrategy", "MARA": "Marathon",
+        "RIOT": "Riot", "MU": "Micron", "ARM": "ARM", "ASML": "ASML",
+        "TSM": "TSMC ADR", "PANW": "Palo Alto", "FTNT": "Fortinet",
+        "CRWD": "CrowdStrike", "DDOG": "Datadog"
     }
     code_to_name.update(US_STOCK_FALLBACK)
 
@@ -613,8 +632,8 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
     # 用於顯示進度的佔位符
     status_placeholder = st.empty()
     
-    # --- [NEW] 混合模式：如果是海選（大量名單），採用 Yahoo 批次下載以達閃電速度 ---
-    use_batch = len(watchlist) > 100
+    # --- [NEW] 混合模式：如果是海選（名單較多），採用 Yahoo 批次下載以達閃電速度 ---
+    use_batch = len(watchlist) > 5
     if use_batch:
         status_placeholder.info(f"⚡ 啟動閃電海選模式 (批次下載 {len(watchlist)} 檔)...")
         # 1. 將 4 碼轉為 Yahoo 格式 (上市 .TW, 上櫃 .TWO)
