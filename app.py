@@ -87,6 +87,7 @@ st.markdown("""
         /* 移除所有不穩定的 :has 選擇器，改用單純的 class 控制 */
         .desktop-only { display: block; }
         .mobile-only { display: none; }
+        .mobile-label { display: none; }
 
         @media (max-width: 768px) {
             .desktop-only { display: none !important; }
