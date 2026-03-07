@@ -133,17 +133,19 @@ st.markdown("""
                 margin-bottom: 2px !important;
             }
             
-            /* 讓分頁按鈕維持水平排版 (使用相鄰兄弟選擇器精確定位) */
-            .pagination-marker + div[data-testid="stHorizontalBlock"] {
+            /* 讓分頁按鈕維持水平排版 (更強力的選擇器避免被 Streamlit 預設樣式覆蓋) */
+            div.pagination-marker + div[data-testid="stHorizontalBlock"] {
                 flex-direction: row !important;
                 display: flex !important;
+                flex-wrap: nowrap !important;
                 align-items: center !important;
                 justify-content: center !important;
             }
-            .pagination-marker + div[data-testid="stHorizontalBlock"] [data-testid="column"] {
+            div.pagination-marker + div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
                 width: auto !important;
                 flex: 1 1 auto !important;
                 min-width: 0px !important;
+                display: block !important;
             }
 
             /* 恢復卡片樣式 */
