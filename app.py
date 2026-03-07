@@ -1567,6 +1567,18 @@ if "results" in st.session_state:
         if os.path.exists(cache_file):
             df_selected = pd.read_csv(cache_file)
             df_selected['ts'] = pd.to_datetime(df_selected['ts'])
+            
+            # --- 補齊圖表所需的技術指標 ---
+            df_selected['ma20'] = df_selected['close'].rolling(window=20).mean()
+            df_selected['ma60'] = df_selected['close'].rolling(window=60).mean()
+            df_selected['ma240'] = df_selected['close'].rolling(window=240).mean()
+            
+            exp1 = df_selected['close'].ewm(span=12, adjust=False).mean()
+            exp2 = df_selected['close'].ewm(span=26, adjust=False).mean()
+            df_selected['macd'] = exp1 - exp2
+            df_selected['signal'] = df_selected['macd'].ewm(span=9, adjust=False).mean()
+            df_selected['hist'] = df_selected['macd'] - df_selected['signal']
+
             plot_financial_charts(df_selected, row['代碼'])
         else:
             st.warning(f"⚠️ 找不到 {row['代碼']} 的快取資料。")
