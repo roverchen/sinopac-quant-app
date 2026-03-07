@@ -254,8 +254,7 @@ def get_stock_name_map(_api):
         "AVGO": "Broadcom", "ORCL": "Oracle", "CRM": "Salesforce",
         "ADBE": "Adobe", "CSCO": "Cisco", "CVX": "Chevron",
         "MRK": "Merck", "ABBV": "AbbVie", "ACN": "Accenture",
-        "PEP": "PepsiCo", "LIN": "Linde", "BAC": "BofA",
-        "ABT": "Abbott", "TMUS": "T-Mobile", "WMT": "Walmart",
+        "BAC": "BofA", "ABT": "Abbott", "TMUS": "T-Mobile", "WMT": "Walmart",
         "TXN": "Texas Inst", "DHR": "Danaher", "NEE": "NextEra",
         "RTX": "Raytheon", "LOW": "Lowe's", "UNP": "Union Pacific",
         "AMAT": "Applied Mat", "HON": "Honeywell", "SPGI": "S&P Global",
@@ -265,13 +264,22 @@ def get_stock_name_map(_api):
         "MDLZ": "Mondelez", "BLK": "BlackRock", "NOW": "ServiceNow",
         "ISRG": "Intuitive Surg", "PLTR": "Palantir", "SMCI": "SMCI",
         "COIN": "Coinbase", "U": "Unity", "SE": "Sea Ltd",
-        "SQ": "Square", "PYPL": "PayPal", "SHOP": "Shopify",
-        "SNOW": "Snowflake", "MSTR": "MicroStrategy", "MARA": "Marathon",
-        "RIOT": "Riot", "MU": "Micron", "ARM": "ARM", "ASML": "ASML",
-        "TSM": "TSMC ADR", "PANW": "Palo Alto", "FTNT": "Fortinet",
-        "CRWD": "CrowdStrike", "DDOG": "Datadog"
+        "SQ": "Square", "SHOP": "Shopify", "SNOW": "Snowflake",
+        "MSTR": "MicroStrategy", "MARA": "Marathon", "RIOT": "Riot",
+        "MU": "Micron", "ARM": "ARM", "ASML": "ASML", "TSM": "TSMC ADR",
+        "PANW": "Palo Alto", "FTNT": "Fortinet", "CRWD": "CrowdStrike", "DDOG": "Datadog"
     }
+    
+    # --- 🇹🇼 台股重點備用清單 (防止 API 同步延遲導致的名稱缺失) ---
+    TW_STOCK_FALLBACK = {
+        "2330": "台積電", "2317": "鴻海", "2454": "聯發科", "2382": "廣達",
+        "2330.TW": "台積電", "2317.TW": "鴻海", "2454.TW": "聯發科", "2382.TW": "廣達",
+        "2308": "台達電", "2881": "富邦金", "2882": "國泰金", "2303": "聯電",
+        "0050": "元大台灣50", "0056": "元大高股息", "00878": "國泰永續高股息", "00919": "群益台灣精選高息"
+    }
+    
     code_to_name.update(US_STOCK_FALLBACK)
+    code_to_name.update(TW_STOCK_FALLBACK)
 
     # 檢查是否為 MockApi (連線衝突模式)
     is_mock = hasattr(_api, 'list_accounts') and len(_api.list_accounts()) == 0 and not hasattr(_api, 'Contracts')
@@ -1198,7 +1206,10 @@ if "results" in st.session_state:
     if (results['名稱'] == '未知').any():
         code_map = get_stock_name_map(api)
         if code_map:
-            results['名稱'] = results['代碼'].apply(lambda c: code_map.get(c, '未知'))
+            results['名稱'] = results.apply(
+                lambda row: code_map.get(row['代碼'], row['名稱']) if row['名稱'] == '未知' else row['名稱'], 
+                axis=1
+            )
             st.session_state.results = results
 
     # 顯示首選
