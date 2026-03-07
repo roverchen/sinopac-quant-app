@@ -66,7 +66,7 @@ if not os.path.exists(CACHE_DIR):
     os.makedirs(CACHE_DIR)
 
 # --- 頁面設定 ---
-st.set_page_config(page_title="量化選股戰情室", layout="wide")
+st.set_page_config(page_title="金融商品市場報明牌系統", layout="wide")
 
 # --- 手機版、表格優化與穩定連線 CSS ---
 st.markdown("""
@@ -129,7 +129,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # 預設時區工具
-st.title("📈 台美股量化選股系統")
+st.title("📈 金融商品市場報明牌系統")
 
 # --- 手機版側邊欄提示 ---
 
