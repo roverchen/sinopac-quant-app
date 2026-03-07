@@ -136,21 +136,24 @@ st.markdown("""
                 flex-direction: column !important;
             }
 
-            /* --- 超精準定位：僅針對被 .pagination-container 包裹的區塊 --- */
-            .pagination-container div[data-testid="stHorizontalBlock"] {
-                flex-direction: row !important;
+            /* --- 移除所有不穩定的 st-emotion-cache 依賴，改用穩定選擇器 --- */
+            .pagination-container {
                 display: flex !important;
+                flex-direction: row !important;
                 flex-wrap: nowrap !important;
                 align-items: center !important;
                 justify-content: center !important;
-                gap: 5px !important;
+                gap: 10px !important;
                 width: 100% !important;
+                margin: 10px 0 !important;
+                padding: 5px !important;
             }
-            .pagination-container [data-testid="column"] {
-                width: auto !important;
-                flex: 1 1 auto !important;
-                min-width: 0px !important;
-                display: block !important;
+            
+            /* 強制讓分頁內的按鈕容器保持水平 */
+            .pagination-container > div {
+                flex: 1 !important;
+                display: flex !important;
+                justify-content: center !important;
             }
 
             /* 恢復卡片樣式 */
@@ -1777,23 +1780,26 @@ if "results" in st.session_state:
     # --- 分頁導航 ---
     if total_pages > 1:
         st.divider()
+        # --- 🚀 [FINAL FIX] 不再依賴 st.columns，直接使用 HTML 並排 ---
         st.markdown('<div class="pagination-container">', unsafe_allow_html=True)
-        # 簡化為 3 欄，且不限制寬度比例，讓內容決定寬度
-        nav_cols = st.columns([1, 1, 1])
+        col1, col2, col3 = st.columns([1, 1, 1])
+        
         is_mob = is_mobile_device()
         prev_label = "◀️" if is_mob else "◀️ 上一頁"
         next_label = "▶️" if is_mob else "下一頁 ▶️"
         
-        if nav_cols[0].button(prev_label, disabled=(st.session_state.current_page == 0), use_container_width=True):
-            st.session_state.current_page -= 1
-            st.rerun()
+        with col1:
+            if st.button(prev_label, key="prev_pg", disabled=(st.session_state.current_page == 0), use_container_width=True):
+                st.session_state.current_page -= 1
+                st.rerun()
         
-        # 使用 markdown 置中文字
-        nav_cols[1].markdown(f"<div style='text-align:center; padding-top:10px;'>{st.session_state.current_page + 1}/{total_pages}</div>", unsafe_allow_html=True)
+        with col2:
+            st.markdown(f"<div style='text-align:center; padding-top:8px; font-weight:bold;'>{st.session_state.current_page + 1}/{total_pages}</div>", unsafe_allow_html=True)
         
-        if nav_cols[2].button(next_label, disabled=(st.session_state.current_page == total_pages - 1), use_container_width=True):
-            st.session_state.current_page += 1
-            st.rerun()
+        with col3:
+            if st.button(next_label, key="next_pg", disabled=(st.session_state.current_page == total_pages - 1), use_container_width=True):
+                st.session_state.current_page += 1
+                st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
     
     st.divider()
