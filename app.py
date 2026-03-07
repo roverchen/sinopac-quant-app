@@ -411,7 +411,7 @@ def resolve_stock_code(input_str, api):
             return None, sorted(prefix_matches, key=lambda x: len(x[1]))[:8]
 
         # B. 針對 Ticker 的拼寫糾錯 (更寬鬆的門檻以捕捉 nvida -> NVDA)
-        tickers = [c for c in code_to_name.keys() if not c.isdigit()]
+        tickers = [c for c in code_to_name.keys() if not (c and c[0].isdigit())]
         close_tickers = difflib.get_close_matches(input_str, tickers, n=5, cutoff=0.5)
         if close_tickers:
             results = [(code_to_name[c], c) for c in close_tickers]
@@ -464,12 +464,12 @@ def get_mass_scan_list(api, market='TW'):
     filtered = []
     for code in all_map.keys():
         if market == 'TW':
-            # 台股：4 碼數字 (排除 6 碼權證)
-            if code.isdigit() and len(code) == 4:
+            # 台股：數字開頭 (包含 4 碼股票與 6 碼/字母型 ETF，排除純字母權證或其他)
+            if code and code[0].isdigit():
                 filtered.append(code)
         elif market == 'US':
-            # 美股：包含字母 (排除純數字及台股後綴)
-            if any(c.isalpha() for c in code) and not (code.endswith('.TW') or code.endswith('.TWO')):
+            # 美股：字母開頭 (排除純數字台股及帶點號的特殊標的)
+            if code and code[0].isalpha() and not (code.endswith('.TW') or code.endswith('.TWO')):
                 filtered.append(code)
     
     # 排序：台股按數字、美股按字母
@@ -642,7 +642,7 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
         ticker_to_code = {} # 紀錄 Ticker -> 原代碼 的映射
         tickers = []
         for c in watchlist:
-            if c.isdigit():
+            if c and c[0].isdigit():
                 t1 = f"{c}.TW"
                 t2 = f"{c}.TWO"
                 tickers.append(t1)
@@ -711,8 +711,8 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
                 # 取得合約物件 (支援台股與美股備用機制)
                 contract = None
                 
-                # 1. 優先嘗試標準路徑 (台股)
-                if code.isdigit():
+                # 1. 優先嘗試標準路徑 (台股：數字開頭)
+                if code and code[0].isdigit():
                     for mk in ['TSE', 'OTC', 'OES']:
                         if hasattr(api.Contracts.Stocks, mk):
                             try:
