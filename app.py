@@ -279,19 +279,30 @@ def get_stock_name_map(_api):
     if not is_mock and hasattr(_api, "Contracts") and hasattr(_api.Contracts, "Stocks"):
         stocks = _api.Contracts.Stocks
         def recursive_scan(item, depth=0):
-            if depth > 5: return
+            if depth > 6: return # 增加深度以確保抓到標的
+            # 優先處理已知為合約集合的節點
+            if hasattr(item, '_code2contract'):
+                for c, contract in item._code2contract.items():
+                    c_code = str(c).upper()
+                    if c_code not in code_to_name:
+                        code_to_name[c_code] = getattr(contract, 'name', 'Unknown')
+                return
+
+            # 如果不是，則繼續往下遞迴
             for attr in dir(item):
                 if attr.startswith('_') or attr in ['append', 'get', 'keys', 'post_init']: continue
                 try:
                     val = getattr(item, attr)
-                    if hasattr(val, '_code2contract'):
-                        for c, contract in val._code2contract.items():
-                            c_code = str(c).upper()
-                            if c_code not in code_to_name:
-                                code_to_name[c_code] = getattr(contract, 'name', 'Unknown')
-                    elif hasattr(val, '__slots__') or hasattr(val, 'get'):
+                    if val and (hasattr(val, '_code2contract') or hasattr(val, '__dict__') or hasattr(val, 'get')):
                         recursive_scan(val, depth + 1)
                 except: continue
+
+        # 針對台股常見市場節點進行優先顯性掃描
+        for mk in ['TSE', 'OTC', 'OES']:
+            if hasattr(stocks, mk):
+                recursive_scan(getattr(stocks, mk))
+        
+        # 剩餘的進行全域遞迴 (捕捉美股或其他特殊節點)
         recursive_scan(stocks)
         
         # 成功抓取後，存入磁碟快取供離線使用 (僅在總量顯著增加時更新)
@@ -313,8 +324,9 @@ def get_stock_name_map(_api):
     # 驗證機制
     if is_mock:
         st.sidebar.info("💡 目前處於「離線恢復模式」，名稱解析來自上次快取資料。")
-    elif len(code_to_name) < 1000 or "AVGO" not in code_to_name:
-        st.warning(f"⚠️ 股票清單載入不完全 (僅 {len(code_to_name)} 檔)，正在嘗試深度掃描...")
+    elif len(code_to_name) < 1000:
+        # 只在側邊欄顯示一次輕量警告，不打斷主畫面
+        st.sidebar.caption(f"ℹ️ 載入 {len(code_to_name)} 檔清單...")
 
     return code_to_name
 
