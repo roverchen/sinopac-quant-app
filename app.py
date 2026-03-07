@@ -46,6 +46,19 @@ import yfinance as yf
 import math
 import pickle
 
+# --- 🎯 設備檢測與適應性設定 ---
+def is_mobile_device():
+    """透過 User-Agent 簡易判斷是否為行動裝置"""
+    try:
+        from streamlit.web.server.websocket_headers import _get_websocket_headers
+        headers = _get_websocket_headers()
+        if not headers:
+            return False
+        ua = headers.get("User-Agent", "").lower()
+        return any(m in ua for m in ["mobile", "android", "iphone", "ipad"])
+    except:
+        return False
+
 # --- 常數設定 ---
 WATCHLIST_FILE = "watchlist.json"
 CACHE_DIR = "cache"
@@ -676,7 +689,8 @@ if 'suggestions' not in st.session_state:
 if 'defense_weight' not in st.session_state:
     st.session_state.defense_weight = 0.5
 if 'rows_per_page' not in st.session_state:
-    st.session_state.rows_per_page = 5
+    # 根據裝置自動化預設值：電腦版 20, 手機版 3
+    st.session_state.rows_per_page = 3 if is_mobile_device() else 20
 if 'current_page' not in st.session_state:
     st.session_state.current_page = 0
 if 'is_big_scan' not in st.session_state:
