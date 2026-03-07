@@ -1,6 +1,8 @@
 import streamlit as st
 import os
 import time
+import base64
+import json
 
 # --- Mac SSL 憑證修正 (解決 [SSL: CERTIFICATE_VERIFY_FAILED]) ---
 try:
@@ -497,17 +499,29 @@ def get_stock_name_map(_api):
 WATCHLIST_FILE = "watchlist.json"
 
 def load_watchlist():
+    # Priority 1: URL Parameters (passed from LocalStorage by JS Bridge)
+    if "w" in st.query_params:
+        try:
+            encoded_w = st.query_params["w"]
+            decoded_w = base64.b64decode(encoded_w).decode('utf-8')
+            return json.loads(decoded_w)
+        except:
+            pass
+
+    # Priority 2: Legacy Server File (Transition phase)
     if os.path.exists(WATCHLIST_FILE):
         try:
             with open(WATCHLIST_FILE, "r") as f:
                 return json.load(f)
         except:
             pass
-    return ["2330", "2317"]
+
+    # Priority 3: Defaults
+    return ["2330", "2317", "0050"]
 
 def save_watchlist(watchlist):
-    with open(WATCHLIST_FILE, "w") as f:
-        json.dump(watchlist, f)
+    """Now purely session-based. Persistence is handled by the JS Bridge in the UI."""
+    st.session_state.watchlist = watchlist
 
 @st.cache_data(ttl=86400)
 def check_revenue_momentum(code):
@@ -668,10 +682,35 @@ def get_mass_scan_list(api, market='TW'):
     # 排序：台股按數字、美股按字母
     return sorted(filtered)
 
-# --- 側邊欄設定 ---
-# 1. 優先處理搜尋與新增邏輯
+# --- 🛠️ LocalStorage Bridge (Multi-User Persistence) ---
+# 1. Initialization: Try to load from browser storage if URL doesn't have it yet
+if "w" not in st.query_params and "ls_init_attempted" not in st.session_state:
+    st.session_state.ls_init_attempted = True
+    st.components.v1.html("""
+        <script>
+            const stored = localStorage.getItem('sinopac_watchlist');
+            if (stored && stored !== '[]' && stored !== 'null') {
+                const url = new URL(window.parent.location.href);
+                // Use btoa for safe transport of the JSON string
+                url.searchParams.set('w', btoa(stored));
+                window.parent.location.href = url.toString();
+            }
+        </script>
+    """, height=0)
+
 if 'watchlist' not in st.session_state:
     st.session_state.watchlist = load_watchlist()
+
+# 2. Persistence: Always write the current session watchlist back to localStorage
+# This component re-renders and executes JS whenever st.session_state.watchlist changes
+if 'watchlist' in st.session_state:
+    wl_json = json.dumps(st.session_state.watchlist)
+    st.components.v1.html(f"""
+        <script>
+            localStorage.setItem('sinopac_watchlist', '{wl_json}');
+        </script>
+    """, height=0)
+
 if 'resolved_code' not in st.session_state:
     st.session_state.resolved_code = None
 if 'suggestions' not in st.session_state:
