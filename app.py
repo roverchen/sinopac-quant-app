@@ -133,15 +133,16 @@ st.markdown("""
                 margin-bottom: 2px !important;
             }
             
-            /* 讓分頁按鈕維持水平排版 (更強力的選擇器避免被 Streamlit 預設樣式覆蓋) */
-            div.pagination-marker + div[data-testid="stHorizontalBlock"] {
+            /* 讓分頁按鈕維持水平排版 (更強力的選擇器與彈性排版) */
+            div.pagination-marker ~ div[data-testid="stHorizontalBlock"] {
                 flex-direction: row !important;
                 display: flex !important;
                 flex-wrap: nowrap !important;
                 align-items: center !important;
                 justify-content: center !important;
+                gap: 5px !important;
             }
-            div.pagination-marker + div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+            div.pagination-marker ~ div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
                 width: auto !important;
                 flex: 1 1 auto !important;
                 min-width: 0px !important;
@@ -1775,13 +1776,17 @@ if "results" in st.session_state:
         # 使用 marker 協助 CSS 定位下一個 sibling (stHorizontalBlock)
         st.markdown('<div class="pagination-marker"></div>', unsafe_allow_html=True)
         nav_cols = st.columns([2, 1, 1, 1, 2])
-        if nav_cols[1].button("◀️ 上一頁", disabled=(st.session_state.current_page == 0)):
+        is_mob = is_mobile_device()
+        prev_label = "◀️" if is_mob else "◀️ 上一頁"
+        next_label = "▶️" if is_mob else "下一頁 ▶️"
+        
+        if nav_cols[1].button(prev_label, disabled=(st.session_state.current_page == 0)):
             st.session_state.current_page -= 1
             st.rerun()
         
-        nav_cols[2].write(f"第 {st.session_state.current_page + 1} / {total_pages} 頁")
+        nav_cols[2].write(f"{st.session_state.current_page + 1}/{total_pages}")
         
-        if nav_cols[3].button("下一頁 ▶️", disabled=(st.session_state.current_page == total_pages - 1)):
+        if nav_cols[3].button(next_label, disabled=(st.session_state.current_page == total_pages - 1)):
             st.session_state.current_page += 1
             st.rerun()
     
