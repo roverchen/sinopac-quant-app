@@ -2,6 +2,8 @@ import os
 import time
 import hmac
 import hashlib
+import json
+import base64
 import requests
 
 class MaxExchangeAPI:
@@ -10,45 +12,55 @@ class MaxExchangeAPI:
         self.secret_key = secret_key
         self.base_url = "https://max-api.maicoin.com"
 
-    def _generate_signature(self, nonce: str, endpoint: str) -> str:
-        message = nonce + endpoint
+    def _get_auth_payload(self, path: str, payload_dict: dict = None):
+        """
+        MAX API v2 驗證機制: 回傳 headers 與 確實要送出的 json 字串
+        """
+        if payload_dict is None:
+            payload_dict = {}
+            
+        nonce = int(time.time() * 1000)
+        payload_dict['nonce'] = nonce
+        payload_dict['path'] = path
+        
+        # 1. 產生與 API 嚴格一致的 JSON 字串 (移除空白)
+        # 測試過 MAX 對於 keys 的順序並沒有強制，但字串必須完全對應
+        json_payload = json.dumps(payload_dict, separators=(',', ':'))
+        b64_payload = base64.b64encode(json_payload.encode('utf-8')).decode('utf-8')
+        
+        # 2. 產生 Signature
         signature = hmac.new(
-            bytes(self.secret_key, 'utf-8'),
-            bytes(message, 'utf-8'),
+            self.secret_key.encode('utf-8'),
+            b64_payload.encode('utf-8'),
             hashlib.sha256
         ).hexdigest()
-        return signature
-
-    def _get_headers(self, endpoint: str) -> dict:
-        nonce = str(int(time.time() * 1000))
-        signature = self._generate_signature(nonce, endpoint)
-        return {
+        
+        headers = {
             'X-MAX-ACCESSKEY': self.access_key,
-            'X-MAX-PAYLOAD': nonce,
+            'X-MAX-PAYLOAD': b64_payload,
             'X-MAX-SIGNATURE': signature,
             'Content-Type': 'application/json'
         }
+        
+        return headers, json_payload
 
     def get_account_balance(self) -> dict:
         """
-        獲取帳戶餘額
-        回傳結構範例:
-        {
-            'twd': {'balance': 10000, 'locked': 0},
-            'btc': {'balance': 0.1, 'locked': 0.05},
-        }
+        獲取帳戶餘額 (使用 v2)
         """
-        endpoint = "/api/v3/members/me"
+        endpoint = "/api/v2/members/me"
         url = self.base_url + endpoint
         
         try:
-            response = requests.get(url, headers=self._get_headers(endpoint))
+            # GET 請求不需要傳送 body，但 header 的 Payload 依然要包含 nonce 跟 path
+            headers, _ = self._get_auth_payload(endpoint)
+            response = requests.get(url, headers=headers)
+            
             if response.status_code == 200:
                 data = response.json()
                 accounts = data.get('accounts', [])
                 balance_dict = {}
                 for acc in accounts:
-                    # 只過濾出有餘額的資產以節省空間
                     if float(acc['balance']) > 0 or float(acc['locked']) > 0:
                         balance_dict[acc['currency']] = {
                             'balance': float(acc['balance']),
@@ -62,16 +74,12 @@ class MaxExchangeAPI:
 
     def place_order(self, market: str, side: str, volume: float, price: float = None, ord_type: str = "limit") -> dict:
         """
-        下單委託
-        market: 收斂後的市場代碼，例如 'btctwd', 'ethtwd'
-        side: 'buy' 或 'sell'
-        volume: 下單數量 (例如 0.01 BTC)
-        price: 限價單的價格
-        ord_type: 'limit' (限價) 或 'market' (市價)
+        下單委託 (使用 v2)
         """
-        endpoint = "/api/v3/orders"
+        endpoint = "/api/v2/orders"
         url = self.base_url + endpoint
         
+        # 準備訂單參數
         payload = {
             "market": market.lower(),
             "side": side.lower(),
@@ -81,33 +89,13 @@ class MaxExchangeAPI:
         
         if ord_type.lower() == "limit" and price is not None:
             payload["price"] = str(price)
-
-        nonce = str(int(time.time() * 1000))
-        
-        # 針對有 payload 的 POST 請求，MAX 規定簽名依然是 nonce + endpoint (v3 後有些不需要 json payload 簽名)
-        # 根據 MAX API v3 文件: payload 實際上是 base64 encode 後的 json object，但最新 API 可以直接傳 nonce
-        # 更保守的做法是參考最新文件：
-        
-        # 準備送出的 headers (MAX API v3 要求將參數放在 JSON body 裡)
-        import json
-        
-        # MAX API Signature payload
-        message = nonce + endpoint
-        signature = hmac.new(
-            bytes(self.secret_key, 'utf-8'),
-            bytes(message, 'utf-8'),
-            hashlib.sha256
-        ).hexdigest()
-        
-        headers = {
-            'X-MAX-ACCESSKEY': self.access_key,
-            'X-MAX-PAYLOAD': nonce,
-            'X-MAX-SIGNATURE': signature,
-            'Content-Type': 'application/json'
-        }
+            
+        # 取得 Headers 與準備確切送出的 json 字串
+        headers, json_payload = self._get_auth_payload(endpoint, payload_dict=payload.copy())
         
         try:
-            response = requests.post(url, headers=headers, json=payload)
+            # 使用 data= 送出原始字串，避免 requests.post(json=) 擅自加上空白破壞驗證
+            response = requests.post(url, headers=headers, data=json_payload)
             if response.status_code in [200, 201]:
                 return response.json()
             else:

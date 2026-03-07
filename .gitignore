@@ -25,3 +25,4 @@ watchlist.json
 
 # OS specific
 .DS_Store
+.env

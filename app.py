@@ -59,7 +59,28 @@ try:
 except ImportError:
     MaxExchangeAPI = None
 
-# --- 🎯 設備檢測與適應性設定 ---
+# --- 🎯 設備檢測與識別碼工具 ---
+import uuid
+try:
+    from streamlit.runtime.scriptrunner import get_script_run_ctx
+except ImportError:
+    get_script_run_ctx = None
+
+def get_session_uid():
+    """取得當前 Session 的識別碼，優先取網址參數，次之取 Streamlit 內部 ID"""
+    u = st.query_params.get("u")
+    if u:
+        return u
+    # 回退到 Streamlit 內部 session_id (至少能保證同一個分頁重整時儘量穩定)
+    try:
+        if get_script_run_ctx:
+            ctx = get_script_run_ctx()
+            if ctx:
+                return f"sess_{ctx.session_id[:8]}"
+    except:
+        pass
+    return "shared"
+
 def is_mobile_device():
     """透過 User-Agent 簡易判斷是否為行動裝置"""
     try:
@@ -72,7 +93,7 @@ def is_mobile_device():
 # --- 常數設定 ---
 WATCHLIST_FILE = "watchlist.json"
 CACHE_DIR = "cache"
-RESULTS_CACHE_FILE = os.path.join(CACHE_DIR, "results_cache.pkl")
+# RESULTS_CACHE_FILE is now dynamic per user
 NAME_MAP_CACHE_FILE = os.path.join(CACHE_DIR, "name_map.pkl")
 
 if not os.path.exists(CACHE_DIR):
@@ -140,6 +161,10 @@ st.markdown("""
         }
 </style>
 """, unsafe_allow_html=True)
+
+# 側邊欄最下方顯示 Debug 資訊 (供確認隔離狀態)
+st.sidebar.markdown("---")
+st.sidebar.caption(f"🆔 Session ID: {get_session_uid()}")
 
 # 預設時區工具
 st.title("📈 金融商品市場報明牌系統")
@@ -225,7 +250,7 @@ if not st.session_state.get('contracts_fetched', False):
 
 # --- 結果暫存 (Persistence) 邏輯 ---
 # --- 結果暫存 (Persistence) 邏輯 ---
-def save_results_cache(df, is_big_scan=False, market=None):
+def save_results_cache(df, is_big_scan=False, market=None, user_id="shared"):
     """將掃描結果存入磁碟，防止手機重新整理後消失"""
     try:
         data = {
@@ -234,16 +259,18 @@ def save_results_cache(df, is_big_scan=False, market=None):
             "is_big_scan": is_big_scan,
             "scan_market": market
         }
-        with open(RESULTS_CACHE_FILE, "wb") as f:
+        cache_file = os.path.join(CACHE_DIR, f"results_cache_{user_id}.pkl")
+        with open(cache_file, "wb") as f:
             pickle.dump(data, f)
     except Exception as e:
         print(f"快取存檔失敗: {e}")
 
-def load_results_cache():
+def load_results_cache(user_id="shared"):
     """從磁碟載入上一次的掃描結果"""
-    if os.path.exists(RESULTS_CACHE_FILE):
+    cache_file = os.path.join(CACHE_DIR, f"results_cache_{user_id}.pkl")
+    if os.path.exists(cache_file):
         try:
-            with open(RESULTS_CACHE_FILE, "rb") as f:
+            with open(cache_file, "rb") as f:
                 return pickle.load(f)
         except:
             pass
@@ -719,19 +746,36 @@ def get_mass_scan_list(api, market='TW'):
 
 # --- 🛠️ LocalStorage Bridge (Multi-User Persistence) ---
 # 1. Initialization: Try to load from browser storage if URL doesn't have it yet
-if "w" not in st.query_params and "ls_init_attempted" not in st.session_state:
+if ("w" not in st.query_params or "u" not in st.query_params) and "ls_init_attempted" not in st.session_state:
     st.session_state.ls_init_attempted = True
     st.components.v1.html("""
         <script>
+            let uid = localStorage.getItem('sinopac_uid');
+            if (!uid) {
+                uid = Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
+                localStorage.setItem('sinopac_uid', uid);
+            }
             const stored = localStorage.getItem('sinopac_watchlist');
-            if (stored && stored !== '[]' && stored !== 'null') {
-                const url = new URL(window.parent.location.href);
-                // Use btoa for safe transport of the JSON string
+            const url = new URL(window.parent.location.href);
+            let reload = false;
+            
+            if (!url.searchParams.has('u')) {
+                url.searchParams.set('u', uid);
+                reload = true;
+            }
+            if (!url.searchParams.has('w') && stored && stored !== '[]' && stored !== 'null') {
                 url.searchParams.set('w', btoa(stored));
+                reload = true;
+            }
+            
+            if (reload) {
                 window.parent.location.href = url.toString();
             }
         </script>
     """, height=0)
+
+# Get current user ID for cache isolation (Robust Hybrid Approach)
+user_id = get_session_uid()
 
 if 'watchlist' not in st.session_state:
     st.session_state.watchlist = load_watchlist()
@@ -1355,8 +1399,9 @@ current_watchlist_key = ",".join(watchlist)
 should_sync = False
 
 # --- 啟動時優先從磁碟載入快取 (行動端穩定性關鍵) ---
+# 使用具備回退機制的 user_id，確保隨時獲得隔離的快取
 if "results" not in st.session_state:
-    cache_data = load_results_cache()
+    cache_data = load_results_cache(user_id=user_id)
     if cache_data:
         # 檢查快取資料結構是否相容 (版本遷移檢查)
         cache_df = cache_data.get("df", pd.DataFrame())
@@ -1388,7 +1433,7 @@ elif st.session_state.get("last_watchlist") != current_watchlist_key:
 # big_scan_btn = st.button("🔍 執行「全市場」大選股", ...)
 
 # --- 掃描執行邏輯 ---
-if big_scan_tw_btn or big_scan_us_btn or big_scan_crypto_btn or scan_btn or should_sync or st.session_state.get("force_rescan"):
+if (big_scan_tw_btn or big_scan_us_btn or big_scan_crypto_btn or scan_btn or should_sync or st.session_state.get("force_rescan")):
     # 1. 決定市場與名單
     if big_scan_tw_btn or big_scan_us_btn or big_scan_crypto_btn:
         if big_scan_tw_btn: m_type = 'TW'
@@ -1420,7 +1465,7 @@ if big_scan_tw_btn or big_scan_us_btn or big_scan_crypto_btn or scan_btn or shou
             st.session_state.current_page = 0 # 重設頁碼
             
             # 存入磁碟快取
-            save_results_cache(results, is_big_scan=st.session_state.is_big_scan, market=st.session_state.scan_market)
+            save_results_cache(results, is_big_scan=st.session_state.is_big_scan, market=st.session_state.scan_market, user_id=user_id)
             st.toast("✅ 數據同步完成！", icon="📉")
         else:
             if st.session_state.is_big_scan:
@@ -1711,7 +1756,7 @@ if "results" in st.session_state:
                         if "results" in st.session_state:
                             st.session_state.results = st.session_state.results[st.session_state.results['代碼'] != row['代碼']]
                             # 更新快取，確保重新整理後依然保持現狀
-                            save_results_cache(st.session_state.results, is_big_scan=False, market=None)
+                            save_results_cache(st.session_state.results, is_big_scan=False, market=None, user_id=user_id)
                     else:
                         st.session_state.watchlist.append(row['代碼'])
                         st.toast(f"➕ 已加入追蹤清單 {row['代碼']}")
