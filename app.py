@@ -1061,10 +1061,15 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
                 atr = last_price * 0.03
             
             # --- [NEW] 價值防禦「動能觸發」 (Volume and MA5) ---
+            vol_momentum_ratio = 1.0
             if len(df) > 5:
                 ma5 = df['close'].rolling(5).mean().iloc[-1]
                 vol_ma5 = df['volume'].rolling(5).mean().iloc[-1]
                 has_momentum = (last_price > ma5) and (df['volume'].iloc[-1] > vol_ma5 * 1.2)
+                
+                # 加密貨幣專屬：24小時成交量動能 (與 5 日均量比較)
+                if market_type == 'CRYPTO':
+                    vol_momentum_ratio = df['volume'].iloc[-1] / vol_ma5 if vol_ma5 > 0 else 1.0
             else:
                 has_momentum = False
             
@@ -1093,6 +1098,10 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
             # 根據滑桿權重結合分數
             final_score = (defense_weight * value_score) + ((1 - defense_weight) * pullback_score)
             
+            # --- [優化] 加密貨幣流動性懲罰：量縮則分數打折 (避免偽金叉) ---
+            if market_type == 'CRYPTO' and vol_momentum_ratio < 0.8:
+                final_score *= 0.7 # 量縮懲罰
+            
             # 決定顯示在表格中的操作建議 (依據目前較高權重的策略得分)
             weighted_value_score = defense_weight * value_score
             weighted_pullback_score = (1 - defense_weight) * pullback_score
@@ -1100,9 +1109,12 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
             if weighted_pullback_score >= weighted_value_score:
                 # 強勢追蹤策略：使用 ATR 動態停損
                 stop_loss = last_price - (atr_multiplier * atr) 
-                target = last_price + (last_price - stop_loss) * 3 # 1:3 風報比
+                # 動態風報比：極強動能(成交量爆發)給予 1:4 目標，否則 1:3
+                rr_ratio = 4.0 if (market_type == 'CRYPTO' and vol_momentum_ratio > 2.0) else 3.0
+                target = last_price + (last_price - stop_loss) * rr_ratio
                 actionable_str = f"📈強勢 | 買:{growth_buy_zone:.1f} | 標:{target:.1f} | 損:{stop_loss:.1f} | 評分：{final_score:.1f}"
             else:
+                # 價值防禦策略：採穩健 1:2 或固定 20% 目標
                 target = defense_base * 1.2 if not np.isnan(defense_base) else value_buy_zone * 1.2
                 stop_loss = year_low * 0.95
                 m_tag = "⚡" if has_momentum else "" # 動能標記
@@ -1117,6 +1129,9 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
                 defense_label = f"{dist_to_defense*100:.1f}%(100日)"
             else:
                 defense_label = f"{dist_to_defense*100:.1f}%" if has_ma240 else f"{dist_to_defense*100:.1f}%(季)"
+            
+            # 資料時間格式化 (僅顯示月-日)
+            last_ts = df['ts'].iloc[-1].strftime('%m-%d')
 
             data_list.append({
                 "代碼": code,
@@ -1140,8 +1155,10 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
                 "_y_low": year_low,
                 "_atr": atr,
                 "_has_momentum": has_momentum,
+                "_vol_ratio": vol_momentum_ratio,
                 "_macd_status": macd_status,
-                "_ma20": ma20_last
+                "_ma20": ma20_last,
+                "_data_ts": last_ts
             })
             
             # --- 頻率保護：如果是大選股，加入微小延遲防止被封鎖 ---
@@ -1192,11 +1209,15 @@ def rescore_results(results_df, defense_weight):
         atr = row.get('_atr', row['最新價格'] * 0.03)
         atr_mult = row.get('_atr_mult', 2.5) # 預設股市倍率
         has_momentum = row.get('_has_momentum', False)
+        vol_ratio = row.get('_vol_ratio', 1.0)
+        m_type = row.get('_market_type', 'TW')
         
         if p_w >= v_w:
             # 強勢追蹤逻辑 (ATR 停損)
             stop_loss = row['最新價格'] - (atr_mult * atr)
-            target = row['最新價格'] + (row['最新價格'] - stop_loss) * 3
+            # 動態風報比
+            rr_ratio = 4.0 if (m_type == 'CRYPTO' and vol_ratio > 2.0) else 3.0
+            target = row['最新價格'] + (row['最新價格'] - stop_loss) * rr_ratio
             return f"📈強勢 | 買:{row['_g_buy']:.1f} | 標:{target:.1f} | 損:{stop_loss:.1f} | 評分：{score:.1f}"
         else:
             # 價值防禦逻辑
@@ -1372,13 +1393,14 @@ if "results" in st.session_state:
     
     with st.expander(f"💡 投資策略與操作建議 ({w_def}% 價值防禦 + {w_gro}% 強勢回測)"):
         st.markdown(f"""
-        本系統目前採用 **「{w_def}/{w_gro} 權重動態配置」** 策略，並透過「營收趨勢」與「波動率 (ATR)」計算精確點位：
+        本系統目前採用 **「{w_def}/{w_gro} 權重動態配置」** 策略，並透過「營收趨勢」與「成交量能 (Volume)」計算精確點位：
         - **🛡️ 價值防禦 ({w_def}% 資金權重)**：
             - **適用**：長線有撐的穩健標的。標註 `⚡` 代表具備 **「量增 + 站回5日線」** 的動能觸發訊號。
-            - **操作**：建議在 **靠近{def_ma}** 且具備動能時分批佈局，目標看{def_ma}之上 20%，停損設於前波低點 (-5%)。
+            - **操作**：建議在 **靠近{def_ma}** 且具備動能時分批佈局，目標採 **1:2 風報比** 或固定 +20%，停損設於前波低點 (-5%)。
         - **📈 強勢回測 ({w_gro}% 資金權重)**：
-            - **適用**：多頭趨勢成長股/主流幣。採用 **ATR 動態停損**，自動適應市場波動。
-            - **操作**：回測 **{pullback_target}** 支撐時買進，停損設為 **{atr_mult} ATR**，停利採 **1:3 風報比** 鎖定利潤。
+            - **適用**：多頭趨勢成長股/主流幣。{ "⚠️ **幣圈流動性過濾**：當 24h 成交量萎縮時將自動扣分。" if is_crypto else "" }
+            - **操作**：回測 **{pullback_target}** 支撐時買進，停損設為 **{atr_mult} ATR**。
+            - **目標**：採 **1:3 風報比**；若成交量異常爆發，目標自動上修至 **1:4**。
         - **MACD 狀態**：`🎯強勢金叉` (0軸上) 代表噴發力較強；`🩹弱勢金叉` (0軸下) 視為低檔技術性反彈。
         """)
 
@@ -1410,6 +1432,7 @@ if "results" in st.session_state:
     <div class="desktop-only">
         <div style="display: flex; border: 1px solid #444; border-radius: 8px; padding: 10px; background: #262730; margin-bottom: 10px; font-weight: bold; align-items: center; font-size: 0.85rem;">
             <div style="flex: 1.5;">股票</div>
+            <div style="flex: 0.6;">時間</div>
             <div style="flex: 0.8;">最新價</div>
             <div style="flex: 0.8;">位階</div>
             <div style="flex: 0.8;">{header_label}</div>
@@ -1506,42 +1529,46 @@ if "results" in st.session_state:
     # 2. 顯示內容 (每一家股票一個穩定容器，手機自動轉卡片)
     for index, row in paged_results.iterrows():
         with st.container(border=True):
-            cols = st.columns([1.5, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 3.5, 0.5])
+            cols = st.columns([1.5, 0.6, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 3.5, 0.5])
             
             # 欄位一：股票名稱 (轉為按鈕連結)
-            icon = "🪙" if "-USD" in row['代碼'] else "🛒"
+            icon = "🪙" if "-USD" in str(row['代碼']) else "🛒"
             if cols[0].button(f"{icon} {row['代碼']} {row['名稱']}", key=f"t_{row['代碼']}_{index}", use_container_width=True):
                 show_order_dialog(row)
             
-            # 欄位二：最新價 (手機版會標註標籤)
+            # 欄位二：資料時間
+            data_ts = row.get('_data_ts', '-')
+            cols[1].markdown(f'<span class="mobile-label">資料時間:</span><span style="font-size:0.8rem; color:#888;">{data_ts}</span>', unsafe_allow_html=True)
+
+            # 欄位三：最新價 (手機版會標註標籤)
             price_val = f"{row['最新價格']:.1f}" if row['最新價格'] != 0 else "-"
-            cols[1].markdown(f'<span class="mobile-label">最新價:</span><b>{price_val}</b>', unsafe_allow_html=True)
+            cols[2].markdown(f'<span class="mobile-label">最新價:</span><b>{price_val}</b>', unsafe_allow_html=True)
             
-            # 欄位三～五：指標
-            cols[2].markdown(f'<span class="mobile-label">一年位階:</span>{row["一年位階"]}', unsafe_allow_html=True)
-            cols[3].markdown(f'<span class="mobile-label">{header_label}:</span>{row["年線乖離"]}', unsafe_allow_html=True)
-            cols[4].markdown(f'<span class="mobile-label">MA20乖離:</span>{row["MA20乖離"]}', unsafe_allow_html=True)
+            # 欄位四～六：指標
+            cols[3].markdown(f'<span class="mobile-label">一年位階:</span>{row["一年位階"]}', unsafe_allow_html=True)
+            cols[4].markdown(f'<span class="mobile-label">{header_label}:</span>{row["年線乖離"]}', unsafe_allow_html=True)
+            cols[5].markdown(f'<span class="mobile-label">MA20乖離:</span>{row["MA20乖離"]}', unsafe_allow_html=True)
             
-            # 欄位六～七：新增的 MA20 價 與 ATR 停損
+            # 欄位七～八：新增的 MA20 價 與 ATR 停損
             ma20_raw = row.get('_ma20', 0)
             ma20_val = f"{ma20_raw:.1f}" if not pd.isna(ma20_raw) else "-"
             atr_mult = row.get('_atr_mult', 2.5)
             atr_stop_raw = row['最新價格'] - (atr_mult * row.get('_atr', 0))
             atr_stop = f"{atr_stop_raw:.1f}" if not pd.isna(atr_stop_raw) else "-"
-            cols[5].markdown(f'<span class="mobile-label">MA20價:</span>{ma20_val}', unsafe_allow_html=True)
-            cols[6].markdown(f'<span class="mobile-label">ATR停損:</span>{atr_stop}', unsafe_allow_html=True)
+            cols[6].markdown(f'<span class="mobile-label">MA20價:</span>{ma20_val}', unsafe_allow_html=True)
+            cols[7].markdown(f'<span class="mobile-label">ATR停損:</span>{atr_stop}', unsafe_allow_html=True)
             
-            # 欄位八：操作建議
-            cols[7].markdown(f"**`{row['操作建議']}`**")
+            # 欄位九：操作建議
+            cols[8].markdown(f"**`{row['操作建議']}`**")
             
-            # 欄位九：動作按鈕 (唯一 Key)
+            # 欄位十：動作按鈕 (唯一 Key)
             is_big_scan = st.session_state.get("is_big_scan", False)
             if is_big_scan:
                 action_icon = "➕"
             else:
                 action_icon = "🗑️" if row['代碼'] in st.session_state.watchlist else "➕"
 
-            if cols[8].button(action_icon, key=f"btn_{row['代碼']}_{index}", use_container_width=True):
+            if cols[9].button(action_icon, key=f"btn_{row['代碼']}_{index}", use_container_width=True):
                 if is_big_scan:
                     if row['代碼'] not in st.session_state.watchlist:
                         st.session_state.watchlist.append(row['代碼'])
