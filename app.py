@@ -412,12 +412,12 @@ def get_stock_name_map(_api):
         "BTC-USD": "比特幣", "ETH-USD": "以太幣", "SOL-USD": "Solana",
         "BNB-USD": "幣安幣", "XRP-USD": "瑞波幣", "ADA-USD": "卡爾達諾",
         "DOGE-USD": "狗狗幣", "AVAX-USD": "雪崩幣", "DOT-USD": "波卡幣",
-        "TRX-USD": "波場幣", "LINK-USD": "Chainlink", "MATIC-USD": "Polygon",
+        "TRX-USD": "波場幣", "LINK-USD": "Chainlink", "POL28321-USD": "Polygon (POL)",
         "NEAR-USD": "NEAR", "LTC-USD": "萊特幣", "BCH-USD": "比特現金",
-        "SHIB-USD": "柴犬幣", "DAI-USD": "DAI", "UNI-USD": "Uniswap",
-        "LEO-USD": "LEO", "APT-USD": "Aptos", "STX-USD": "Stacks",
-        "OKB-USD": "OKB", "ATOM-USD": "Cosmos", "IMX-USD": "Immutable",
-        "WHBAR-USD": "HBAR", "KAS-USD": "Kaspa", "ETC-USD": "以太經典",
+        "SHIB-USD": "柴犬幣", "DAI-USD": "DAI", "UNI7083-USD": "Uniswap",
+        "LEO-USD": "LEO", "APT21794-USD": "Aptos", "STX4847-USD": "Stacks",
+        "OKB-USD": "OKB", "ATOM-USD": "Cosmos", "IMX10603-USD": "Immutable",
+        "HBAR-USD": "HBAR", "KAS-USD": "Kaspa", "ETC-USD": "以太經典",
         "RENDER-USD": "Render", "FIL-USD": "Filecoin", "LDO-USD": "Lido"
     }
     
@@ -653,9 +653,9 @@ def get_mass_scan_list(api, market='TW'):
             return [
                 "BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "XRP-USD", 
                 "ADA-USD", "DOGE-USD", "AVAX-USD", "DOT-USD", "TRX-USD",
-                "LINK-USD", "MATIC-USD", "NEAR-USD", "LTC-USD", "BCH-USD",
-                "SHIB-USD", "DAI-USD", "UNI-USD", "LEO-USD", "APT-USD",
-                "STX-USD", "OKB-USD", "ATOM-USD", "IMX-USD", "HBAR-USD",
+                "LINK-USD", "POL28321-USD", "NEAR-USD", "LTC-USD", "BCH-USD",
+                "SHIB-USD", "DAI-USD", "UNI7083-USD", "LEO-USD", "APT21794-USD",
+                "STX4847-USD", "OKB-USD", "ATOM-USD", "IMX10603-USD", "HBAR-USD",
                 "KAS-USD", "ETC-USD", "RENDER-USD", "FIL-USD", "LDO-USD"
             ]
 
