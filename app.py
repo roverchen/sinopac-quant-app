@@ -1017,7 +1017,8 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
                         st.warning(f"代碼 {code} 無法獲取有效資料")
                     continue
 
-                # 儲存到本地快取 (此處僅存原始數據，指標會統一在下方計算)
+            # 如果成功取得資料且不是從本地快取讀取的，則儲存到本地快取 (此處僅存原始數據，指標會統一在下方計算)
+            if df is not None and not df.empty and source != "💾 本地":
                 df.to_csv(cache_file, index=False)
             
             # --- 統一技術指標計算入口 (不論來源為何都必須執行) ---
