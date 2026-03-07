@@ -102,10 +102,16 @@ st.markdown("""
                 margin-bottom: 2px !important;
             }
             
-            /* 讓分頁按鈕維持水平排版 (覆蓋上面的垂直堆疊) */
-            .pagination-row [data-testid="column"] {
+            /* 讓分頁按鈕維持水平排版 (使用相鄰兄弟選擇器精確定位) */
+            .pagination-marker + div[data-testid="stHorizontalBlock"] {
+                flex-direction: row !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+            }
+            .pagination-marker + div[data-testid="stHorizontalBlock"] [data-testid="column"] {
                 width: auto !important;
-                flex: 1 1 0% !important;
+                flex: 1 1 auto !important;
                 min-width: 0px !important;
             }
 
@@ -119,7 +125,7 @@ st.markdown("""
             }
             
             .stButton button {
-                font-size: 0.9rem !important;
+                font-size: 0.85rem !important;
             }
         }
 </style>
@@ -1556,7 +1562,8 @@ if "results" in st.session_state:
     # --- 分頁導航 ---
     if total_pages > 1:
         st.divider()
-        st.markdown('<div class="pagination-row">', unsafe_allow_html=True)
+        # 使用 marker 協助 CSS 定位下一個 sibling (stHorizontalBlock)
+        st.markdown('<div class="pagination-marker"></div>', unsafe_allow_html=True)
         nav_cols = st.columns([2, 1, 1, 1, 2])
         if nav_cols[1].button("◀️ 上一頁", disabled=(st.session_state.current_page == 0)):
             st.session_state.current_page -= 1
@@ -1567,7 +1574,6 @@ if "results" in st.session_state:
         if nav_cols[3].button("下一頁 ▶️", disabled=(st.session_state.current_page == total_pages - 1)):
             st.session_state.current_page += 1
             st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
     
     st.divider()
     
