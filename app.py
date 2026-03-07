@@ -523,9 +523,14 @@ def get_mass_scan_list(api, market='TW'):
     filtered = []
     for code in all_map.keys():
         if market == 'TW':
-            # 台股：數字開頭 (包含 4 碼股票與 6 碼/字母型 ETF，排除純字母權證或其他)
+            # 台股規則優化：
+            # 1. 排除長度大於 6 的 (通常是權證 03xxP, 07xxQ 等)
+            # 2. 只有 4 碼數字 (普通股) 或 5-6 碼 (ETF，如 0050, 00631L) 才納入
             if code and code[0].isdigit():
-                filtered.append(code)
+                if len(code) == 4: # 普通股
+                    filtered.append(code)
+                elif 5 <= len(code) <= 6: # ETF 與特殊類標的
+                    filtered.append(code)
         elif market == 'US':
             # 美股：字母開頭 (排除純數字台股及帶點號的特殊標的)
             if code and code[0].isalpha() and not (code.endswith('.TW') or code.endswith('.TWO')):
