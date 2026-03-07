@@ -638,6 +638,16 @@ def get_mass_scan_list(api, market='TW'):
             # 美股：字母開頭 (排除純數字台股及帶點號的特殊標的)
             if code and code[0].isalpha() and not (code.endswith('.TW') or code.endswith('.TWO')):
                 filtered.append(code)
+        elif market == 'CRYPTO':
+            # 加密貨幣：自定義主流幣清單 (Yahoo Finance 格式)
+            return [
+                "BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "XRP-USD", 
+                "ADA-USD", "DOGE-USD", "AVAX-USD", "DOT-USD", "TRX-USD",
+                "LINK-USD", "MATIC-USD", "NEAR-USD", "LTC-USD", "BCH-USD",
+                "SHIB-USD", "DAI-USD", "UNI-USD", "LEO-USD", "APT-USD",
+                "STX-USD", "OKB-USD", "ATOM-USD", "IMX-USD", "WHBAR-USD",
+                "KAS-USD", "ETC-USD", "RENDER-USD", "FIL-USD", "LDO-USD"
+            ]
     
     # 排序：台股按數字、美股按字母
     return sorted(filtered)
@@ -675,6 +685,8 @@ with st.sidebar.container():
                                         type="primary" if st.session_state.get("scan_market") == "TW" else "secondary")
     big_scan_us_btn = st.sidebar.button("🇺🇸 美國股票海選", use_container_width=True,
                                         type="primary" if st.session_state.get("scan_market") == "US" else "secondary")
+    big_scan_crypto_btn = st.sidebar.button("🪙 加密貨幣海選", use_container_width=True,
+                                           type="primary" if st.session_state.get("scan_market") == "CRYPTO" else "secondary")
     st.markdown('</div>', unsafe_allow_html=True)
 
 st.sidebar.divider()
@@ -760,7 +772,7 @@ if "last_order" in st.session_state:
 watchlist = st.session_state.watchlist
 
 # --- 核心邏輯 ---
-def fetch_and_analyze(watchlist, defense_weight=0.5):
+def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
     data_list = []
     
     # 每次新掃描前，重置自動重連標記，以便未來再次觸發時能重連
@@ -954,6 +966,8 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
                 
                 # 計算 MA 均線
                 df['ma20'] = df['close'].rolling(window=20).mean()
+                df['ma50'] = df['close'].rolling(window=50).mean()
+                df['ma100'] = df['close'].rolling(window=100).mean()
                 df['ma60'] = df['close'].rolling(window=60).mean()
                 df['ma240'] = df['close'].rolling(window=240).mean()
                 
@@ -982,14 +996,23 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
             level_percentile = (last_price - year_low) / (year_high - year_low) if (year_high - year_low) != 0 else 0
             
             ma20_last = df['ma20'].iloc[-1]
+            ma50_last = df['ma50'].iloc[-1]
+            ma100_last = df['ma100'].iloc[-1]
             ma60_last = df['ma60'].iloc[-1]
             ma240_last = df['ma240'].iloc[-1]
             
-            dist_to_ma20 = (last_price / ma20_last - 1) if not np.isnan(ma20_last) else 100
+            dist_to_ma20 = (last_price / ma20_last - 1) if not np.isnan(ma20_last) else 0
             
-            # --- [修正] IPO 彈性防護：若無年線 (MA240)，改用季線 (MA60) 作為防禦基準 ---
-            has_ma240 = not np.isnan(ma240_last)
-            defense_base = ma240_last if has_ma240 else ma60_last
+            # --- [修正] 市場彈性策略 ---
+            if market_type == 'CRYPTO':
+                has_defense_ma = not np.isnan(ma100_last)
+                defense_base = ma100_last if has_defense_ma else ma50_last
+                atr_multiplier = 3.0 # 加密貨幣抗震係數
+            else:
+                has_ma240 = not np.isnan(ma240_last)
+                defense_base = ma240_last if has_ma240 else ma60_last
+                atr_multiplier = 2.5 # 股市標準係數
+            
             dist_to_defense = (last_price / defense_base - 1) if not np.isnan(defense_base) else 0
             
             # MACD 狀態優化：加入 0 軸偏向過濾器
@@ -1059,12 +1082,12 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
             weighted_pullback_score = (1 - defense_weight) * pullback_score
             
             if weighted_pullback_score >= weighted_value_score:
-                # 強勢追蹤策略：使用 ATR 動態停損 (預設 2.5 倍 ATR，美股高波自動拉開)
-                stop_loss = last_price - (2.5 * atr) 
+                # 強勢追蹤策略：使用 ATR 動態停損
+                stop_loss = last_price - (atr_multiplier * atr) 
                 target = last_price + (last_price - stop_loss) * 3 # 1:3 風報比
                 actionable_str = f"📈強勢 | 買:{growth_buy_zone:.1f} | 標:{target:.1f} | 損:{stop_loss:.1f} | 評分：{final_score:.1f}"
             else:
-                target = ma240_last * 1.2 if not np.isnan(ma240_last) else value_buy_zone * 1.2
+                target = defense_base * 1.2 if not np.isnan(defense_base) else value_buy_zone * 1.2
                 stop_loss = year_low * 0.95
                 m_tag = "⚡" if has_momentum else "" # 動能標記
                 actionable_str = f"🛡價值{m_tag} | 買:{value_buy_zone:.1f} | 標:{target:.1f} | 損:{stop_loss:.1f} | 評分：{final_score:.1f}"
@@ -1073,13 +1096,19 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
             if not is_rev_ok:
                 final_score *= 0.1
             
+            # 構建顯示用乖離標籤
+            if market_type == 'CRYPTO':
+                defense_label = f"{dist_to_defense*100:.1f}%(100日)"
+            else:
+                defense_label = f"{dist_to_defense*100:.1f}%" if has_ma240 else f"{dist_to_defense*100:.1f}%(季)"
+
             data_list.append({
                 "代碼": code,
                 "名稱": stock_name,
                 "最新價格": last_price,
                 "操作建議": actionable_str,
                 "一年位階": f"{level_percentile*100:.1f}%",
-                "年線乖離": f"{dist_to_defense*100:.1f}%" if has_ma240 else f"{dist_to_defense*100:.1f}%(季)",
+                "年線乖離": defense_label,
                 "MA20乖離": f"{dist_to_ma20*100:.1f}%",
                 "MACD狀態": macd_status,
                 "綜合評分": final_score,
@@ -1090,7 +1119,8 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
                 "_v_buy": value_buy_zone,
                 "_g_buy": growth_buy_zone,
                 "_ma_base": defense_base,
-                "_has_ma240": has_ma240,
+                "_market_type": market_type,
+                "_atr_mult": atr_multiplier,
                 "_y_low": year_low,
                 "_atr": atr,
                 "_has_momentum": has_momentum,
@@ -1121,7 +1151,7 @@ def rescore_results(results_df, defense_weight):
     if results_df.empty: return results_df
     
     # --- [修正] 結構檢查：防止快取版本不相容導致 KeyError ---
-    required_cols = ['_v_score', '_p_score', '_is_rev_ok', '_g_buy', '_v_buy', '_ma_base', '_has_ma240', '_y_low']
+    required_cols = ['_v_score', '_p_score', '_is_rev_ok', '_g_buy', '_v_buy', '_ma_base', '_y_low']
     if not all(col in results_df.columns for col in required_cols):
         # 如果欄位不齊，可能是舊版快取。不報錯，直接回傳原始資料，並提示重新掃描。
         print("[Notice] Old cache detected in rescore_results, skipping vector update.")
@@ -1144,16 +1174,17 @@ def rescore_results(results_df, defense_weight):
         
         # 取得指標
         atr = row.get('_atr', row['最新價格'] * 0.03)
+        atr_mult = row.get('_atr_mult', 2.5) # 預設股市倍率
         has_momentum = row.get('_has_momentum', False)
         
         if p_w >= v_w:
             # 強勢追蹤逻辑 (ATR 停損)
-            stop_loss = row['最新價格'] - (2.5 * atr)
+            stop_loss = row['最新價格'] - (atr_mult * atr)
             target = row['最新價格'] + (row['最新價格'] - stop_loss) * 3
             return f"📈強勢 | 買:{row['_g_buy']:.1f} | 標:{target:.1f} | 損:{stop_loss:.1f} | 評分：{score:.1f}"
         else:
-            # 價值防禦逻辑 (動能標記)
-            target = row['_ma_base'] * 1.2 if row['_has_ma240'] else row['_v_buy'] * 1.2
+            # 價值防禦逻辑
+            target = row['_ma_base'] * 1.2
             stop_loss = row['_y_low'] * 0.95
             m_tag = "⚡" if has_momentum else ""
             return f"🛡價值{m_tag} | 買:{row['_v_buy']:.1f} | 標:{target:.1f} | 損:{stop_loss:.1f} | 評分：{score:.1f}"
@@ -1241,13 +1272,16 @@ elif st.session_state.get("last_watchlist") != current_watchlist_key:
 # --- 掃描執行邏輯 ---
 if big_scan_tw_btn or big_scan_us_btn or scan_btn or should_sync or st.session_state.get("force_rescan"):
     # 1. 決定市場與名單
-    if big_scan_tw_btn or big_scan_us_btn:
-        m_type = 'TW' if big_scan_tw_btn else 'US'
-        m_label = "台灣" if m_type == 'TW' else "美國"
+    if big_scan_tw_btn or big_scan_us_btn or big_scan_crypto_btn:
+        if big_scan_tw_btn: m_type = 'TW'
+        elif big_scan_us_btn: m_type = 'US'
+        else: m_type = 'CRYPTO'
+        
+        m_label = {"TW": "台灣", "US": "美國", "CRYPTO": "加密貨幣"}[m_type]
         st.session_state.is_big_scan = True
         st.session_state.scan_market = m_type
         scan_list = get_mass_scan_list(api, market=m_type)
-        toast_msg = f"🚀 開始 {m_label} 股票大平原掃描 (共 {len(scan_list)} 檔)..."
+        toast_msg = f"🚀 開始 {m_label} 大平原掃描 (共 {len(scan_list)} 檔)..."
     else:
         st.session_state.is_big_scan = False
         st.session_state.scan_market = None
@@ -1260,7 +1294,7 @@ if big_scan_tw_btn or big_scan_us_btn or scan_btn or should_sync or st.session_s
         st.session_state.last_watchlist = current_watchlist_key
         st.session_state.force_rescan = False
         
-        results = fetch_and_analyze(scan_list, defense_weight=st.session_state.defense_weight)
+        results = fetch_and_analyze(scan_list, defense_weight=st.session_state.defense_weight, market_type=st.session_state.scan_market)
         
         if not results.empty:
             st.session_state.results = results
@@ -1354,7 +1388,7 @@ if "results" in st.session_state:
             <div style="flex: 1.5;">股票</div>
             <div style="flex: 0.8;">最新價</div>
             <div style="flex: 0.8;">位階</div>
-            <div style="flex: 0.8;">年線乖離</div>
+            <div style="flex: 0.8;">{"100日乖離" if st.session_state.scan_market == "CRYPTO" else "年線乖離"}</div>
             <div style="flex: 0.8;">MA20乖離</div>
             <div style="flex: 0.8;">MA20價</div>
             <div style="flex: 0.8;">ATR停損</div>
