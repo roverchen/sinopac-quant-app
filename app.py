@@ -50,11 +50,8 @@ import pickle
 def is_mobile_device():
     """透過 User-Agent 簡易判斷是否為行動裝置"""
     try:
-        from streamlit.web.server.websocket_headers import _get_websocket_headers
-        headers = _get_websocket_headers()
-        if not headers:
-            return False
-        ua = headers.get("User-Agent", "").lower()
+        # 使用最新的 st.context.headers (取代已棄用的 _get_websocket_headers)
+        ua = st.context.headers.get("User-Agent", "").lower()
         return any(m in ua for m in ["mobile", "android", "iphone", "ipad"])
     except:
         return False
