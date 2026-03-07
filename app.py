@@ -575,7 +575,7 @@ scan_btn = False
 if not st.session_state.get("is_big_scan", False):
     with st.sidebar.container():
         st.markdown('<div class="desktop-only">', unsafe_allow_html=True)
-        scan_btn = st.sidebar.button("🔄 重新掃描目前清單", use_container_width=True)
+        scan_btn = st.sidebar.button("� 掃描目前追蹤清單", use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
 st.sidebar.divider()
@@ -1261,7 +1261,7 @@ if "results" in st.session_state:
         top_pick = results.iloc[0]
         st.success(f"🛡️ 今日最值得佈局：**{top_pick['代碼']} {top_pick['名稱']}** ({top_pick['操作建議']})")
     else:
-        st.warning("⚠️ 目前清單中尚無有效的分析結果，請點擊「🚀 重新掃描」。")
+        st.warning("⚠️ 目前清單中尚無有效的分析結果，請點擊「🚀 掃描目前追蹤清單」。")
     
     # --- 指標說明 ---
     w_def = int(st.session_state.defense_weight * 100)
@@ -1458,4 +1458,4 @@ if "results" in st.session_state:
     # 互動式圖表已移至「下單確認」對話框內，此處保持簡潔
     pass
 else:
-    st.info("🔄 正在初始化市場數據，或請點擊左側「🚀 手動重新掃描數據」。")
+    st.info("🔄 正在初始化市場數據，或請點擊左側「🚀 掃描目前追蹤清單」。")
