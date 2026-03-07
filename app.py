@@ -1490,13 +1490,19 @@ if "results" in st.session_state:
                     if row['代碼'] in st.session_state.watchlist:
                         st.session_state.watchlist.remove(row['代碼'])
                         st.toast(f"🗑️ 已從清單移除 {row['代碼']}")
+                        # --- [優化] 即時從目前顯示的分析結果中移除該列，避免整頁重新掃描 ---
+                        if "results" in st.session_state:
+                            st.session_state.results = st.session_state.results[st.session_state.results['代碼'] != row['代碼']]
+                            # 更新快取，確保重新整理後依然保持現狀
+                            save_results_cache(st.session_state.results, is_big_scan=False, market=None)
                     else:
                         st.session_state.watchlist.append(row['代碼'])
                         st.toast(f"➕ 已加入追蹤清單 {row['代碼']}")
+                        # 如果是新加入，則還是需要重新掃描來獲取分析數據
+                        if "results" in st.session_state:
+                            del st.session_state.results
+                    
                     save_watchlist(st.session_state.watchlist)
-                    # 重新整理以反映清單變化
-                    if "results" in st.session_state:
-                        del st.session_state.results
                     st.rerun()
 
     # --- 分頁導航 ---
