@@ -728,7 +728,7 @@ with st.sidebar.container():
     st.markdown('<div class="desktop-only">', unsafe_allow_html=True)
     st.session_state.rows_per_page = st.sidebar.select_slider(
         "📄 每頁顯示數量",
-        options=[5, 10, 20, 50, 100],
+        options=[3, 5, 10, 20, 50, 100],
         value=st.session_state.rows_per_page
     )
     st.markdown('</div>', unsafe_allow_html=True)
