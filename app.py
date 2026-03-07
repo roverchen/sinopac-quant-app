@@ -136,19 +136,17 @@ st.markdown("""
                 flex-direction: column !important;
             }
 
-            /* --- 精準定位：僅讓緊跟在 pagination-marker 之後的分頁列保持水平 --- */
-            /* 使用 ~ (General Sibling) 確保能跨越 Streamlit 內部的包裝容器 */
-            .pagination-marker ~ div[data-testid="stHorizontalBlock"],
-            .pagination-marker ~ div div[data-testid="stHorizontalBlock"] {
+            /* --- 超精準定位：僅針對被 .pagination-container 包裹的區塊 --- */
+            .pagination-container div[data-testid="stHorizontalBlock"] {
                 flex-direction: row !important;
                 display: flex !important;
                 flex-wrap: nowrap !important;
                 align-items: center !important;
                 justify-content: center !important;
                 gap: 5px !important;
+                width: 100% !important;
             }
-            .pagination-marker ~ div[data-testid="stHorizontalBlock"] [data-testid="column"],
-            .pagination-marker ~ div div[data-testid="stHorizontalBlock"] [data-testid="column"] {
+            .pagination-container [data-testid="column"] {
                 width: auto !important;
                 flex: 1 1 auto !important;
                 min-width: 0px !important;
@@ -1779,8 +1777,7 @@ if "results" in st.session_state:
     # --- 分頁導航 ---
     if total_pages > 1:
         st.divider()
-        # 使用 marker 協助 CSS 定位 (雖已改為全域 row，保留 marker 作為樣式鉤子)
-        st.markdown('<div class="pagination-marker"></div>', unsafe_allow_html=True)
+        st.markdown('<div class="pagination-container">', unsafe_allow_html=True)
         # 簡化為 3 欄，且不限制寬度比例，讓內容決定寬度
         nav_cols = st.columns([1, 1, 1])
         is_mob = is_mobile_device()
@@ -1797,6 +1794,7 @@ if "results" in st.session_state:
         if nav_cols[2].button(next_label, disabled=(st.session_state.current_page == total_pages - 1), use_container_width=True):
             st.session_state.current_page += 1
             st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
     
     st.divider()
     
