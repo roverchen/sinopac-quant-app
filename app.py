@@ -824,7 +824,8 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
             for k in range(0, len(tickers), chunk_size):
                 chunk = tickers[k:k+chunk_size]
                 status_placeholder.info(f"📥 正在批次下載市場數據 ({min(k + chunk_size, len(tickers))}/{len(tickers)})...")
-                batch_data = yf.download(chunk, start=start_date, group_by='ticker', threads=True, progress=False, timeout=10)
+                # 強制使用 auto_adjust=True 以獲取穩定的技術指標得分
+                batch_data = yf.download(chunk, start=start_date, group_by='ticker', threads=True, progress=False, timeout=10, auto_adjust=True)
                 
                 # 處理下載回來的數據
                 for t in chunk:
@@ -877,102 +878,30 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
                 
                 # 1. 優先嘗試標準路徑 (台股：數字開頭)
                 if code and code[0].isdigit():
-                    for mk in ['TSE', 'OTC', 'OES']:
-                        if hasattr(api.Contracts.Stocks, mk):
-                            try:
-                                contract = getattr(api.Contracts.Stocks, mk)[code]
-                                if contract: break
-                            except: continue
+                    # 2. 獲取台股歷史數據 (統一改用 Yahoo Finance 模式)
+                    status_msg = "❌ 抓取失敗"
+                    for suffix in ['.TW', '.TWO']:
+                        try:
+                            t = yf.Ticker(code + suffix)
+                            # 使用 auto_adjust=True 確保指標一致性
+                            df_yf = t.history(start=start_date, interval="1d", auto_adjust=True)
+                            if not df_yf.empty:
+                                df = df_yf.reset_index()
+                                df.columns = [c.lower() for c in df.columns]
+                                if 'date' in df.columns:
+                                    df = df.rename(columns={'date': 'ts'})
+                                df['ts'] = pd.to_datetime(df['ts'])
+                                # 統一欄位
+                                df = df[['ts', 'open', 'high', 'low', 'close', 'volume']]
+                                source = f"🌐 Yahoo({suffix})"
+                                break
+                        except: continue
                     
-                    # 2. 如果標準路徑找不到，嘗試全域掃描 (防止節點名稱變更)
-                    if not contract:
-                        def find_in_obj(obj, depth=0):
-                            if depth > 3: return None # 限制搜尋深度以防卡死
-                            for a in dir(obj):
-                                if (a.startswith('_') or 
-                                    a.startswith('model_') or 
-                                    a in ['append', 'get', 'keys', 'post_init']): 
-                                    continue
-                                try:
-                                    sub = getattr(obj, a)
-                                    if hasattr(sub, '__getitem__'):
-                                        try:
-                                            res = sub[code]
-                                            if res: return res
-                                        except: pass
-                                    # 繼續往下一層找 (深度限制)
-                                    if hasattr(sub, '__dict__'):
-                                        res = find_in_obj(sub, depth + 1)
-                                        if res: return res
-                                except: pass
-                            return None
-                        contract = find_in_obj(api.Contracts.Stocks)
-
-                    if not contract:
-                        status_msg = "❌ 找不到合約"
-                        if not st.session_state.get('last_chance_tried', False):
-                            st.toast(f"🔍 正在刷新系統合約以尋找 {code}...", icon="🔄")
-                            try:
-                                # 加入超時限制 (如果有支援的話)
-                                api.fetch_contracts(contract_download=True)
-                                # 刷新後立刻再找一次
-                                contract = find_in_obj(api.Contracts.Stocks)
-                            except Exception as e:
-                                st.warning(f"合約同步發生異常: {e}")
-                            st.session_state.last_chance_tried = True
-                            
-                    if not contract:
+                    if df is None:
                         if not quiet_mode:
-                            st.warning(f"找不到代碼 {code} 的合約，請確認代碼是否正確。")
-                        print(f"[Warning] Contract not found for {code}")
+                            st.warning(f"無法取得台股 {code} 的 K 線資料")
                         data_list.append({
-                            "代碼": code, "名稱": stock_name, "最新價格": 0, "操作建議": status_msg,
-                            "一年位階": "-", "年線乖離": "-", "MA20乖離": "-", "MACD狀態": "-", "綜合評分": -1
-                        })
-                        continue
-                    
-                    # 取得台股 KBar
-                    try:
-                        kbars = api.kbars(contract, start=start_date)
-                        df = pd.DataFrame({**kbars})
-                        source = "☁️ 雲端"
-                        
-                        # --- [修正] 如果 Shioaji 回傳空資料 (常見於新股 7717)，嘗試切換到 yfinance 備援 ---
-                        if df.empty:
-                            print(f"[Fallback] Shioaji no data for {code}, trying yfinance...")
-                            for suffix in ['.TW', '.TWO']:
-                                try:
-                                    t = yf.Ticker(code + suffix)
-                                    df_yf = t.history(period="1y", interval="1d")
-                                    if not df_yf.empty:
-                                        df = df_yf.reset_index()
-                                        df.columns = [c.lower() for c in df.columns]
-                                        if 'date' in df.columns:
-                                            df = df.rename(columns={'date': 'ts'})
-                                        df['ts'] = pd.to_datetime(df['ts'])
-                                        df = df[['ts', 'open', 'high', 'low', 'close', 'volume']]
-                                        source = f"🌐 Yahoo({suffix})"
-                                        break
-                                except: continue
-                    except Exception as e:
-                        error_msg = str(e)
-                        # --- [Auto-Reconnect] 捕捉 Token 過期或連線中斷引發的 Timeout ---
-                        if "api/v1/data/kbars" in error_msg:
-                            if not st.session_state.get('auto_reconnected', False):
-                                st.warning("⚠️ API 連線逾時或 Token 已過期，系統正在自動重新連線...")
-                                st.session_state.auto_reconnected = True
-                                st.cache_resource.clear()
-                                time.sleep(1) # 讓舊連線稍微冷卻釋放
-                                st.rerun()
-                            else:
-                                if not quiet_mode:
-                                    st.error("❌ 自動重連後仍無法取得資料，請手動點擊「🔄 重連 API」。")
-                        
-                        if not quiet_mode:
-                            st.warning(f"無法取得台股 {code} 的 K 線資料: {e}")
-                        print(f"[Error] Failed to fetch kbars for {code}: {e}")
-                        data_list.append({
-                            "代碼": code, "名稱": stock_name, "最新價格": 0, "操作建議": "❌ 無法取得K線",
+                            "代碼": code, "名稱": stock_name, "最新價格": 0, "操作建議": "❌ 無法取得數據",
                             "一年位階": "-", "年線乖離": "-", "MA20乖離": "-", "MACD狀態": "-", "綜合評分": -1
                         })
                         continue
@@ -982,7 +911,8 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
                         # 確保代碼符號對 Yahoo 友善 (如 BRK.B -> BRK-B)
                         query_code = code.replace('.', '-')
                         ticker = yf.Ticker(query_code)
-                        df_yf = ticker.history(period="1y", interval="1d")
+                        # 使用 auto_adjust=True
+                        df_yf = ticker.history(start=start_date, interval="1d", auto_adjust=True)
                         if not df_yf.empty:
                             df = df_yf.reset_index()
                             df.columns = [c.lower() for c in df.columns]
@@ -993,8 +923,7 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
                             source = "🌐 Yahoo"
                         else:
                             if not quiet_mode:
-                                st.warning(f"Yahoo Finance 查無代碼 {code} 的歷史資料")
-                            print(f"[Warning] No yfinance data for {code}")
+                                st.warning(f"Yahoo Finance 查無美股代碼 {code} 的歷史資料")
                             data_list.append({
                                 "代碼": code, "名稱": stock_name, "最新價格": 0, "操作建議": "❌ 無美股數據",
                                 "一年位階": "-", "年線乖離": "-", "MA20乖離": "-", "MACD狀態": "-", "綜合評分": -1
