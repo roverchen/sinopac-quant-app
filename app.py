@@ -125,16 +125,8 @@ st.markdown("""
             .mobile-only { display: block !important; }
             .mobile-label { display: inline-block !important; color: #888; font-size: 0.8rem; margin-right: 6px; width: 70px; }
 
-            /* 強制股票卡片內部的欄位垂直堆疊 */
-            [data-testid="stVerticalBlockBorderWrapper"] [data-testid="column"] {
-                width: 100% !important;
-                flex: 1 1 100% !important;
-                min-width: 100% !important;
-                margin-bottom: 2px !important;
-            }
-            
-            /* 讓分頁按鈕維持水平排版 (更強力的選擇器與彈性排版) */
-            div.pagination-marker ~ div[data-testid="stHorizontalBlock"] {
+            /* --- 核心結構修正：預設所有水平欄位在手機版不堆疊 --- */
+            div[data-testid="stHorizontalBlock"] {
                 flex-direction: row !important;
                 display: flex !important;
                 flex-wrap: nowrap !important;
@@ -142,11 +134,20 @@ st.markdown("""
                 justify-content: center !important;
                 gap: 5px !important;
             }
-            div.pagination-marker ~ div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+            div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
                 width: auto !important;
                 flex: 1 1 auto !important;
                 min-width: 0px !important;
                 display: block !important;
+            }
+
+            /* --- 僅針對股票卡片內部的欄位進行垂直堆疊 --- */
+            [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] {
+                flex-direction: column !important;
+            }
+            [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="column"] {
+                width: 100% !important;
+                flex: 1 1 100% !important;
             }
 
             /* 恢復卡片樣式 */
@@ -1773,20 +1774,22 @@ if "results" in st.session_state:
     # --- 分頁導航 ---
     if total_pages > 1:
         st.divider()
-        # 使用 marker 協助 CSS 定位下一個 sibling (stHorizontalBlock)
+        # 使用 marker 協助 CSS 定位 (雖已改為全域 row，保留 marker 作為樣式鉤子)
         st.markdown('<div class="pagination-marker"></div>', unsafe_allow_html=True)
-        nav_cols = st.columns([2, 1, 1, 1, 2])
+        # 簡化為 3 欄，且不限制寬度比例，讓內容決定寬度
+        nav_cols = st.columns([1, 1, 1])
         is_mob = is_mobile_device()
         prev_label = "◀️" if is_mob else "◀️ 上一頁"
         next_label = "▶️" if is_mob else "下一頁 ▶️"
         
-        if nav_cols[1].button(prev_label, disabled=(st.session_state.current_page == 0)):
+        if nav_cols[0].button(prev_label, disabled=(st.session_state.current_page == 0), use_container_width=True):
             st.session_state.current_page -= 1
             st.rerun()
         
-        nav_cols[2].write(f"{st.session_state.current_page + 1}/{total_pages}")
+        # 使用 markdown 置中文字
+        nav_cols[1].markdown(f"<div style='text-align:center; padding-top:10px;'>{st.session_state.current_page + 1}/{total_pages}</div>", unsafe_allow_html=True)
         
-        if nav_cols[3].button(next_label, disabled=(st.session_state.current_page == total_pages - 1)):
+        if nav_cols[2].button(next_label, disabled=(st.session_state.current_page == total_pages - 1), use_container_width=True):
             st.session_state.current_page += 1
             st.rerun()
     
