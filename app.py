@@ -90,78 +90,19 @@ st.markdown("""
         .mobile-label { display: none; }
 
         @media (max-width: 768px) {
-            .desktop-only { display: none !important; }
-            .mobile-only { display: block !important; }
-            
-            /* 強制所有欄位垂直堆疊 */
+            /* 移除強制垂直堆疊，維持水平排版 */
             [data-testid="column"] {
-                width: 100% !important;
-                flex: 1 1 100% !important;
-                min-width: 100% !important;
-                margin-bottom: 2px !important;
+                margin-bottom: 0px !important;
             }
-        
-        /* 讓原生容器變成漂亮的卡片樣式 */
-        [data-testid="stVerticalBlockBorderWrapper"] {
-            border-left: 5px solid #00d4ff !important;
-            background-color: #1e1e1e !important;
-            border-radius: 12px !important;
-            margin-bottom: 12px !important;
-        }
+            
+            /* 縮小手機版字體大小以適應水平排版 */
+            .stButton button, p, span, b, div {
+                font-size: 0.85rem !important;
+            }
 
-        /* 顯示手機標籤 */
-        .mobile-label { 
-            display: inline-block; 
-            color: #888;
-            font-size: 0.8rem;
-            margin-right: 6px;
-            width: 70px;
+            /* 手機版隱藏某些較不重要的欄位以節省空間 (可由使用者決定) */
+            /* 暫時保持全部顯示以符合使用者「與 Desktop 一樣」的要求 */
         }
-
-        /* 優化操作建議顯示 */
-        code {
-            display: block !important;
-            width: 100% !important;
-            padding: 10px !important;
-            background: #2b2b2b !important;
-            border-radius: 4px !important;
-            margin: 5px 0 !important;
-        }
-
-        /* 讓按鈕在手機上更好點擊 */
-        .stButton button {
-            width: 100% !important;
-            height: 40px !important;
-            margin-top: 5px !important;
-        }
-
-        /* 列表中的股票按鈕優化 */
-        [data-testid="column"] .stButton button {
-            text-align: left !important;
-            border: none !important;
-            background: rgba(0, 212, 255, 0.1) !important;
-            color: #00d4ff !important;
-            font-size: 1rem !important;
-            padding: 8px !important;
-        }
-        /* 側邊欄按鈕按鈕樣式 (手機版) */
-        .stButton button {
-            width: 100% !important;
-            height: 40px !important;
-            margin-top: 5px !important;
-            background: rgba(0, 212, 255, 0.1) !important;
-            color: #00d4ff !important;
-            border: 1px solid rgba(0, 212, 255, 0.3) !important;
-        }
-        
-        /* 隱藏不想在手機顯示的元素 */
-        .desktop-only { display: none !important; }
-        .mobile-only { display: block !important; }
-        
-        [data-testid="stSidebarCollapsedControl"] {
-            z-index: 99999 !important;
-        }
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -1440,20 +1381,18 @@ if "results" in st.session_state:
 
     # --- 渲染邏輯：單一路徑原生容器 (最穩定方案) ---
     
-    # 1. 顯示表頭 (直接使用 HTML 以確保 .desktop-only 隱藏完全生效)
+    # 1. 顯示表頭 (移除 desktop-only，讓手機也能看到)
     st.markdown("""
-    <div class="desktop-only">
-        <div style="display: flex; border: 1px solid #444; border-radius: 8px; padding: 10px; background: #262730; margin-bottom: 10px; font-weight: bold; align-items: center;">
-            <div style="flex: 1.5;">股票</div>
-            <div style="flex: 0.8;">最新價</div>
-            <div style="flex: 0.8;">位階</div>
-            <div style="flex: 0.8;">年線乖離</div>
-            <div style="flex: 0.8;">MA20乖離</div>
-            <div style="flex: 0.8;">MA20價</div>
-            <div style="flex: 0.8;">ATR停損</div>
-            <div style="flex: 3.5;">操作建議</div>
-            <div style="flex: 0.5;"></div>
-        </div>
+    <div style="display: flex; border: 1px solid #444; border-radius: 8px; padding: 10px; background: #262730; margin-bottom: 10px; font-weight: bold; align-items: center; font-size: 0.85rem;">
+        <div style="flex: 1.5;">股票</div>
+        <div style="flex: 0.8;">最新價</div>
+        <div style="flex: 0.8;">位階</div>
+        <div style="flex: 0.8;">年線乖離</div>
+        <div style="flex: 0.8;">MA20乖離</div>
+        <div style="flex: 0.8;">MA20價</div>
+        <div style="flex: 0.8;">ATR停損</div>
+        <div style="flex: 3.5;">操作建議</div>
+        <div style="flex: 0.5;"></div>
     </div>
     """, unsafe_allow_html=True)
     
