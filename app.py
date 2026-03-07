@@ -1382,13 +1382,14 @@ if "results" in st.session_state:
     # --- 渲染邏輯：單一路徑原生容器 (最穩定方案) ---
     
     # 1. 顯示表頭 (僅在電腦版顯示)
-    st.markdown("""
+    header_label = "100日乖離" if st.session_state.get("scan_market") == "CRYPTO" else "年線乖離"
+    st.markdown(f"""
     <div class="desktop-only">
         <div style="display: flex; border: 1px solid #444; border-radius: 8px; padding: 10px; background: #262730; margin-bottom: 10px; font-weight: bold; align-items: center; font-size: 0.85rem;">
             <div style="flex: 1.5;">股票</div>
             <div style="flex: 0.8;">最新價</div>
             <div style="flex: 0.8;">位階</div>
-            <div style="flex: 0.8;">{"100日乖離" if st.session_state.scan_market == "CRYPTO" else "年線乖離"}</div>
+            <div style="flex: 0.8;">{header_label}</div>
             <div style="flex: 0.8;">MA20乖離</div>
             <div style="flex: 0.8;">MA20價</div>
             <div style="flex: 0.8;">ATR停損</div>
@@ -1494,12 +1495,13 @@ if "results" in st.session_state:
             
             # 欄位三～五：指標
             cols[2].markdown(f'<span class="mobile-label">一年位階:</span>{row["一年位階"]}', unsafe_allow_html=True)
-            cols[3].markdown(f'<span class="mobile-label">年線乖離:</span>{row["年線乖離"]}', unsafe_allow_html=True)
+            cols[3].markdown(f'<span class="mobile-label">{header_label}:</span>{row["年線乖離"]}', unsafe_allow_html=True)
             cols[4].markdown(f'<span class="mobile-label">MA20乖離:</span>{row["MA20乖離"]}', unsafe_allow_html=True)
             
             # 欄位六～七：新增的 MA20 價 與 ATR 停損
             ma20_val = f"{row.get('_ma20', 0):.1f}"
-            atr_stop = f"{row['最新價格'] - (2.5 * row.get('_atr', 0)):.1f}"
+            atr_mult = row.get('_atr_mult', 2.5)
+            atr_stop = f"{row['最新價格'] - (atr_mult * row.get('_atr', 0)):.1f}"
             cols[5].markdown(f'<span class="mobile-label">MA20價:</span>{ma20_val}', unsafe_allow_html=True)
             cols[6].markdown(f'<span class="mobile-label">ATR停損:</span>{atr_stop}', unsafe_allow_html=True)
             
