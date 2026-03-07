@@ -125,8 +125,21 @@ st.markdown("""
             .mobile-only { display: block !important; }
             .mobile-label { display: inline-block !important; color: #888; font-size: 0.8rem; margin-right: 6px; width: 70px; }
 
-            /* --- 核心結構修正：預設所有水平欄位在手機版不堆疊 --- */
-            div[data-testid="stHorizontalBlock"] {
+            /* --- 恢復股票卡片專屬的垂直堆疊 (防止被誤傷) --- */
+            [data-testid="stVerticalBlockBorderWrapper"] [data-testid="column"] {
+                width: 100% !important;
+                flex: 1 1 100% !important;
+                min-width: 100% !important;
+                margin-bottom: 2px !important;
+            }
+            [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] {
+                flex-direction: column !important;
+            }
+
+            /* --- 精準定位：僅讓緊跟在 pagination-marker 之後的分頁列保持水平 --- */
+            /* 使用 ~ (General Sibling) 確保能跨越 Streamlit 內部的包裝容器 */
+            .pagination-marker ~ div[data-testid="stHorizontalBlock"],
+            .pagination-marker ~ div div[data-testid="stHorizontalBlock"] {
                 flex-direction: row !important;
                 display: flex !important;
                 flex-wrap: nowrap !important;
@@ -134,20 +147,12 @@ st.markdown("""
                 justify-content: center !important;
                 gap: 5px !important;
             }
-            div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+            .pagination-marker ~ div[data-testid="stHorizontalBlock"] [data-testid="column"],
+            .pagination-marker ~ div div[data-testid="stHorizontalBlock"] [data-testid="column"] {
                 width: auto !important;
                 flex: 1 1 auto !important;
                 min-width: 0px !important;
                 display: block !important;
-            }
-
-            /* --- 僅針對股票卡片內部的欄位進行垂直堆疊 --- */
-            [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] {
-                flex-direction: column !important;
-            }
-            [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="column"] {
-                width: 100% !important;
-                flex: 1 1 100% !important;
             }
 
             /* 恢復卡片樣式 */
