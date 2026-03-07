@@ -405,10 +405,25 @@ def get_stock_name_map(_api):
         "0050": "元大台灣50", "0056": "元大高股息", "00878": "國泰永續高股息", "00919": "群益台灣精選高息"
     }
     
+    # --- 🪙 加密貨幣名稱補全 (針對 Yahoo Finance 代碼) ---
+    CRYPTO_FALLBACK = {
+        "BTC-USD": "比特幣", "ETH-USD": "以太幣", "SOL-USD": "Solana",
+        "BNB-USD": "幣安幣", "XRP-USD": "瑞波幣", "ADA-USD": "卡爾達諾",
+        "DOGE-USD": "狗狗幣", "AVAX-USD": "雪崩幣", "DOT-USD": "波卡幣",
+        "TRX-USD": "波場幣", "LINK-USD": "Chainlink", "MATIC-USD": "Polygon",
+        "NEAR-USD": "NEAR", "LTC-USD": "萊特幣", "BCH-USD": "比特現金",
+        "SHIB-USD": "柴犬幣", "DAI-USD": "DAI", "UNI-USD": "Uniswap",
+        "LEO-USD": "LEO", "APT-USD": "Aptos", "STX-USD": "Stacks",
+        "OKB-USD": "OKB", "ATOM-USD": "Cosmos", "IMX-USD": "Immutable",
+        "WHBAR-USD": "HBAR", "KAS-USD": "Kaspa", "ETC-USD": "以太經典",
+        "RENDER-USD": "Render", "FIL-USD": "Filecoin", "LDO-USD": "Lido"
+    }
+    
     code_to_name.update(US_STOCK_FALLBACK)
     if 'US_STOCK_ADDITIONAL' in locals():
         code_to_name.update(US_STOCK_ADDITIONAL)
     code_to_name.update(TW_STOCK_FALLBACK)
+    code_to_name.update(CRYPTO_FALLBACK)
 
     # 檢查是否為 MockApi (連線衝突模式)
     is_mock = hasattr(_api, 'list_accounts') and len(_api.list_accounts()) == 0 and not hasattr(_api, 'Contracts')
@@ -646,8 +661,8 @@ def get_mass_scan_list(api, market='TW'):
                 elif len(code) == 6 and code.startswith(('00', '01')):
                     filtered.append(code)
         elif market == 'US':
-            # 美股：字母開頭 (排除純數字台股及帶點號的特殊標的)
-            if code and code[0].isalpha() and not (code.endswith('.TW') or code.endswith('.TWO')):
+            # 美股：字母開頭且排除加密貨幣代碼
+            if code and code[0].isalpha() and not (code.endswith('.TW') or code.endswith('.TWO') or '-USD' in str(code)):
                 filtered.append(code)
     
     # 排序：台股按數字、美股按字母
@@ -1363,7 +1378,7 @@ if "results" in st.session_state:
     # --- 自定義列表 ---
     is_big = st.session_state.get("is_big_scan", False)
     scan_market = st.session_state.get("scan_market", "TW")
-    market_label = "台灣" if scan_market == "TW" else "美國"
+    market_label = {"TW": "台灣", "US": "美國", "CRYPTO": "加密貨幣"}.get(scan_market, "未知")
     list_title = f"🏆 {market_label}全市場大選股排行榜" if is_big else "📊 目前追蹤清單"
     st.markdown(f"### {list_title}")
     
@@ -1487,7 +1502,8 @@ if "results" in st.session_state:
             cols = st.columns([1.5, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 3.5, 0.5])
             
             # 欄位一：股票名稱 (轉為按鈕連結)
-            if cols[0].button(f"🛒 {row['代碼']} {row['名稱']}", key=f"t_{row['代碼']}_{index}", use_container_width=True):
+            icon = "🪙" if "-USD" in row['代碼'] else "🛒"
+            if cols[0].button(f"{icon} {row['代碼']} {row['名稱']}", key=f"t_{row['代碼']}_{index}", use_container_width=True):
                 show_order_dialog(row)
             
             # 欄位二：最新價 (手機版會標註標籤)
@@ -1500,9 +1516,11 @@ if "results" in st.session_state:
             cols[4].markdown(f'<span class="mobile-label">MA20乖離:</span>{row["MA20乖離"]}', unsafe_allow_html=True)
             
             # 欄位六～七：新增的 MA20 價 與 ATR 停損
-            ma20_val = f"{row.get('_ma20', 0):.1f}"
+            ma20_raw = row.get('_ma20', 0)
+            ma20_val = f"{ma20_raw:.1f}" if not pd.isna(ma20_raw) else "-"
             atr_mult = row.get('_atr_mult', 2.5)
-            atr_stop = f"{row['最新價格'] - (atr_mult * row.get('_atr', 0)):.1f}"
+            atr_stop_raw = row['最新價格'] - (atr_mult * row.get('_atr', 0))
+            atr_stop = f"{atr_stop_raw:.1f}" if not pd.isna(atr_stop_raw) else "-"
             cols[5].markdown(f'<span class="mobile-label">MA20價:</span>{ma20_val}', unsafe_allow_html=True)
             cols[6].markdown(f'<span class="mobile-label">ATR停損:</span>{atr_stop}', unsafe_allow_html=True)
             
