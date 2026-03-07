@@ -304,7 +304,120 @@ def get_stock_name_map(_api):
         "DAL": "Delta Air", "UAL": "United Air", "AAL": "American Air", "LUV": "Southwest",
         "CAT": "Caterpillar", "DE": "John Deere", "HON": "Honeywell", "GE": "GE Aerospace",
         "RTX": "Raytheon", "LMT": "Lockheed", "BA": "Boeing", "UPS": "UPS",
-        "FDX": "FedEx", "UNP": "Union Pacific", "CSX": "CSX", "NSC": "Norfolk Southern"
+        "FDX": "FedEx", "UNP": "Union Pacific", "CSX": "CSX", "NSC": "Norfolk Southern",
+        "A": "Agilent", "ACN": "Accenture", "ADBE": "Adobe", "ADI": "Analog Devices",
+        "ADP": "Automatic Data", "ADSK": "Autodesk", "AEE": "Ameren", "AEP": "Am Electric",
+        "AES": "AES Corp", "AFL": "Aflac", "AIG": "Am International", "AIZ": "Assurant",
+        "AJG": "Arthur J. Gallagher", "AKAM": "Akamai", "ALB": "Albemarle", "ALGN": "Align",
+        "ALL": "Allstate", "ALLE": "Allegion", "AMAT": "Applied Materials", "AMCR": "Amcor",
+        "AMD": "AMD", "AME": "AMETEK", "AMGN": "Amgen", "AMP": "Ameriprise",
+        "AMT": "American Tower", "AMZN": "Amazon", "ANET": "Arista", "ANSS": "ANSYS",
+        "AON": "Aon", "AOS": "A.O. Smith", "APD": "Air Products", "APH": "Amphenol",
+        "APTV": "Aptiv", "ARE": "Alexandria", "ATO": "Atmos Energy", "AVB": "AvalonBay",
+        "AVGO": "Broadcom", "AVY": "Avery Dennison", "AWK": "Am Water Works", "AXP": "Am Express",
+        "AZO": "AutoZone", "BA": "Boeing", "BAC": "BofA", "BALL": "Ball Corp",
+        "BAX": "Baxter", "BBWI": "Bath & Body Works", "BBY": "Best Buy", "BDX": "Becton Dickinson",
+        "BEN": "Franklin Resources", "BF.B": "Brown-Forman", "BIIB": "Biogen", "BIO": "Bio-Rad",
+        "BK": "BNY Mellon", "BKNG": "Booking", "BKR": "Baker Hughes", "BLK": "BlackRock",
+        "BMY": "Bristol-Myers", "BR": "Broadridge", "BRK.B": "Berkshire B", "BRO": "Brown & Brown",
+        "BSX": "Boston Scientific", "BWA": "BorgWarner", "BXP": "Boston Properties", "C": "Citigroup",
+        "CAG": "Conagra", "CAH": "Cardinal Health", "CARR": "Carrier", "CAT": "Caterpillar",
+        "CB": "Chubb", "CBOE": "Cboe", "CBRE": "CBRE Group", "CCI": "Crown Castle",
+        "CCL": "Carnival", "CDNS": "Cadence", "CDW": "CDW", "CE": "Celanese",
+        "CEG": "Constellation Energy", "CF": "CF Industries", "CFG": "Citizens Financial", "CHD": "Church & Dwight",
+        "CHRW": "C.H. Robinson", "CHTR": "Charter", "CI": "Cigna", "CINF": "Cincinnati Financial",
+        "CL": "Colgate", "CLX": "Clorox", "CMA": "Comerica", "CMCSA": "Comcast",
+        "CME": "CME Group", "CMG": "Chipotle", "CMI": "Cummins", "CMS": "CMS Energy",
+        "CNC": "Centene", "CNP": "CenterPoint", "COF": "Capital One", "COO": "CooperCos",
+        "COP": "ConocoPhillips", "COST": "Costco", "CPB": "Campbell Soup", "CPRT": "Copart",
+        "CPT": "Camden Property", "CRL": "Charles River", "CRM": "Salesforce", "CSGP": "CoStar",
+        "CSX": "CSX", "CTAS": "Cintas", "CTLT": "Catalent", "CTRA": "Coterra",
+        "CTSH": "Cognizant", "CTVA": "Corteva", "CVS": "CVS Health", "CVX": "Chevron",
+        "CZR": "Caesars", "D": "Dominion Energy", "DAL": "Delta", "DD": "DuPont",
+        "DE": "John Deere", "DFS": "Discover", "DG": "Dollar General", "DGX": "Quest",
+        "DHI": "D.R. Horton", "DHR": "Danaher", "DIS": "Disney", "DLR": "Digital Realty",
+        "DLTR": "Dollar Tree", "DOV": "Dover", "DOW": "Dow", "DPZ": "Domino's",
+        "DRI": "Darden", "DTE": "DTE Energy", "DUK": "Duke Energy", "DVA": "DaVita",
+        "DVN": "Devon", "DXC": "DXC Technology", "DXCM": "Dexcom", "EA": "Electronic Arts",
+        "EBAY": "eBay", "ECL": "Ecolab", "ED": "Consol Edison", "EFX": "Equifax",
+        "EIX": "Edison International", "EL": "Estee Lauder", "ELV": "Elevance", "EMN": "Eastman",
+        "EMR": "Emerson", "ENPH": "Enphase", "EOG": "EOG Resources", "EPAM": "EPAM",
+        "EQIX": "Equinix", "EQT": "EQT", "ES": "Eversource", "ESS": "Essex Property",
+        "ETN": "Eaton", "ETR": "Entergy", "ETSY": "Etsy", "EVRG": "Evergy",
+        "EW": "Edwards Lifesciences", "EXC": "Exelon", "EXPD": "Expeditors", "EXPE": "Expedia",
+        "EXR": "Extra Space", "F": "Ford", "FANG": "Diamondback", "FAST": "Fastenal",
+        "FCX": "Freeport-McMoRan", "FDS": "FactSet", "FDX": "FedEx", "FE": "FirstEnergy",
+        "FFIV": "F5", "FIS": "FIS", "FISV": "Fiserv", "FITB": "Fifth Third",
+        "FLT": "Fleetcor", "FMC": "FMC", "FOX": "Fox Corp B", "FOXA": "Fox Corp A",
+        "FRT": "Federal Realty", "FSLR": "First Solar", "FTNT": "Fortinet", "FTV": "Fortive",
+        "GD": "General Dynamics", "GE": "GE", "GEHC": "GE HealthCare", "GEN": "Gen Digital",
+        "GILD": "Gilead", "GIS": "General Mills", "GL": "Globe Life", "GLW": "Corning",
+        "GM": "GM", "GNRC": "Generac", "GOOG": "Alphabet C", "GOOGL": "Alphabet A",
+        "GPC": "Genuine Parts", "GPN": "Global Payments", "GRMN": "Garmin", "GS": "Goldman Sachs",
+        "GWW": "Grainger", "HAL": "Halliburton", "HAS": "Hasbro", "HBAN": "Huntington",
+        "HCA": "HCA Healthcare", "HD": "Home Depot", "HES": "Hess", "HIG": "Hartford",
+        "HII": "Huntington Ingalls", "HLT": "Hilton", "HOLX": "Hologic", "HON": "Honeywell",
+        "HPE": "HP Ent", "HPQ": "HP Inc", "HRL": "Hormel", "HSIC": "Henry Schein",
+        "HST": "Host Hotels", "HSY": "Hershey", "HUM": "Humana", "HWM": "Howmet Aerospace",
+        "IBM": "IBM", "ICE": "ICE", "IDXX": "IDEXX", "IEX": "IDEX", "IFF": "IFF",
+        "ILMN": "Illumina", "INCY": "Incyte", "INTC": "Intel", "INTU": "Intuit",
+        "IP": "Intl Paper", "IPG": "Interpublic Group", "IQV": "IQVIA", "IRM": "Iron Mountain",
+        "ISRG": "Intuitive", "IT": "Gartner", "ITW": "Illinois Tool", "IVZ": "Invesco",
+        "J": "Jacobs", "JBHT": "J.B. Hunt", "JCI": "Johnson Controls", "JKHY": "Jack Henry",
+        "JNJ": "J&J", "JNPR": "Juniper", "JPM": "JPMorgan", "K": "Kellogg",
+        "KDP": "Keurig Dr Pepper", "KEY": "KeyCorp", "KEYS": "Keysight", "KHC": "Kraft Heinz",
+        "KIM": "Kimco", "KMB": "Kimberly-Clark", "KMI": "Kinder Morgan", "KMX": "CarMax",
+        "KO": "Coca-Cola", "KR": "Kroger", "L": "Loews", "LRCX": "Lam Research",
+        "LULU": "Lululemon", "LUV": "Southwest", "LYB": "LyondellBasell", "MA": "Mastercard",
+        "MAR": "Marriott", "MAS": "Masco", "MCD": "McDonald's", "MCHP": "Microchip",
+        "MCK": "McKesson", "MCO": "Moody's", "MDLZ": "Mondelez", "MDT": "Medtronic",
+        "MET": "MetLife", "META": "Meta", "MGM": "MGM Resorts", "MHK": "Mohawk",
+        "MKC": "McCormick", "MKTX": "MarketAxess", "MLM": "Martin Marietta", "MMC": "Marsh McLennan",
+        "MMM": "3M", "MNST": "Monster", "MO": "Altria", "MOH": "Molina",
+        "MOS": "Mosaic", "MPC": "Marathon Petroleum", "MPWR": "Monolithic Power", "MRK": "Merck",
+        "MRNA": "Moderna", "MRO": "Marathon Oil", "MS": "Morgan Stanley", "MSCI": "MSCI",
+        "MSFT": "Microsoft", "MSI": "Motorola", "MTB": "M&T Bank", "MTCH": "Match Group",
+        "MTD": "Mettler Toledo", "MU": "Micron", "NCLH": "Norwegian Cruise", "NDAQ": "Nasdaq",
+        "NDSN": "Nordson", "NEE": "NextEra", "NEM": "Newmont", "NFLX": "Netflix",
+        "NI": "NiSource", "NKE": "Nike", "NOC": "Northrop Grumman", "NOW": "ServiceNow",
+        "NRG": "NRG Energy", "NSC": "Norfolk Southern", "NTAP": "NetApp", "NTRS": "Northern Trust",
+        "NUE": "Nucor", "NVDA": "NVIDIA", "NVR": "NVR", "NWL": "Newell Brands",
+        "NWS": "News Corp B", "NWSA": "News Corp A", "O": "Realty Income", "ODFL": "Old Dominion",
+        "OKE": "ONEOK", "OMC": "Omnicom", "ON": "ON Semiconductor", "ORCL": "Oracle",
+        "ORLY": "O'Reilly", "OTIS": "Otis", "OXY": "Occidental", "PANW": "Palo Alto",
+        "PARA": "Paramount", "PAYC": "Paycom", "PAYX": "Paychex", "PCAR": "PACCAR",
+        "PCG": "PG&E", "PEG": "Public Service", "PEP": "PepsiCo", "PFE": "Pfizer",
+        "PFG": "Principal Financial", "PG": "P&G", "PGR": "Progressive", "PH": "Parker-Hannifin",
+        "PHM": "PulteGroup", "PKG": "Packaging Corp", "PKI": "PerkinElmer", "PLD": "Prologis",
+        "PM": "Philip Morris", "PNC": "PNC", "PNR": "Pentair", "PNW": "Pinnacle West",
+        "POOL": "Pool Corp", "PPG": "PPG", "PPL": "PPL Corp", "PRU": "Prudential",
+        "PSA": "Public Storage", "PSX": "Phillips 66", "PTC": "PTC", "PYPL": "PayPal",
+        "QCOM": "Qualcomm", "QRVO": "Qorvo", "RCL": "Royal Caribbean", "RE": "Everest Re",
+        "REG": "Regency Centers", "REGN": "Regeneron", "RF": "Regions Financial", "RHI": "Robert Half",
+        "RJF": "Raymond James", "RL": "Ralph Lauren", "RMD": "ResMed", "ROK": "Rockwell",
+        "ROL": "Rollins", "ROP": "Roper", "ROST": "Ross Stores", "RSG": "Republic Services",
+        "RTX": "Raytheon", "RVTY": "Revvity", "SBAC": "SBA Comm", "SBUX": "Starbucks",
+        "SCHW": "Schwab", "SEDG": "SolarEdge", "SEE": "Sealed Air", "SHW": "Sherwin-Williams",
+        "SJM": "J.M. Smucker", "SLB": "Schlumberger", "SNA": "Snap-on", "SNPS": "Synopsys",
+        "SO": "Southern Co", "SPG": "Simon Property", "SPGI": "S&P Global", "SRE": "Sempra",
+        "STE": "STERIS", "STT": "State Street", "STX": "Seagate", "STZ": "Constellation Brands",
+        "SWK": "Stanley Black & Decker", "SWKS": "Skyworks", "SYF": "Synchrony", "SYK": "Stryker",
+        "SYY": "Sysco", "T": "AT&T", "TAP": "Molson Coors", "TDG": "TransDigm",
+        "TDY": "Teledyne", "TECH": "Bio-Techne", "TEL": "TE Connectivity", "TER": "Teradyne",
+        "TFC": "Truist", "TFX": "Teleflex", "TGT": "Target", "TJX": "TJX Companies",
+        "TMO": "Thermo Fisher", "TMUS": "T-Mobile", "TPR": "Tapestry", "TRMB": "Trimble",
+        "TROW": "T. Rowe Price", "TRV": "Travelers", "TSCO": "Tractor Supply", "TSLA": "Tesla",
+        "TSN": "Tyson Foods", "TT": "Trane", "TTWO": "Take-Two", "TXN": "Texas Instruments",
+        "TXT": "Textron", "TYL": "Tyler Technologies", "UAL": "United Airlines", "UDR": "UDR",
+        "UHS": "Universal Health", "ULTA": "Ulta Beauty", "UNH": "UnitedHealth", "UNP": "Union Pacific",
+        "UPS": "UPS", "URI": "United Rentals", "USB": "U.S. Bancorp", "V": "Visa",
+        "VFC": "VF Corp", "VICI": "VICI Properties", "VLO": "Valero", "VMC": "Vulcan",
+        "VNO": "Vornado", "VRSK": "Verisk", "VRSN": "Verisign", "VRTX": "Vertex",
+        "VTR": "Ventas", "VTRS": "Viatris", "VZ": "Verizon", "WAB": "Wabtec",
+        "WAT": "Waters", "WBA": "Walgreens", "WBD": "Warner Bros", "WDC": "Western Digital",
+        "WEC": "WEC Energy", "WELL": "Welltower", "WFC": "Wells Fargo", "WHR": "Whirlpool",
+        "WM": "Waste Management", "WMB": "Williams Cos", "WMT": "Walmart", "WRB": "W.R. Berkley",
+        "WRK": "WestRock", "WST": "West Pharmaceutical", "WTW": "Willis Towers Watson", "WY": "Weyerhaeuser"
     }
     
     # --- 🇹🇼 台股重點備用清單 (防止 API 同步延遲導致的名稱缺失) ---
@@ -323,39 +436,52 @@ def get_stock_name_map(_api):
     # 檢查是否為 MockApi (連線衝突模式)
     is_mock = hasattr(_api, 'list_accounts') and len(_api.list_accounts()) == 0 and not hasattr(_api, 'Contracts')
 
+    # --- 強化合約同步 (關鍵修復：解決 82 檔問題) ---
+    if not is_mock and hasattr(_api, "Contracts") and hasattr(_api.Contracts, "Stocks"):
+        # 如果當前合約庫太小，強制啟動深度下載
+        if len(code_to_name) < 1000:
+            with st.spinner("📦 正在深度同步市場數據 (預計 15 秒)..."):
+                try:
+                    _api.fetch_contracts(contract_download=True)
+                except:
+                    _api.fetch_contracts()
+    
     if not is_mock and hasattr(_api, "Contracts") and hasattr(_api.Contracts, "Stocks"):
         stocks = _api.Contracts.Stocks
+        
         def recursive_scan(item, depth=0):
-            if depth > 6: return # 增加深度以確保抓到標的
-            # 優先處理已知為合約集合的節點
+            if depth > 5: return # 防止過深
+            
+            # [優先級 1] 合約直接映射節點
             if hasattr(item, '_code2contract'):
-                for c, contract in item._code2contract.items():
+                c2c = item._code2contract
+                for c, contract in c2c.items():
                     c_code = str(c).upper()
                     if c_code not in code_to_name:
                         code_to_name[c_code] = getattr(contract, 'name', 'Unknown')
                 return
 
-            # 如果不是，則繼續往下遞迴
+            # [優先級 2] 屬性遞迴
             for attr in dir(item):
                 if attr.startswith('_') or attr in ['append', 'get', 'keys', 'post_init']: continue
                 try:
                     val = getattr(item, attr)
-                    if val and (hasattr(val, '_code2contract') or hasattr(val, '__dict__') or hasattr(val, 'get')):
+                    # 只有具備子節點特徵的才進去
+                    if val and (hasattr(val, '_code2contract') or hasattr(val, '__dict__')):
                         recursive_scan(val, depth + 1)
                 except: continue
 
-            # 針對常見市場節點進行優先顯性掃描
-            for mk in ['TSE', 'OTC', 'OES', 'US', 'USA']:
-                if hasattr(stocks, mk):
-                    recursive_scan(getattr(stocks, mk))
-            
-            # 剩餘的進行全域遞迴 (捕捉其他特殊節點)
-            recursive_scan(stocks)
+        # 針對常見市場節點進行優先顯性掃描
+        for mk in ['TSE', 'OTC', 'OES', 'US', 'USA']:
+            if hasattr(stocks, mk):
+                recursive_scan(getattr(stocks, mk))
         
-        # 成功抓取後，存入磁碟快取供離線使用 (僅在總量顯著增加時更新)
+        # 全域掃描 (保片：捕捉其他特殊標的)
+        recursive_scan(stocks)
+        
+        # 成功抓取後，存入磁碟快取
         if len(code_to_name) > 1000:
             try:
-                # 如果目前的 US 列表比快取新，則強制更新
                 with open(NAME_MAP_CACHE_FILE, "wb") as f:
                     pickle.dump(code_to_name, f)
             except: pass
