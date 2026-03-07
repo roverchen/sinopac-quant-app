@@ -476,9 +476,6 @@ def get_stock_name_map(_api):
             if hasattr(stocks, mk):
                 recursive_scan(getattr(stocks, mk))
         
-        # 全域掃描 (保片：捕捉其他特殊標的)
-        recursive_scan(stocks)
-        
         # 成功抓取後，存入磁碟快取
         if len(code_to_name) > 1000:
             try:
@@ -647,12 +644,14 @@ def get_mass_scan_list(api, market='TW'):
     """
     all_map = get_stock_name_map(api)
     filtered = []
-    for code in all_map.keys():
+    for code, name in all_map.items():
         if market == 'TW':
             # 台股規則優化：
-            # 1. 排除長度大於 6 的 (通常是權證 03xxP, 07xxQ 等)
-            # 2. 只有 4 碼數字 (普通股) 或 5-6 碼 (ETF，如 0050, 00631L) 才納入
+            # 1. 只有 4 碼數字 (普通股) 或 5-6 碼 (ETF，如 0050) 才納入
+            # 2. 排除權證 (名稱含 購/售/牛/熊)
             if code and code[0].isdigit():
+                if any(k in name for k in ['購', '售', '牛', '熊']):
+                    continue
                 if len(code) == 4: # 普通股
                     filtered.append(code)
                 elif 5 <= len(code) <= 6: # ETF 與特殊類標的
