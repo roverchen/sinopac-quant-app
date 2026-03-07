@@ -271,7 +271,7 @@ def get_stock_name_map(_api):
         "SNOW": "Snowflake", "MSTR": "MicroStrategy", "COIN": "Coinbase", "PLTR": "Palantir",
         "ABNB": "Airbnb", "LRCX": "Lam Research", "MU": "Micron", "ADI": "Analog Devices",
         "KLAC": "KLA Corp", "MELI": "MercadoLibre", "REGN": "Regeneron", "VRTX": "Vertex",
-        "ADSK": "Autodesk", "NXPI": "NXP"}, 
+        "ADSK": "Autodesk", "NXPI": "NXP"}
     # 追加更多常用美股
     US_STOCK_ADDITIONAL = {
         "PYPL": "PayPal", "SQ": "Block", "U": "Unity", "SE": "Sea Ltd",
