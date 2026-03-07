@@ -267,7 +267,44 @@ def get_stock_name_map(_api):
         "SQ": "Square", "SHOP": "Shopify", "SNOW": "Snowflake",
         "MSTR": "MicroStrategy", "MARA": "Marathon", "RIOT": "Riot",
         "MU": "Micron", "ARM": "ARM", "ASML": "ASML", "TSM": "TSMC ADR",
-        "PANW": "Palo Alto", "FTNT": "Fortinet", "CRWD": "CrowdStrike", "DDOG": "Datadog"
+        "PANW": "Palo Alto", "FTNT": "Fortinet", "CRWD": "CrowdStrike", "DDOG": "Datadog",
+        "SNOW": "Snowflake", "MSTR": "MicroStrategy", "COIN": "Coinbase", "PLTR": "Palantir",
+        "ABNB": "Airbnb", "LRCX": "Lam Research", "MU": "Micron", "ADI": "Analog Devices",
+        "KLAC": "KLA Corp", "MELI": "MercadoLibre", "REGN": "Regeneron", "VRTX": "Vertex",
+        "ADSK": "Autodesk", "NXPI": "NXP"}, 
+    # 追加更多常用美股
+    US_STOCK_ADDITIONAL = {
+        "PYPL": "PayPal", "SQ": "Block", "U": "Unity", "SE": "Sea Ltd",
+        "DOCU": "DocuSign", "RBLX": "Roblox", "SNAP": "Snapchat", "PINS": "Pinterest",
+        "TWLO": "Twilio", "OKTA": "Okta", "ZS": "Zscaler", "NET": "Cloudflare",
+        "MRVL": "Marvell", "WDAY": "Workday", "TEAM": "Atlassian", "MDB": "MongoDB",
+        "FSLY": "Fastly", "NET": "Cloudflare", "SHOP": "Shopify", "SPOT": "Spotify",
+        "AFRM": "Affirm", "SOFI": "SoFi", "HOOD": "Robinhood", "COIN": "Coinbase",
+        "DKNG": "DraftKings", "PATH": "UiPath", "AI": "C3.ai", "SMCI": "Super Micro",
+        "ARM": "Arm Holdings", "LLY": "Eli Lilly", "V": "Visa", "MA": "Mastercard",
+        "JPM": "JPMorgan", "BAC": "Bank of America", "WFC": "Wells Fargo", "C": "Citigroup",
+        "GS": "Goldman Sachs", "MS": "Morgan Stanley", "BRK.B": "Berkshire B", "BLK": "BlackRock",
+        "XOM": "Exxon", "CVX": "Chevron", "SHEL": "Shell", "TTE": "TotalEnergies",
+        "BP": "BP", "COP": "ConocoPhillips", "SLB": "Schlumberger", "HAL": "Halliburton",
+        "NKE": "Nike", "SBUX": "Starbucks", "MCD": "McDonald's", "CMG": "Chipotle",
+        "TJX": "TJX Companies", "LULU": "Lululemon", "TGT": "Target", "LOW": "Lowe's",
+        "HD": "Home Depot", "COST": "Costco", "WMT": "Walmart", "PG": "P&G",
+        "KO": "Coca-Cola", "PEP": "PepsiCo", "MDLZ": "Mondelez", "PM": "Philip Morris",
+        "MO": "Altria", "CL": "Colgate", "KMB": "Kimberly-Clark", "EL": "Estee Lauder",
+        "PFE": "Pfizer", "MRK": "Merck", "JNJ": "Johnson & Johnson", "ABT": "Abbott",
+        "MDT": "Medtronic", "TMO": "Thermo Fisher", "DHR": "Danaher", "ISRG": "Intuitive",
+        "AMT": "American Tower", "PLD": "Prologis", "CCI": "Crown Castle", "PSA": "Public Storage",
+        "EQIX": "Equinix", "DLR": "Digital Realty", "SPG": "Simon Property", "WY": "Weyerhaeuser",
+        "T": "AT&T", "VZ": "Verizon", "TMUS": "T-Mobile", "META": "Meta", "GOOGL": "Alphabet",
+        "NFLX": "Netflix", "DIS": "Disney", "CMCSA": "Comcast", "CHTR": "Charter",
+        "WBD": "Warner Bros", "PARA": "Paramount", "LYV": "Live Nation", "TTWO": "Take-Two",
+        "EA": "Electronic Arts", "ZM": "Zoom", "DASH": "DoorDash", "UBER": "Uber",
+        "LYFT": "Lyft", "ABNB": "Airbnb", "BKNG": "Booking", "EXPE": "Expedia",
+        "TSLA": "Tesla", "F": "Ford", "GM": "GM", "RIVN": "Rivian", "LCID": "Lucid",
+        "DAL": "Delta Air", "UAL": "United Air", "AAL": "American Air", "LUV": "Southwest",
+        "CAT": "Caterpillar", "DE": "John Deere", "HON": "Honeywell", "GE": "GE Aerospace",
+        "RTX": "Raytheon", "LMT": "Lockheed", "BA": "Boeing", "UPS": "UPS",
+        "FDX": "FedEx", "UNP": "Union Pacific", "CSX": "CSX", "NSC": "Norfolk Southern"
     }
     
     # --- 🇹🇼 台股重點備用清單 (防止 API 同步延遲導致的名稱缺失) ---
@@ -279,6 +316,8 @@ def get_stock_name_map(_api):
     }
     
     code_to_name.update(US_STOCK_FALLBACK)
+    if 'US_STOCK_ADDITIONAL' in locals():
+        code_to_name.update(US_STOCK_ADDITIONAL)
     code_to_name.update(TW_STOCK_FALLBACK)
 
     # 檢查是否為 MockApi (連線衝突模式)
@@ -305,13 +344,13 @@ def get_stock_name_map(_api):
                         recursive_scan(val, depth + 1)
                 except: continue
 
-        # 針對台股常見市場節點進行優先顯性掃描
-        for mk in ['TSE', 'OTC', 'OES']:
-            if hasattr(stocks, mk):
-                recursive_scan(getattr(stocks, mk))
-        
-        # 剩餘的進行全域遞迴 (捕捉美股或其他特殊節點)
-        recursive_scan(stocks)
+            # 針對常見市場節點進行優先顯性掃描
+            for mk in ['TSE', 'OTC', 'OES', 'US', 'USA']:
+                if hasattr(stocks, mk):
+                    recursive_scan(getattr(stocks, mk))
+            
+            # 剩餘的進行全域遞迴 (捕捉其他特殊節點)
+            recursive_scan(stocks)
         
         # 成功抓取後，存入磁碟快取供離線使用 (僅在總量顯著增加時更新)
         if len(code_to_name) > 1000:
@@ -1236,7 +1275,9 @@ if "results" in st.session_state:
 
     # --- 自定義列表 ---
     is_big = st.session_state.get("is_big_scan", False)
-    list_title = "🏆 全市場大選股排行榜" if is_big else "📊 目前追蹤清單"
+    scan_market = st.session_state.get("scan_market", "TW")
+    market_label = "台灣" if scan_market == "TW" else "美國"
+    list_title = f"🏆 {market_label}全市場大選股排行榜" if is_big else "📊 目前追蹤清單"
     st.markdown(f"### {list_title}")
     
     # 分頁計算
