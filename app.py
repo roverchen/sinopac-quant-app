@@ -1526,18 +1526,32 @@ if "results" in st.session_state:
             cols[7].markdown(f"**`{row['操作建議']}`**")
             
             # 欄位九：動作按鈕 (唯一 Key)
-            action_icon = "🗑️" if row['代碼'] in st.session_state.watchlist else "➕"
+            is_big_scan = st.session_state.get("is_big_scan", False)
+            if is_big_scan:
+                action_icon = "➕"
+            else:
+                action_icon = "🗑️" if row['代碼'] in st.session_state.watchlist else "➕"
+
             if cols[8].button(action_icon, key=f"btn_{row['代碼']}_{index}", use_container_width=True):
-                if row['代碼'] in st.session_state.watchlist:
-                    st.session_state.watchlist.remove(row['代碼'])
-                    st.toast(f"已從清單移除 {row['代碼']}")
+                if is_big_scan:
+                    if row['代碼'] not in st.session_state.watchlist:
+                        st.session_state.watchlist.append(row['代碼'])
+                        st.toast(f"✅ 已加入追蹤清單 {row['代碼']} {row['名稱']}")
+                        save_watchlist(st.session_state.watchlist)
+                    else:
+                        st.toast(f"ℹ️ {row['代碼']} 已在清單中")
                 else:
-                    st.session_state.watchlist.append(row['代碼'])
-                    st.toast(f"已加入追蹤清單 {row['代碼']}")
-                save_watchlist(st.session_state.watchlist)
-                if not st.session_state.get("is_big_scan") and "results" in st.session_state:
-                    del st.session_state.results
-                st.rerun()
+                    if row['代碼'] in st.session_state.watchlist:
+                        st.session_state.watchlist.remove(row['代碼'])
+                        st.toast(f"🗑️ 已從清單移除 {row['代碼']}")
+                    else:
+                        st.session_state.watchlist.append(row['代碼'])
+                        st.toast(f"➕ 已加入追蹤清單 {row['代碼']}")
+                    save_watchlist(st.session_state.watchlist)
+                    # 重新整理以反映清單變化
+                    if "results" in st.session_state:
+                        del st.session_state.results
+                    st.rerun()
 
     # --- 分頁導航 ---
     if total_pages > 1:
