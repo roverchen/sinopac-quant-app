@@ -1115,7 +1115,7 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
                 # 隱藏欄位：供即時重新計分使用 (不顯示在 UI)
                 "_v_score": value_score,
                 "_p_score": pullback_score,
-                "_is_rev_ok": is_rev_ok,
+                "_is_rev_ok": bool(is_rev_ok),
                 "_v_buy": value_buy_zone,
                 "_g_buy": growth_buy_zone,
                 "_ma_base": defense_base,
@@ -1163,8 +1163,8 @@ def rescore_results(results_df, defense_weight):
     # 使用向量運算重新計算綜合評分
     df['綜合評分'] = (defense_weight * df['_v_score']) + ((1 - defense_weight) * df['_p_score'])
     
-    # 營收衰退懲罰
-    df.loc[~df['_is_rev_ok'], '綜合評分'] *= 0.1
+    # 營收衰退懲罰 (確保使用比較運算而非位元反轉，以防 pandas 將布林自動轉為浮點數)
+    df.loc[df['_is_rev_ok'] == False, '綜合評分'] *= 0.1
     
     # 重新產生操作建議文字
     def build_action(row):
