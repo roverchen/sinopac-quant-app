@@ -709,8 +709,10 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
                 ticker_to_code[t1] = c
                 ticker_to_code[t2] = c
             else:
-                tickers.append(c)
-                ticker_to_code[c] = c
+                # 美股處理：將 BRK.B 轉為 BRK-B 以利 Yahoo 識別
+                t = c.replace('.', '-')
+                tickers.append(t)
+                ticker_to_code[t] = c
         
         # 2. 執行批次下載 (分段執行以提高成功率)
         try:
@@ -874,7 +876,9 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
                 else:
                     # 3. 處理美股 (透過 yfinance 補完計畫)
                     try:
-                        ticker = yf.Ticker(code)
+                        # 確保代碼符號對 Yahoo 友善 (如 BRK.B -> BRK-B)
+                        query_code = code.replace('.', '-')
+                        ticker = yf.Ticker(query_code)
                         df_yf = ticker.history(period="1y", interval="1d")
                         if not df_yf.empty:
                             df = df_yf.reset_index()
