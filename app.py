@@ -850,7 +850,8 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
         print(f"[Analysis] {progress_info}")
         try:
             stock_name = code_to_name.get(code, "未知")
-            cache_file = os.path.join(CACHE_DIR, f"{code}.csv")
+            # --- [NEW] 使用 _y 後綴來強制區隔與舊版(原始價)的緩存資料 ---
+            cache_file = os.path.join(CACHE_DIR, f"{code}_y.csv")
             df = None
             source = "☁️ 雲端"
 
@@ -1436,7 +1437,7 @@ if "results" in st.session_state:
         # --- [NEW] 在對話框內顯示 K 線與 MACD 指標 ---
         st.divider()
         st.markdown(f"#### 📊 {row['代碼']} {row['名稱']} 技術圖表")
-        cache_file = os.path.join(CACHE_DIR, f"{row['代碼']}.csv")
+        cache_file = os.path.join(CACHE_DIR, f"{row['代碼']}_y.csv")
         if os.path.exists(cache_file):
             df_selected = pd.read_csv(cache_file)
             df_selected['ts'] = pd.to_datetime(df_selected['ts'])
