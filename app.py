@@ -650,14 +650,14 @@ def get_mass_scan_list(api, market='TW'):
     """
     if market == 'CRYPTO':
         # 加密貨幣：自定義主流幣清單 (Yahoo Finance 格式)
-        return [
-            "BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "XRP-USD", 
-            "ADA-USD", "DOGE-USD", "AVAX-USD", "DOT-USD", "TRX-USD",
-            "LINK-USD", "MATIC-USD", "NEAR-USD", "LTC-USD", "BCH-USD",
-            "SHIB-USD", "DAI-USD", "UNI-USD", "LEO-USD", "APT-USD",
-            "STX-USD", "OKB-USD", "ATOM-USD", "IMX-USD", "WHBAR-USD",
-            "KAS-USD", "ETC-USD", "RENDER-USD", "FIL-USD", "LDO-USD"
-        ]
+            return [
+                "BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "XRP-USD", 
+                "ADA-USD", "DOGE-USD", "AVAX-USD", "DOT-USD", "TRX-USD",
+                "LINK-USD", "MATIC-USD", "NEAR-USD", "LTC-USD", "BCH-USD",
+                "SHIB-USD", "DAI-USD", "UNI-USD", "LEO-USD", "APT-USD",
+                "STX-USD", "OKB-USD", "ATOM-USD", "IMX-USD", "HBAR-USD",
+                "KAS-USD", "ETC-USD", "RENDER-USD", "FIL-USD", "LDO-USD"
+            ]
 
     all_map = get_stock_name_map(api)
     filtered = []
@@ -911,6 +911,9 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
             st.error(f"批次下載發生異常: {e}")
 
     for i, code in enumerate(watchlist):
+        # 0. 代碼正規化 (確保大小寫一致，利於名稱比對與 API 調用)
+        code = code.upper()
+        
         progress_info = f"🕒 正在分析 ({i+1}/{len(watchlist)}): {code} ..."
         status_placeholder.info(progress_info)
         # 同步輸出到終端機供診斷
@@ -979,31 +982,31 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
                         # 確保代碼符號對 Yahoo 友善 (如 BRK.B -> BRK-B)
                         query_code = code.replace('.', '-')
                         ticker = yf.Ticker(query_code)
-                        # 使用 auto_adjust=True
-                        df_yf = ticker.history(start=start_date, interval="1d", auto_adjust=True)
-                        if not df_yf.empty:
-                            df = df_yf.reset_index()
-                            df.columns = [c.lower() for c in df.columns]
-                            if 'date' in df.columns:
-                                df = df.rename(columns={'date': 'ts'})
-                            df['ts'] = pd.to_datetime(df['ts'])
-                            df = df[['ts', 'open', 'high', 'low', 'close', 'volume']]
-                            source = "🌐 Yahoo"
-                        else:
-                            if not quiet_mode:
-                                st.warning(f"Yahoo Finance 查無美股代碼 {code} 的歷史資料")
-                            data_list.append({
-                                "代碼": code, "名稱": stock_name, "最新價格": 0, "操作建議": "❌ 無美股數據",
-                                "一年位階": "-", "年線乖離": "-", "MA20乖離": "-", "MACD狀態": "-", "綜合評分": -1
-                            })
+                        try:
+                            # 優先嘗試 start_date
+                            df_yf = ticker.history(start=start_date, interval="1d", auto_adjust=True)
+                            if df_yf.empty and market_type == 'CRYPTO':
+                                # 幣圈備援：若 start_date 抓不到，嘗試 period='1y' (解決時區與開始日期偏移問題)
+                                df_yf = ticker.history(period="1y", interval="1d", auto_adjust=True)
+                            
+                            if not df_yf.empty:
+                                df = df_yf.reset_index()
+                                df.columns = [c.lower() for c in df.columns]
+                                if 'date' in df.columns: df = df.rename(columns={'date': 'ts'})
+                                df['ts'] = pd.to_datetime(df['ts'])
+                                df = df[['ts', 'open', 'high', 'low', 'close', 'volume']]
+                                source = "🌐 Yahoo"
+                            else:
+                                if not quiet_mode:
+                                    st.warning(f"Yahoo Finance 查無代碼 {code} 的歷史資料")
+                                data_list.append({
+                                    "代碼": code, "名稱": stock_name, "最新價格": 0, "操作建議": "❌ 無有效數據",
+                                    "一年位階": "-", "年線乖離": "-", "MA20乖離": "-", "MACD狀態": "-", "綜合評分": -1
+                                })
+                                continue
+                        except Exception as inner_err:
+                            st.error(f"單一數據抓取異常 ({code}): {inner_err}")
                             continue
-                    except Exception as yf_err:
-                        st.error(f"美股數據抓取失敗 ({code}): {yf_err}")
-                        data_list.append({
-                            "代碼": code, "名稱": stock_name, "最新價格": 0, "操作建議": "❌ 抓取失敗",
-                            "一年位階": "-", "年線乖離": "-", "MA20乖離": "-", "MACD狀態": "-", "綜合評分": -1
-                        })
-                        continue
                 
                 # 確認資料有效性
                 if df is None or df.empty:
