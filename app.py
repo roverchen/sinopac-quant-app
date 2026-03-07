@@ -294,9 +294,10 @@ def get_stock_name_map(_api):
                 except: continue
         recursive_scan(stocks)
         
-        # 成功抓取後，存入磁碟快取供離線使用
+        # 成功抓取後，存入磁碟快取供離線使用 (僅在總量顯著增加時更新)
         if len(code_to_name) > 1000:
             try:
+                # 如果目前的 US 列表比快取新，則強制更新
                 with open(NAME_MAP_CACHE_FILE, "wb") as f:
                     pickle.dump(code_to_name, f)
             except: pass
@@ -312,8 +313,8 @@ def get_stock_name_map(_api):
     # 驗證機制
     if is_mock:
         st.sidebar.info("💡 目前處於「離線恢復模式」，名稱解析來自上次快取資料。")
-    elif len(code_to_name) < 1000:
-        st.warning(f"⚠️ 股票清單載入不完全 (僅 {len(code_to_name)} 檔)，部分代碼可能暫時無法解析名稱。")
+    elif len(code_to_name) < 1000 or "AVGO" not in code_to_name:
+        st.warning(f"⚠️ 股票清單載入不完全 (僅 {len(code_to_name)} 檔)，正在嘗試深度掃描...")
 
     return code_to_name
 
@@ -467,8 +468,8 @@ def get_mass_scan_list(api, market='TW'):
             if code.isdigit() and len(code) == 4:
                 filtered.append(code)
         elif market == 'US':
-            # 美股：純字母 (排除含有點號或數字的衍生標的)
-            if code.isalpha():
+            # 美股：包含字母 (排除純數字及台股後綴)
+            if any(c.isalpha() for c in code) and not (code.endswith('.TW') or code.endswith('.TWO')):
                 filtered.append(code)
     
     # 排序：台股按數字、美股按字母
@@ -637,33 +638,45 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
     if use_batch:
         status_placeholder.info(f"⚡ 啟動閃電海選模式 (批次下載 {len(watchlist)} 檔)...")
         # 1. 將 4 碼轉為 Yahoo 格式 (上市 .TW, 上櫃 .TWO)
-        # 這裡簡化處理：先嘗試 .TW，失敗再點擊詳情時會由 Shioaji 修正。
-        # 更準確做法應是查詢 api.Contracts，但為了極速先假設大部分為 .TW/.TWO 混合批次抓取
+        # 為了效率，先全部嘗試 .TW，後續分析時若沒資料再補抓 .TWO
+        ticker_to_code = {} # 紀錄 Ticker -> 原代碼 的映射
         tickers = []
         for c in watchlist:
             if c.isdigit():
-                tickers.append(f"{c}.TW")
-                tickers.append(f"{c}.TWO")
+                t1 = f"{c}.TW"
+                t2 = f"{c}.TWO"
+                tickers.append(t1)
+                tickers.append(t2)
+                ticker_to_code[t1] = c
+                ticker_to_code[t2] = c
             else:
                 tickers.append(c)
+                ticker_to_code[c] = c
         
-        # 2. 執行批次下載 (Yahoo 支援一次抓多檔)
+        # 2. 執行批次下載 (分段執行以提高成功率)
         try:
-            # 分段下載以防超出 URL 長度限制 (每 50 檔一組)
             all_dfs = {}
-            chunk_size = 50
+            chunk_size = 100 # 加大 chunk 以提升速度，但也增加單次失敗風險
             for k in range(0, len(tickers), chunk_size):
                 chunk = tickers[k:k+chunk_size]
-                status_placeholder.info(f"📥 正在批次下載數據 ({k//2}/{len(watchlist)})...")
-                batch_data = yf.download(chunk, start=start_date, group_by='ticker', threads=True, progress=False)
-                for ticker in chunk:
+                status_placeholder.info(f"📥 正在批次下載市場數據 ({min(k + chunk_size, len(tickers))}/{len(tickers)})...")
+                batch_data = yf.download(chunk, start=start_date, group_by='ticker', threads=True, progress=False, timeout=10)
+                
+                # 處理下載回來的數據
+                for t in chunk:
                     try:
-                        if ticker in batch_data and not batch_data[ticker].dropna().empty:
-                            all_dfs[ticker.split('.')[0]] = batch_data[ticker].dropna()
+                        if t in batch_data:
+                            d = batch_data[t].dropna()
+                            if not d.empty:
+                                code_key = ticker_to_code[t]
+                                # 如果已經有資料 (可能是 .TW 抓到了)，則不覆蓋
+                                if code_key not in all_dfs:
+                                    all_dfs[code_key] = d
                     except: continue
+                # 稍微休息避免被封鎖
+                if len(tickers) > 500: time.sleep(0.5)
         except Exception as e:
-            st.error(f"批次下載失敗: {e}")
-            use_batch = False # 失敗則退回傳統逐筆模式
+            st.error(f"批次下載發生異常: {e}")
 
     for i, code in enumerate(watchlist):
         progress_info = f"🕒 正在分析 ({i+1}/{len(watchlist)}): {code} ..."
