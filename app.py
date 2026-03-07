@@ -559,24 +559,19 @@ if 'scan_market' not in st.session_state:
     st.session_state.scan_market = None
 
 # --- [NEW] 側邊欄：功能入口置頂 ---
-st.sidebar.markdown("### 🚀 快速功能")
+# 1. 掃描目前追蹤清單 (置頂且不隱藏)
+scan_btn = st.sidebar.button("🚀 掃描目前追蹤清單", use_container_width=True)
 
-# 1. 台灣股票海選 (使用 .desktop-only 包裹，在手機版隱藏)
+st.sidebar.markdown("### � 大數據海選")
+
+# 2. 台灣/美國股票海選 (使用 .desktop-only 包裹)
 with st.sidebar.container():
     st.markdown('<div class="desktop-only">', unsafe_allow_html=True)
-    big_scan_tw_btn = st.sidebar.button("🔍 台灣股票海選", use_container_width=True, 
+    big_scan_tw_btn = st.sidebar.button("🇹🇼 台灣股票海選", use_container_width=True, 
                                         type="primary" if st.session_state.get("scan_market") == "TW" else "secondary")
-    big_scan_us_btn = st.sidebar.button("🔎 美國股票海選", use_container_width=True,
+    big_scan_us_btn = st.sidebar.button("🇺🇸 美國股票海選", use_container_width=True,
                                         type="primary" if st.session_state.get("scan_market") == "US" else "secondary")
     st.markdown('</div>', unsafe_allow_html=True)
-
-# 2. 重新掃描目前清單 (僅在非大選股模式且非手機版顯示)
-scan_btn = False
-if not st.session_state.get("is_big_scan", False):
-    with st.sidebar.container():
-        st.markdown('<div class="desktop-only">', unsafe_allow_html=True)
-        scan_btn = st.sidebar.button("� 掃描目前追蹤清單", use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
 
 st.sidebar.divider()
 st.sidebar.markdown("### ⚙️ 策略與顯示設定")
