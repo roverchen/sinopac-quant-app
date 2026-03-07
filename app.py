@@ -696,32 +696,31 @@ with st.sidebar.container():
         value=st.session_state.rows_per_page
     )
     st.markdown('</div>', unsafe_allow_html=True)
-# 3. 新增股票 (僅在「目前追蹤清單」模式下顯示)
-if not st.session_state.get("is_big_scan", False):
-    st.sidebar.header("➕ 新增股票")
-    with st.sidebar.form("add_stock_form", clear_on_submit=True):
-        new_input = st.text_input("輸入代碼或名稱 (例: 2330 或 台積電)")
-        submitted = st.form_submit_button("新增到清單")
-        if submitted and new_input:
-            # 先進行代碼檢索，暫不觸發全域掃描
-            resolved_code, suggestions = resolve_stock_code(new_input, api)
-            if resolved_code:
-                if resolved_code not in st.session_state.watchlist:
-                    st.session_state.watchlist.append(resolved_code)
-                    save_watchlist(st.session_state.watchlist)
-                    # 成功找到代碼，清除建議並準備同步
-                    if "last_suggestions" in st.session_state:
-                        del st.session_state.last_suggestions
-                    st.rerun()
-                else:
-                    st.sidebar.warning(f"⚠️ {resolved_code} 已在清單中")
-            elif suggestions:
-                # 沒找到精確代碼，存下建議
-                st.session_state.last_suggestions = (new_input, suggestions)
-            else:
-                st.sidebar.error(f"❌ 找不到與「{new_input}」相符的股票")
+# 3. 新增股票 (始終顯示，方便使用者隨時加入追蹤)
+st.sidebar.header("➕ 新增股票")
+with st.sidebar.form("add_stock_form", clear_on_submit=True):
+    new_input = st.text_input("輸入代碼或名稱 (例: 2330 或 台積電)")
+    submitted = st.form_submit_button("新增到清單")
+    if submitted and new_input:
+        # 先進行代碼檢索，暫不觸發全域掃描
+        resolved_code, suggestions = resolve_stock_code(new_input, api)
+        if resolved_code:
+            if resolved_code not in st.session_state.watchlist:
+                st.session_state.watchlist.append(resolved_code)
+                save_watchlist(st.session_state.watchlist)
+                # 成功找到代碼，清除建議並準備同步
                 if "last_suggestions" in st.session_state:
                     del st.session_state.last_suggestions
+                st.rerun()
+            else:
+                st.sidebar.warning(f"⚠️ {resolved_code} 已在清單中")
+        elif suggestions:
+            # 沒找到精確代碼，存下建議
+            st.session_state.last_suggestions = (new_input, suggestions)
+        else:
+            st.sidebar.error(f"❌ 找不到與「{new_input}」相符的股票")
+            if "last_suggestions" in st.session_state:
+                del st.session_state.last_suggestions
 
     # 顯示建議清單 (如果有的話)
     if "last_suggestions" in st.session_state:
@@ -1015,23 +1014,38 @@ def fetch_and_analyze(watchlist, defense_weight=0.5):
                         st.warning(f"代碼 {code} 無法獲取有效資料")
                     continue
 
+                # 儲存到本地快取 (此處僅存原始數據，指標會統一在下方計算)
+                df.to_csv(cache_file, index=False)
+            
+            # --- 統一技術指標計算入口 (不論來源為何都必須執行) ---
+            if df is not None and not df.empty:
+                # 確保欄位名稱正確
                 df.columns = [c.lower() for c in df.columns]
-                df['ts'] = pd.to_datetime(df['ts'])
-
-                # 計算指標並存檔
+                
+                # 計算 MA 均線
                 df['ma20'] = df['close'].rolling(window=20).mean()
                 df['ma60'] = df['close'].rolling(window=60).mean()
                 df['ma240'] = df['close'].rolling(window=240).mean()
+                
+                # 計算 MACD
                 ema12 = df['close'].ewm(span=12).mean()
                 ema26 = df['close'].ewm(span=26).mean()
                 df['macd'] = ema12 - ema26
                 df['signal'] = df['macd'].ewm(span=9).mean()
                 df['hist'] = df['macd'] - df['signal']
                 
-                # 儲存到本地快取
-                df.to_csv(cache_file, index=False)
+                # 防禦性檢查：如果資料太短導致指標全是 NaN，補上預設值
+                if len(df) < 5:
+                    df['ma20'] = df['ma20'].fillna(df['close'])
+                    df['ma60'] = df['ma60'].fillna(df['close'])
+                    df['ma240'] = df['ma240'].fillna(df['close'])
             
             # --- 核心邏輯：雙策略評分 (新股彈性優化) ---
+            if df is None or df.empty or 'ma20' not in df.columns:
+                if not quiet_mode:
+                    st.warning(f"⚠️ {code} 指標計算失敗，跳過分析")
+                continue
+
             last_price = df['close'].iloc[-1]
             year_high = df['close'].max()
             year_low = df['close'].min()
