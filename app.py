@@ -3,6 +3,11 @@ import os
 import time
 import base64
 import json
+from dotenv import load_dotenv
+
+# 載入環境變數 (如 MAX API Keys)
+load_dotenv()
+
 
 # --- Mac SSL 憑證修正 (解決 [SSL: CERTIFICATE_VERIFY_FAILED]) ---
 try:
@@ -47,6 +52,12 @@ import requests
 import yfinance as yf
 import math
 import pickle
+
+# 導入外掛 API
+try:
+    from max_api import MaxExchangeAPI
+except ImportError:
+    MaxExchangeAPI = None
 
 # --- 🎯 設備檢測與適應性設定 ---
 def is_mobile_device():
@@ -137,6 +148,15 @@ st.title("📈 金融商品市場報明牌系統")
 
 # --- 初始化 API ---
 @st.cache_resource
+def init_max_api():
+    if MaxExchangeAPI:
+        key = os.getenv("MAX_API_KEY")
+        secret = os.getenv("MAX_API_SECRET")
+        if key and secret:
+            return MaxExchangeAPI(key, secret)
+    return None
+
+@st.cache_resource
 def init_api():
     api = sj.Shioaji()
     # 優先從 st.secrets 讀取，若無則使用預設硬編碼內容
@@ -171,10 +191,25 @@ def init_api():
 
 # 側邊欄：API 狀態
 api = init_api()
+max_api = init_max_api()
 
 # 檢查連線健康度
 is_mock = hasattr(api, 'list_accounts') and len(api.list_accounts()) == 0 and not hasattr(api, 'Contracts')
-conn_status = "🔴 連線衝突 (唯讀模式)" if is_mock else "🟢 API 連線正常"
+conn_status = "🔴 Shioaji:衝突(唯讀)" if is_mock else "🟢 Shioaji:正常"
+max_status = "🟢 MAX:正常" if max_api else "⚪ MAX:未設定"
+
+st.sidebar.markdown(f"**{conn_status} | {max_status}**")
+
+# 顯示 MAX 餘額
+if max_api:
+    bal = max_api.get_account_balance()
+    if 'error' not in bal:
+        twd = bal.get('twd', {}).get('balance', 0)
+        btc = bal.get('btc', {}).get('balance', 0)
+        eth = bal.get('eth', {}).get('balance', 0)
+        st.sidebar.caption(f"💰 餘額: {twd:,.0f} TWD | {btc:.4f} BTC | {eth:.4f} ETH")
+    else:
+        st.sidebar.caption(f"⚠️ MAX 連線錯誤: {bal.get('error', 'Unknown')}")
 
 # --- 憑證交易與背景邏輯 ---
 
@@ -1520,46 +1555,80 @@ if "results" in st.session_state:
             st.session_state.last_order = f"{get_now().strftime('%H:%M:%S')} - 已模擬買入 {row['代碼']} {qty}股"
             st.rerun()
             
-        # 按鈕 2: 實盤下單 (需憑證啟動)
-        if ca_active:
-            if c2.button("💰 API 實盤下單", use_container_width=True, type="primary"):
-                try:
-                    # 1. 取得合約
-                    contract = None
-                    for mk in ["TSE", "OTC"]:
-                        try:
-                            contract = getattr(api.Contracts.Stocks, mk)[row['代碼']]
-                            if contract: break
-                        except: continue
-                    
-                    if not contract:
-                        st.error("❌ 找不到該標的合約，無法下單。")
-                    else:
-                        # 2. 建立訂單 (預設為市價或最接近建議價)
-                        # 注意：此處僅為展示架構，實際下單需處理 Order 對象
-                        from shioaji import Order
-                        from shioaji.constant import Action, PriceType, OrderType
+        # 按鈕 2: 實盤下單
+        is_crypto = "-USD" in str(row['代碼'])
+        
+        if is_crypto:
+            # 針對加密貨幣透過 MAX API 下單
+            if max_api:
+                if c2.button("💰 MAX 實盤下單", use_container_width=True, type="primary"):
+                    try:
+                        # 處理 Yahoo 代碼轉換為 MAX 支持的交易對格式 (例如 BTC-USD -> btctwd)
+                        raw_code = row['代碼'].split('-')[0].lower()
+                        # 處理有夾帶數字的雅虎代碼
+                        for clean_t in ["pol", "uni", "apt", "stx", "imx"]:
+                            if clean_t in raw_code: raw_code = clean_t
+                            
+                        max_market = f"{raw_code}twd"
                         
-                        order = Order(
+                        # 呼叫 MAX API 送出限價單
+                        trade = max_api.place_order(
+                            market=max_market,
+                            side="buy",
+                            volume=qty,
                             price=buy_price,
-                            quantity=qty,
-                            action=Action.Buy,
-                            price_type=PriceType.LMT, # 限價
-                            order_type=OrderType.ROD, # 當日有效
-                            account=api.list_accounts()[0] # 預設取第一個帳號
+                            ord_type="limit"
                         )
                         
-                        trade = api.place_order(contract, order)
-                        st.session_state.last_order = f"{get_now().strftime('%H:%M:%S')} - API 已送出 {row['代碼']} {qty}股 (限價:{buy_price})"
-                        st.toast("✅ API 委託已送出！", icon="🚀")
-                        st.rerun()
-                except Exception as e:
-                    st.error(f"❌ API 下單失敗: {e}")
+                        if 'error' in trade:
+                            st.error(f"❌ MAX 下單失敗: {trade['error']}")
+                        else:
+                            st.session_state.last_order = f"{get_now().strftime('%H:%M:%S')} - MAX 已送出 {raw_code.upper()} {qty}顆 (限價:{buy_price})"
+                            st.toast("✅ MAX 委託已送出！", icon="🚀")
+                            st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ MAX 系統異常: {e}")
+            else:
+                c2.button("💰 MAX 未連線", use_container_width=True, disabled=True)
         else:
-            c2.link_button("🌐 官網開啟下單", 
-                         "https://www.sinotrade.com.tw/newweb/goOrder/?nav=0", 
-                         use_container_width=True,
-                         help="憑證未啟動，請手動至官網下單")
+            # 針對一般股票透過 Shioaji 永豐金 API 下單
+            if ca_active:
+                if c2.button("💰 API 實盤下單", use_container_width=True, type="primary"):
+                    try:
+                        # 1. 取得合約
+                        contract = None
+                        for mk in ["TSE", "OTC"]:
+                            try:
+                                contract = getattr(api.Contracts.Stocks, mk)[row['代碼']]
+                                if contract: break
+                            except: continue
+                        
+                        if not contract:
+                            st.error("❌ 找不到該標的合約，無法下單。")
+                        else:
+                            from shioaji import Order
+                            from shioaji.constant import Action, PriceType, OrderType
+                            
+                            order = Order(
+                                price=buy_price,
+                                quantity=qty,
+                                action=Action.Buy,
+                                price_type=PriceType.LMT, # 限價
+                                order_type=OrderType.ROD, # 當日有效
+                                account=api.list_accounts()[0] # 預設取第一個帳號
+                            )
+                            
+                            trade = api.place_order(contract, order)
+                            st.session_state.last_order = f"{get_now().strftime('%H:%M:%S')} - API 已送出 {row['代碼']} {qty}股 (限價:{buy_price})"
+                            st.toast("✅ API 委託已送出！", icon="🚀")
+                            st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ API 下單失敗: {e}")
+            else:
+                c2.link_button("🌐 官網開啟下單", 
+                             "https://www.sinotrade.com.tw/newweb/goOrder/?nav=0", 
+                             use_container_width=True,
+                             help="憑證未啟動，請手動至官網下單")
 
         # --- [NEW] 在對話框內顯示 K 線與 MACD 指標 ---
         st.divider()
