@@ -1007,6 +1007,9 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
                         except Exception as inner_err:
                             st.error(f"單一數據抓取異常 ({code}): {inner_err}")
                             continue
+                    except Exception as yf_err:
+                        st.error(f"資料抓取過程中發生未預期錯誤 ({code}): {yf_err}")
+                        continue
                 
                 # 確認資料有效性
                 if df is None or df.empty:
