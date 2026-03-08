@@ -23,12 +23,11 @@ class MaxExchangeAPI:
         payload_dict['nonce'] = nonce
         payload_dict['path'] = path
         
-        # 1. 產生與 API 嚴格一致的 JSON 字串 (移除空白)
-        # 測試過 MAX 對於 keys 的順序並沒有強制，但字串必須完全對應
-        json_payload = json.dumps(payload_dict, separators=(',', ':'))
+        # 1. 產生與 API 嚴格一致的 JSON 字串 (移除空白，排序 Keys 以確保一致性)
+        json_payload = json.dumps(payload_dict, separators=(',', ':'), sort_keys=True)
         b64_payload = base64.b64encode(json_payload.encode('utf-8')).decode('utf-8')
         
-        # 2. 產生 Signature
+        # 2. 產生 Signature (對應 Base64 字串進行 HMAC-SHA256)
         signature = hmac.new(
             self.secret_key.encode('utf-8'),
             b64_payload.encode('utf-8'),
@@ -52,9 +51,10 @@ class MaxExchangeAPI:
         url = self.base_url + endpoint
         
         try:
-            # GET 請求不需要傳送 body，但 header 的 Payload 依然要包含 nonce 跟 path
-            headers, _ = self._get_auth_payload(endpoint)
-            response = requests.get(url, headers=headers)
+            # [FIX] GET 請求雖然通常無 body，但 MAX V2 要求 Payload 與 Body 必須一致
+            # 這裡產生含有 nonce 與 path 的 JSON 並透過 requests.request("GET", ..., data=) 送出
+            headers, json_payload = self._get_auth_payload(endpoint)
+            response = requests.request("GET", url, headers=headers, data=json_payload)
             
             if response.status_code == 200:
                 data = response.json()
