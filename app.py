@@ -102,21 +102,21 @@ def auto_close_sidebar():
         st.session_state.should_close_sidebar = True
 
 def render_sidebar_closer():
-    """如果標記為真，則注入 JS 關閉側邊欄"""
+    """如果標記為真，則注入 JS 關閉側邊欄 (使用 st.markdown 避免 iframe 限制)"""
     if st.session_state.get('should_close_sidebar', False):
-        import streamlit.components.v1 as components
-        components.html(
+        st.markdown(
             """
             <script>
-                var sidebar = window.parent.document.querySelector('[data-testid="stSidebar"]');
-                var closeButton = sidebar.querySelector('button[aria-label="Close"]');
-                if (closeButton) {
-                    closeButton.click();
-                }
+                // 使用 setTimeout 確保 DOM 渲染完成
+                setTimeout(function() {
+                    var closeBtn = window.parent.document.querySelector('[data-testid="stSidebar"] button[aria-label="Close"]');
+                    if (closeBtn) {
+                        closeBtn.click();
+                    }
+                }, 100);
             </script>
             """,
-            height=0,
-            width=0
+            unsafe_allow_html=True
         )
         st.session_state.should_close_sidebar = False
 
