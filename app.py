@@ -173,9 +173,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 側邊欄最下方顯示 Debug 資訊 (供確認隔離狀態)
-st.sidebar.markdown("---")
-st.sidebar.caption(f"🆔 Session ID: {get_session_uid()}")
 
 # 預設時區工具
 st.title("📈 金融商品市場報明牌系統")
@@ -229,12 +226,8 @@ def init_api():
 api = init_api()
 max_api = init_max_api()
 
-# 檢查連線健康度
+# 核心連線狀態檢查 (背景邏輯)
 is_mock = hasattr(api, 'list_accounts') and len(api.list_accounts()) == 0 and not hasattr(api, 'Contracts')
-conn_status = "🔴 Shioaji:衝突(唯讀)" if is_mock else "🟢 Shioaji:正常"
-max_status = "🟢 MAX:正常" if max_api else "⚪ MAX:未設定"
-
-st.sidebar.markdown(f"**{conn_status} | {max_status}**")
 
 # 顯示 MAX 餘額
 if max_api:
