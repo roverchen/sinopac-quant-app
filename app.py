@@ -698,9 +698,9 @@ def display_simulation_dashboard(user_id):
     """在 UI 中顯示交易紀錄儀表板，區分『系統全域』與『個人手動』"""
     st.markdown("## 📈 交易紀錄儀表板 (Trading Record Dashboard)")
     
-    tabs = st.tabs(["🤖 系統自動執行 (全域共享)", "👤 我的手動執行 (個人隔離)"])
+    tabs = st.tabs(["👤 我的手動執行 (個人隔離)", "🤖 系統自動執行 (全域共享)"])
     
-    for i, (log_id, title) in enumerate([("system", "系統"), (user_id, "個人")]):
+    for i, (log_id, title) in enumerate([(user_id, "個人"), ("system", "系統")]):
         with tabs[i]:
             logs = load_trading_log(log_id)
             if not logs:
