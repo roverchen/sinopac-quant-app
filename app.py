@@ -6,7 +6,9 @@ import json
 from dotenv import load_dotenv
 
 # 載入環境變數 (如 MAX API Keys)
-load_dotenv()
+# 使用絕對路徑確保無論從哪裡啟動都能讀到同目錄下的 .env
+env_path = os.path.join(os.path.dirname(__file__), '.env')
+load_dotenv(env_path)
 
 
 # --- Mac SSL 憑證修正 (解決 [SSL: CERTIFICATE_VERIFY_FAILED]) ---
@@ -232,6 +234,13 @@ def init_api():
 
 # 側邊欄：API 狀態
 api = init_api()
+# 初始化 API 狀態
+# 這裡特別印出偵測到的狀態供除錯，但不顯露完整金鑰
+m_api_status = "未設定"
+key_demo = os.getenv("MAX_API_KEY")
+if key_demo:
+    m_api_status = f"已偵測 (開頭: {key_demo[:4]}...)"
+
 max_api = init_max_api_v2()
 
 # 核心連線狀態檢查 (背景邏輯)
@@ -246,7 +255,13 @@ if max_api:
         eth = bal.get('eth', {}).get('balance', 0)
         st.sidebar.caption(f"💰 餘額: {twd:,.0f} TWD | {btc:.4f} BTC | {eth:.4f} ETH")
     else:
-        st.sidebar.caption(f"⚠️ MAX 連線錯誤: {bal.get('error', 'Unknown')}")
+        # 特別處理 404
+        if "404" in str(bal['error']):
+            st.sidebar.caption(f"⚠️ MAX 連線無效 (404)。請檢查金鑰是否在 MAX 後台已被刪除或失效。")
+        else:
+            st.sidebar.caption(f"⚠️ MAX 連線錯誤: {bal.get('error', 'Unknown')}")
+else:
+    st.sidebar.caption(f"⚪ MAX API: {m_api_status} (請設定 .env 或 Secrets)")
 
 # --- 憑證交易與背景邏輯 ---
 
