@@ -259,9 +259,9 @@ max_api = init_max_api_v2()
 # 核心連線狀態檢查 (背景邏輯)
 is_mock = hasattr(api, 'list_accounts') and len(api.list_accounts()) == 0 and not hasattr(api, 'Contracts')
 
-# 顯示 MAX 餘額
 if max_api:
     bal = max_api.get_account_balance()
+    st.session_state.max_balance = bal # [NEW] 存入 session_state 供下單視窗檢查
     if 'error' not in bal:
         twd = bal.get('twd', {}).get('balance', 0)
         btc = bal.get('btc', {}).get('balance', 0)
@@ -652,6 +652,9 @@ def record_trade(user_id, category, symbol, name, price, reason, is_system=False
     """記錄一筆新的模擬或實盤交易。is_system=True 會記入全域共享檔。"""
     log_id = "system" if is_system else user_id
     logs = load_trading_log(log_id)
+    
+    # 強制轉為 float 以支援加密貨幣的小數單位
+    shares = float(shares)
     
     # 1. 系統自動規則：每日每市場僅限一筆
     if is_system:
@@ -1867,9 +1870,17 @@ if "results" in st.session_state:
         
         col1, col2 = st.columns(2)
         with col1:
-            st.metric("建議買價", f"{buy_price:.1f}")
+            st.metric("建議買價", f"{buy_price:.2f}")
+            
+        # 判斷是否為虛擬貨幣或美股
+        is_crypto = "-USD" in str(row['代碼'])
+        is_us = ".TW" not in str(row['代碼']) and not is_crypto
+        
         with col2:
-            qty = st.number_input("委託股數", min_value=1, value=1000, step=100)
+            if is_crypto:
+                qty = st.number_input("委託數量 (顆)", min_value=0.0001, value=0.1, step=0.01, format="%.4f")
+            else:
+                qty = st.number_input("委託股數", min_value=1, value=1000, step=100)
             
         # --- [NEW] MAX 市場智慧識別 ---
         max_market_id = None
@@ -1902,7 +1913,17 @@ if "results" in st.session_state:
             elif f"{base_coin}usdt" in available_ids:
                 max_market_id = f"{base_coin}usdt"
             
-        st.success(f"💡 預估委託金額: **{buy_price * qty:,.0f}** 元")
+        total_amount = buy_price * qty
+        st.success(f"💡 預估委託金額: **{total_amount:,.2f}** 元")
+        
+        # --- [NEW] 餘額檢查 ---
+        insufficient_funds = False
+        if max_api and is_crypto:
+            max_bal = st.session_state.get('max_balance', {})
+            twd_avail = float(max_bal.get('twd', {}).get('balance', 0))
+            if total_amount > twd_avail:
+                st.error(f"⚠️ 餘額不足！可用: **{twd_avail:,.2f}** TWD (缺: {total_amount - twd_avail:,.2f})")
+                insufficient_funds = True
         
         st.divider()
         c1, c2 = st.columns(2)
@@ -1924,7 +1945,7 @@ if "results" in st.session_state:
             # 針對加密貨幣透過 MAX API 下單
             if max_api:
                 btn_label = f"💰 MAX 實盤下單 ({max_market_id.upper()})" if max_market_id else "❌ MAX 不支援此幣"
-                if c2.button(btn_label, use_container_width=True, type="primary", disabled=(not max_market_id)):
+                if st.button(btn_label, use_container_width=True, type="primary", disabled=(not max_market_id or insufficient_funds)):
                     try:
                         # 呼叫 MAX API 送出限價單
                         trade = max_api.place_order(
