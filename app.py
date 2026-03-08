@@ -754,10 +754,29 @@ def get_mass_scan_list(api, market='TW'):
     # 排序：台股按數字、美股按字母
     return sorted(filtered)
 
-# --- 🛠️ LocalStorage Bridge (Multi-User Persistence) ---
-# 1. Initialization: Try to load from browser storage if URL doesn't have it yet
-if ("w" not in st.query_params or "u" not in st.query_params) and "ls_init_attempted" not in st.session_state:
-    st.session_state.ls_init_attempted = True
+# --- 🛠️ 核心隔離邏輯：強制身分識別障礙 ---
+# 在取得 UID 之前，嚴禁執行後續任何資料載入與 UI 渲染
+if "u" not in st.query_params:
+    st.markdown("""
+        <div style='display: flex; flex-direction: column; align-items: center; justify-content: center; height: 70vh;'>
+            <h2 style='color: #00d4ff;'>🛡️ 正在建立安全連線...</h2>
+            <p style='color: #888;'>正在為您的瀏覽器準備專屬隔離環境，請稍候。</p>
+            <div class="loader"></div>
+        </div>
+        <style>
+            .loader {
+                border: 4px solid #333;
+                border-top: 4px solid #00d4ff;
+                border-radius: 50%;
+                width: 40px;
+                height: 40px;
+                animation: spin 1s linear infinite;
+            }
+            @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        </style>
+    """, unsafe_allow_html=True)
+    
+    # 執行 JS Bridge 取得或產生 UID
     st.components.v1.html("""
         <script>
             let uid = localStorage.getItem('sinopac_uid');
@@ -767,22 +786,16 @@ if ("w" not in st.query_params or "u" not in st.query_params) and "ls_init_attem
             }
             const stored = localStorage.getItem('sinopac_watchlist');
             const url = new URL(window.parent.location.href);
-            let reload = false;
             
-            if (!url.searchParams.has('u')) {
-                url.searchParams.set('u', uid);
-                reload = true;
-            }
-            if (!url.searchParams.has('w') && stored && stored !== '[]' && stored !== 'null') {
+            url.searchParams.set('u', uid);
+            if (stored && stored !== '[]' && stored !== 'null') {
                 url.searchParams.set('w', btoa(stored));
-                reload = true;
             }
-            
-            if (reload) {
-                window.parent.location.href = url.toString();
-            }
+            window.parent.location.href = url.toString();
         </script>
     """, height=0)
+    
+    st.stop() # 🛑 絕對禁止後續代碼運行，防止資料串連
 
 # Get current user ID for cache isolation (Robust Hybrid Approach)
 user_id = get_session_uid()
