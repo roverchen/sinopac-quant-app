@@ -1773,7 +1773,7 @@ if "results" not in st.session_state:
             # 或者是有自動觸發標記
             if st.session_state.get("trigger_daily_scan"):
                 should_sync = True
-                st.session_state.trigger_daily_scan = False
+                # 注意：不要在這裡歸零旗標，保留給下方的掃描邏輯判斷市場使用
 
 elif st.session_state.get("last_watchlist") != current_watchlist_key:
     # 只有當追蹤清單「內容改變」時，才自動觸發同步
@@ -1791,12 +1791,14 @@ if (big_scan_tw_btn or big_scan_us_btn or big_scan_crypto_btn or scan_btn or sho
     
     # 1. 決定市場與名單
     if big_scan_tw_btn or big_scan_us_btn or big_scan_crypto_btn or is_trigger_daily:
-        # 重設每日觸發旗標，避免重複觸發
-        st.session_state.trigger_daily_scan = False
+        # 決定市場類型：優先看按鈕，再看 Session State 紀錄
         if big_scan_tw_btn: m_type = 'TW'
         elif big_scan_us_btn: m_type = 'US'
         elif big_scan_crypto_btn: m_type = 'CRYPTO'
-        else: m_type = 'TW' # 預設自動掃描為台股
+        else: m_type = st.session_state.get("scan_market", "TW")
+        
+        # 執行到此才正式歸零每日觸發旗標
+        st.session_state.trigger_daily_scan = False
         
         m_label = {"TW": "台灣", "US": "美國", "CRYPTO": "加密貨幣"}[m_type]
         st.session_state.is_big_scan = True
