@@ -184,23 +184,13 @@ st.title("📈 金融商品市場報明牌系統")
 
 # --- 手機版側邊欄提示 ---
 
-@st.cache_resource
-def init_max_api_v2():
+# @st.cache_resource  <-- [REMOVED] 為了確保能套用最新的 max_api.py 修改，暫時關閉快取
+def init_max_api_v4():
     if MaxExchangeAPI:
-        # --- 除錯資訊 ---
-        # st.sidebar.write(f"DEBUG: MaxExchangeAPI methods: {[m for m in dir(MaxExchangeAPI) if not m.startswith('_')]}") 
-        # ---
         key = os.getenv("MAX_API_KEY")
         secret = os.getenv("MAX_API_SECRET")
         if key and secret and len(key) > 10:
-            api_obj = MaxExchangeAPI(key, secret)
-            # 強制檢查是否有 get_markets
-            if not hasattr(api_obj, "get_markets"):
-                print("!!! CRITICAL: MaxExchangeAPI instance is missing get_markets !!!")
-                # 備援：動態注入 (防止 app 崩潰)
-                from max_api import MaxExchangeAPI as RefinedAPI
-                return RefinedAPI(key, secret)
-            return api_obj
+            return MaxExchangeAPI(key, secret)
     return None
 
 @st.cache_resource
@@ -254,7 +244,9 @@ key_demo = os.getenv("MAX_API_KEY")
 if key_demo:
     m_api_status = f"已偵測 (開頭: {key_demo[:4]}...)"
 
-max_api = init_max_api_v2()
+max_api = init_max_api_v4()
+v_tag = f" v{max_api.VERSION}" if max_api else ""
+m_api_status = f"已偵測{v_tag} (開頭: {key_demo[:4]}...)" if key_demo else "待設定"
 
 # 核心連線狀態檢查 (背景邏輯)
 is_mock = hasattr(api, 'list_accounts') and len(api.list_accounts()) == 0 and not hasattr(api, 'Contracts')

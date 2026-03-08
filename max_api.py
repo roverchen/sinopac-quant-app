@@ -7,6 +7,7 @@ import base64
 import requests
 
 class MaxExchangeAPI:
+    VERSION = "2.3.GET_PARAMS" # 版本號供除錯使用
     def __init__(self, access_key: str, secret_key: str):
         self.access_key = access_key
         self.secret_key = secret_key
@@ -51,10 +52,13 @@ class MaxExchangeAPI:
         url = self.base_url + endpoint
         
         try:
-            # [FIX] GET 請求雖然通常無 body，但 MAX V2 要求 Payload 與 Body 必須一致
-            # 這裡產生含有 nonce 與 path 的 JSON 並透過 requests.request("GET", ..., data=) 送出
+            # [FIX] 對於 GET 請求，參數應放在 Query String 中，而非 Body
+            # 這樣可以避免某些環境 (如 Streamlit/Proxies) 阻擋 GET Body 導致的 401
             headers, json_payload = self._get_auth_payload(endpoint)
-            response = requests.request("GET", url, headers=headers, data=json_payload)
+            payload_dict = json.loads(json_payload)
+            
+            # 將 nonce, path 等放入 params
+            response = requests.get(url, headers=headers, params=payload_dict)
             
             if response.status_code == 200:
                 data = response.json()
@@ -94,7 +98,7 @@ class MaxExchangeAPI:
         headers, json_payload = self._get_auth_payload(endpoint, payload_dict=payload.copy())
         
         try:
-            # 使用 data= 送出原始字串，避免 requests.post(json=) 擅自加上空白破壞驗證
+            # POST 請求則維持使用 Body (data=)
             response = requests.post(url, headers=headers, data=json_payload)
             if response.status_code in [200, 201]:
                 return response.json()
@@ -105,9 +109,10 @@ class MaxExchangeAPI:
 
     def get_markets(self) -> list:
         """
-        獲取所有可交易的市場清單
+        獲獲取所有可交易的市場清單
         """
         url = f"{self.base_url}/api/v2/markets"
+        # 公開 API 不需要驗證與 body
         try:
             response = requests.get(url)
             if response.status_code == 200:
