@@ -277,7 +277,8 @@ st.title("📈 金融商品市場報明牌系統")
 
 # --- [NEW] 行動端專屬：頂部快捷導航列 (方案 A+B) ---
 if is_mobile_device():
-    st.markdown('<div class="mobile-nav-container">', unsafe_allow_html=True)
+    # 使用 .mobile-horiz-row 類別強制內部 columns 水平排列
+    st.markdown('<div class="mobile-horiz-row nav-container">', unsafe_allow_html=True)
     m_col1, m_col2, m_col3, m_col4, m_col5 = st.columns(5)
     
     with m_col1:
@@ -2304,8 +2305,8 @@ if "results" in st.session_state:
     # --- 分頁導航 ---
     if total_pages > 1:
         st.divider()
-        # --- 🚀 [FINAL FIX] 不再依賴 st.columns，直接使用 HTML 並排 ---
-        st.markdown('<div class="pagination-container">', unsafe_allow_html=True)
+        # --- 🚀 [FINAL FIX] 使用 .mobile-horiz-row 強制水平不換行 ---
+        st.markdown('<div class="mobile-horiz-row pagination-container">', unsafe_allow_html=True)
         col1, col2, col3 = st.columns([1, 1, 1])
         
         is_mob = is_mobile_device()
