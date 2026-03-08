@@ -929,22 +929,26 @@ if 'is_big_scan' not in st.session_state:
     st.session_state.is_big_scan = False
 if 'scan_market' not in st.session_state:
     st.session_state.scan_market = None
+if 'active_page' not in st.session_state:
+    st.session_state.active_page = "market"
 
 # --- 側邊欄額外功能 ---
 st.sidebar.markdown("---")
-show_sim = st.sidebar.checkbox("📊 顯示模擬交易儀表板", value=False)
-
-if show_sim:
-    display_simulation_dashboard(user_id)
-    st.divider()
+if st.sidebar.button("📊 模擬交易儀表板", use_container_width=True):
+    st.session_state.active_page = "simulation"
+    st.rerun()
 
 # --- [NEW] 側邊欄：功能入口置頂 ---
 # 1. 掃描目前追蹤清單 (置頂且不隱藏)
-scan_btn = st.sidebar.button("🚀 掃描目前追蹤清單", use_container_width=True)
+if st.sidebar.button("🚀 掃描目前追蹤清單", use_container_width=True):
+    st.session_state.active_page = "market"
+    scan_btn = True # 模擬按鈕按下
+else:
+    scan_btn = False
 
 st.sidebar.markdown("###  大數據海選")
 
-# 2. 台灣/美國股票海選 (使用 .desktop-only 包裹)
+# 2. 台灣/美國股票海選
 with st.sidebar.container():
     st.markdown('<div class="desktop-only">', unsafe_allow_html=True)
     big_scan_tw_btn = st.sidebar.button("🇹🇼 台灣股票海選", use_container_width=True, 
@@ -954,6 +958,10 @@ with st.sidebar.container():
     big_scan_crypto_btn = st.sidebar.button("🪙 加密貨幣海選", use_container_width=True,
                                            type="primary" if st.session_state.get("scan_market") == "CRYPTO" else "secondary")
     st.markdown('</div>', unsafe_allow_html=True)
+
+# 確保按下海選按鈕時切換回主頁
+if big_scan_tw_btn or big_scan_us_btn or big_scan_crypto_btn:
+    st.session_state.active_page = "market"
 
 st.sidebar.divider()
 st.sidebar.markdown("### ⚙️ 策略與顯示設定")
@@ -986,6 +994,7 @@ with st.sidebar.form("add_stock_form", clear_on_submit=True):
             if resolved_code not in st.session_state.watchlist:
                 st.session_state.watchlist.append(resolved_code)
                 save_watchlist(st.session_state.watchlist)
+                st.session_state.active_page = "market"
                 # 成功找到代碼，清除建議並準備同步
                 if "last_suggestions" in st.session_state:
                     del st.session_state.last_suggestions
@@ -1616,6 +1625,14 @@ if (big_scan_tw_btn or big_scan_us_btn or big_scan_crypto_btn or scan_btn or sho
                 st.error("❌ 全市場掃描未成功取得數據。")
             else:
                 st.warning("⚠️ 掃描完成，但在現有清單中找不到可分析的有效數據。")
+
+# --- 頁面路由切換 ---
+if st.session_state.active_page == "simulation":
+    if st.button("🏠 返回行情掃描 (Market)"):
+        st.session_state.active_page = "market"
+        st.rerun()
+    display_simulation_dashboard(user_id)
+    st.stop()
 
 # 顯示最後更新時間與結果
 if "results" in st.session_state:
