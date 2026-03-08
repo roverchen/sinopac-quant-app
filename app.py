@@ -101,35 +101,38 @@ def render_sidebar_closer():
     """如果標記為真，則注入 JS 關閉側邊欄 (使用 components.html 確保 JS 能執行)"""
     if st.session_state.get('should_close_sidebar', False):
         import streamlit.components.v1 as components
+        import time
+        # 加入 timestamp 確保 Streamlit 每次都看作新的 iframe 重新渲染執行 JS
         components.html(
-            """
+            f"""
             <script>
-            setTimeout(function() {
+            // Execution ID: {time.time()}
+            setTimeout(function() {{
                 var doc = window.parent.document;
                 
                 // 優先方法：直接尋找手機版的側邊欄關閉按鈕 (通常在 stSidebar 的 header)
                 var sidebar = doc.querySelector('[data-testid="stSidebar"]');
-                if (sidebar) {
+                if (sidebar) {{
                     var btns = sidebar.querySelectorAll('button');
-                    for (var i = 0; i < btns.length; i++) {
+                    for (var i = 0; i < btns.length; i++) {{
                         var btn = btns[i];
-                        if (btn.getAttribute('aria-label') === 'Close' || (btn.querySelector('svg') && !btn.innerText)) {
+                        if (btn.getAttribute('aria-label') === 'Close' || (btn.querySelector('svg') && !btn.innerText)) {{
                             btn.click();
-                        }
-                    }
-                }
+                        }}
+                    }}
+                }}
                 
                 // 備用方法 1: 點擊深色遮罩 (Backdrop)，這在手機版通常等同於關閉側邊欄
                 // Streamlit >= 1.30 加入了不同的 Overlay class 或 testid
                 var overlay = doc.querySelector('div[data-testid="stSidebarOverlay"]');
-                if (overlay) {
+                if (overlay) {{
                     overlay.click();
-                }
+                }}
                 
                 // 備用方法 2: 模擬送出 ESC 按鍵事件
-                doc.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true}));
+                doc.dispatchEvent(new KeyboardEvent('keydown', {{key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true}}));
                 
-            }, 500); // 延長到 500ms 確保 React 已經完全渲染完按鈕狀態
+            }}, 500); // 延長到 500ms 確保 React 已經完全渲染完按鈕狀態
             </script>
             """,
             height=0, width=0
