@@ -96,6 +96,30 @@ def is_mobile_device():
     except:
         return False
 
+def auto_close_sidebar():
+    """在行動裝置上標記需要收合側邊欄，由主程式渲染時執行"""
+    if is_mobile_device():
+        st.session_state.should_close_sidebar = True
+
+def render_sidebar_closer():
+    """如果標記為真，則注入 JS 關閉側邊欄"""
+    if st.session_state.get('should_close_sidebar', False):
+        import streamlit.components.v1 as components
+        components.html(
+            """
+            <script>
+                var sidebar = window.parent.document.querySelector('[data-testid="stSidebar"]');
+                var closeButton = sidebar.querySelector('button[aria-label="Close"]');
+                if (closeButton) {
+                    closeButton.click();
+                }
+            </script>
+            """,
+            height=0,
+            width=0
+        )
+        st.session_state.should_close_sidebar = False
+
 # --- 常數設定 ---
 WATCHLIST_FILE = "watchlist.json"
 CACHE_DIR = "cache"
@@ -107,6 +131,7 @@ if not os.path.exists(CACHE_DIR):
 
 # --- 頁面設定 ---
 st.set_page_config(page_title="金融商品市場報明牌系統", layout="wide")
+render_sidebar_closer() # 執行掛起的側邊欄收合請求
 
 # --- 手機版、表格優化與穩定連線 CSS ---
 st.markdown("""
@@ -1023,12 +1048,14 @@ if 'active_page' not in st.session_state:
 
 
 if st.sidebar.button("📊 交易紀錄儀表板", use_container_width=True):
+    auto_close_sidebar()
     st.session_state.active_page = "simulation"
     st.rerun()
 
 # --- [NEW] 側邊欄：功能入口置頂 ---
 # 1. 掃描目前追蹤清單 (置頂且不隱藏)
 if st.sidebar.button("🚀 目前追蹤清單", use_container_width=True):
+    auto_close_sidebar()
     st.session_state.active_page = "market"
     scan_btn = True # 模擬按鈕按下
 else:
@@ -1040,16 +1067,35 @@ st.sidebar.markdown("###  大數據海選")
 with st.sidebar.container():
     st.markdown('<div class="desktop-only">', unsafe_allow_html=True)
     big_scan_tw_btn = st.sidebar.button("🇹🇼 台灣股票海選", use_container_width=True, 
-                                        type="primary" if st.session_state.get("scan_market") == "TW" else "secondary")
+                                        type="primary" if st.session_state.get("scan_market") == "TW" else "secondary",
+                                        help="掃描台股全市場 (約 1800+ 檔) 並過濾出優質標的")
     big_scan_us_btn = st.sidebar.button("🇺🇸 美國股票海選", use_container_width=True,
-                                        type="primary" if st.session_state.get("scan_market") == "US" else "secondary")
+                                        type="primary" if st.session_state.get("scan_market") == "US" else "secondary",
+                                        help="掃描美股熱門標的並過濾出優質標的")
     big_scan_crypto_btn = st.sidebar.button("🪙 加密貨幣海選", use_container_width=True,
-                                           type="primary" if st.session_state.get("scan_market") == "CRYPTO" else "secondary")
+                                           type="primary" if st.session_state.get("scan_market") == "CRYPTO" else "secondary",
+                                           help="掃描熱門加密貨幣並過濾出優質標的")
     st.markdown('</div>', unsafe_allow_html=True)
 
 # 確保按下海選按鈕時切換回主頁
-if big_scan_tw_btn or big_scan_us_btn or big_scan_crypto_btn:
-    st.session_state.active_page = "market"
+if big_scan_tw_btn:
+    auto_close_sidebar()
+    st.session_state.scan_market = "TW"
+    st.session_state.is_big_scan = True
+    st.session_state.trigger_daily_scan = True
+    st.rerun()
+if big_scan_us_btn:
+    auto_close_sidebar()
+    st.session_state.scan_market = "US"
+    st.session_state.is_big_scan = True
+    st.session_state.trigger_daily_scan = True
+    st.rerun()
+if big_scan_crypto_btn:
+    auto_close_sidebar()
+    st.session_state.scan_market = "CRYPTO"
+    st.session_state.is_big_scan = True
+    st.session_state.trigger_daily_scan = True
+    st.rerun()
 
 st.sidebar.divider()
 st.sidebar.markdown("### ⚙️ 策略與顯示設定")
@@ -1079,6 +1125,7 @@ with st.sidebar.form("add_stock_form", clear_on_submit=True):
         # 先進行代碼檢索，暫不觸發全域掃描
         resolved_code, suggestions = resolve_stock_code(new_input, api)
         if resolved_code:
+            auto_close_sidebar()
             if resolved_code not in st.session_state.watchlist:
                 st.session_state.watchlist.append(resolved_code)
                 save_watchlist(st.session_state.watchlist)
@@ -1103,6 +1150,7 @@ with st.sidebar.form("add_stock_form", clear_on_submit=True):
         st.sidebar.info(f"🤔 找不到「{orig_input}」，您指的可能是：")
         for name, code in suggestions:
             if st.sidebar.button(f"{name} ({code})", key=f"suggest_{code}"):
+                auto_close_sidebar()
                 if code not in st.session_state.watchlist:
                     st.session_state.watchlist.append(code)
                     save_watchlist(st.session_state.watchlist)
