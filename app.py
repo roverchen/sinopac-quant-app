@@ -227,27 +227,45 @@ st.markdown("""
 
             /* --- [NEW] 行動端快捷導航頂部 CSS --- */
             .mobile-nav-container {
-                display: flex !important;
-                flex-wrap: wrap !important;
-                justify-content: space-between !important;
-                gap: 8px !important;
+                width: 100% !important;
                 margin-bottom: 20px !important;
-                padding: 10px !important;
-                background: rgba(255, 255, 255, 0.03) !important;
+                padding: 10px 5px !important;
+                background: rgba(255, 255, 255, 0.05) !important;
                 border-radius: 12px !important;
                 border: 1px solid rgba(255, 255, 255, 0.1) !important;
                 backdrop-filter: blur(10px) !important;
             }
-            .nav-card {
-                flex: 1 1 18% !important;
-                min-width: 60px !important;
+            
+            /* 強制內層的 stHorizontalBlock (columns) 保持水平不換行 */
+            .mobile-nav-container div[data-testid="stHorizontalBlock"] {
+                display: flex !important;
+                flex-direction: row !important;
+                flex-wrap: nowrap !important;
+                align-items: flex-start !important;
+                justify-content: space-between !important;
+                width: 100% !important;
+            }
+
+            /* 每個按鈕容器佔 19% 左右 */
+            .mobile-nav-container [data-testid="column"] {
+                flex: 1 1 19% !important;
+                min-width: 0 !important;
+                width: 19% !important;
                 text-align: center !important;
             }
+            
             .nav-label {
-                font-size: 0.7rem !important;
+                font-size: 0.65rem !important;
                 margin-top: 4px !important;
                 color: #aaa !important;
                 display: block !important;
+                white-space: nowrap !important;
+            }
+            
+            .mobile-nav-container button {
+                padding: 4px !important;
+                height: 40px !important;
+                min-height: 40px !important;
             }
         }
 </style>
