@@ -1784,9 +1784,15 @@ elif st.session_state.get("last_watchlist") != current_watchlist_key:
 # big_scan_btn = st.button("🔍 執行「全市場」大選股", ...)
 
 # --- 掃描執行邏輯 ---
-if (big_scan_tw_btn or big_scan_us_btn or big_scan_crypto_btn or scan_btn or should_sync or st.session_state.get("force_rescan")):
+is_trigger_daily = st.session_state.get("trigger_daily_scan", False)
+
+if (big_scan_tw_btn or big_scan_us_btn or big_scan_crypto_btn or scan_btn or should_sync or 
+    st.session_state.get("force_rescan") or is_trigger_daily):
+    
     # 1. 決定市場與名單
-    if big_scan_tw_btn or big_scan_us_btn or big_scan_crypto_btn or st.session_state.get("trigger_daily_scan"):
+    if big_scan_tw_btn or big_scan_us_btn or big_scan_crypto_btn or is_trigger_daily:
+        # 重設每日觸發旗標，避免重複觸發
+        st.session_state.trigger_daily_scan = False
         if big_scan_tw_btn: m_type = 'TW'
         elif big_scan_us_btn: m_type = 'US'
         elif big_scan_crypto_btn: m_type = 'CRYPTO'
