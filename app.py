@@ -686,8 +686,8 @@ def check_and_exit_trades(user_id, current_prices):
             save_trading_log(log_id, logs)
 
 def display_simulation_dashboard(user_id):
-    """在 UI 中顯示模擬交易儀表板，區分『系統全域』與『個人手動』"""
-    st.markdown("## 📈 模擬交易儀表板 (Simulation Dashboard)")
+    """在 UI 中顯示交易紀錄儀表板，區分『系統全域』與『個人手動』"""
+    st.markdown("## 📈 交易紀錄儀表板 (Trading Record Dashboard)")
     
     tabs = st.tabs(["🤖 系統自動執行 (全域共享)", "👤 我的手動執行 (個人隔離)"])
     
@@ -933,7 +933,7 @@ if 'active_page' not in st.session_state:
     st.session_state.active_page = "market"
 
 
-if st.sidebar.button("📊 模擬交易儀表板", use_container_width=True):
+if st.sidebar.button("📊 交易紀錄儀表板", use_container_width=True):
     st.session_state.active_page = "simulation"
     st.rerun()
 
