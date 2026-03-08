@@ -904,15 +904,17 @@ if ("w" not in st.query_params) and "ls_init_attempted" not in st.session_state:
         </script>
     """, height=0)
 
-# 3. Persistence: Always write the current session watchlist back to localStorage
-# This component re-renders and executes JS whenever st.session_state.watchlist changes
+# 3. Persistence: Only write back to localStorage if the watchlist has actually changed
+# This prevents the JS iframe from stealing focus on every re-run (Character typed, etc.)
 if 'watchlist' in st.session_state:
-    wl_json = json.dumps(st.session_state.watchlist)
-    st.components.v1.html(f"""
-        <script>
-            localStorage.setItem('sinopac_watchlist', '{wl_json}');
-        </script>
-    """, height=0)
+    current_wl_json = json.dumps(st.session_state.watchlist)
+    if st.session_state.get('last_synced_wl') != current_wl_json:
+        st.session_state.last_synced_wl = current_wl_json
+        st.components.v1.html(f"""
+            <script>
+                localStorage.setItem('sinopac_watchlist', '{current_wl_json}');
+            </script>
+        """, height=0)
 
 if 'resolved_code' not in st.session_state:
     st.session_state.resolved_code = None
