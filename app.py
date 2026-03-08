@@ -1042,7 +1042,13 @@ if 'watchlist' in st.session_state:
         st.session_state.last_synced_wl = current_wl_json
         st.components.v1.html(f"""
             <script>
+                // 更新 LocalStorage
                 localStorage.setItem('sinopac_watchlist', '{current_wl_json}');
+                
+                // 同步更新網址參數，防止重新整理後從舊網址還原
+                const url = new URL(window.parent.location.href);
+                url.searchParams.set('w', btoa('{current_wl_json}'));
+                window.parent.history.replaceState(null, '', url.toString());
             </script>
         """, height=0)
 
