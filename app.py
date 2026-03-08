@@ -945,9 +945,6 @@ if show_sim:
     display_simulation_dashboard(user_id)
     st.divider()
 
-# 原有的側邊欄其它元素
-with st.sidebar.expander("🛠️ 進階定價/顯示設定"):
-
 # --- [NEW] 側邊欄：功能入口置頂 ---
 # 1. 掃描目前追蹤清單 (置頂且不隱藏)
 scan_btn = st.sidebar.button("🚀 掃描目前追蹤清單", use_container_width=True)
