@@ -179,9 +179,8 @@ st.title("📈 金融商品市場報明牌系統")
 
 # --- 手機版側邊欄提示 ---
 
-# --- 初始化 API ---
 @st.cache_resource
-def init_max_api():
+def init_max_api_v2():
     if MaxExchangeAPI:
         key = os.getenv("MAX_API_KEY")
         secret = os.getenv("MAX_API_SECRET")
@@ -233,7 +232,7 @@ def init_api():
 
 # 側邊欄：API 狀態
 api = init_api()
-max_api = init_max_api()
+max_api = init_max_api_v2()
 
 # 核心連線狀態檢查 (背景邏輯)
 is_mock = hasattr(api, 'list_accounts') and len(api.list_accounts()) == 0 and not hasattr(api, 'Contracts')
