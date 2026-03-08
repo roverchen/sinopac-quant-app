@@ -265,10 +265,10 @@ else:
 # --- 憑證交易與背景邏輯 ---
 
 # 確保合約在登入後只抓一次 (強制下載模式)
-if not st.session_state.get('contracts_fetched', False):
+if api is not None and not st.session_state.get('contracts_fetched', False):
     try:
         api.fetch_contracts()
-        if not hasattr(api.Contracts, 'Stocks') or len(dir(api.Contracts.Stocks)) < 3:
+        if hasattr(api, 'Contracts') and (not hasattr(api.Contracts, 'Stocks') or len(dir(api.Contracts.Stocks)) < 3):
             api.fetch_contracts(contract_download=True)
         st.session_state.contracts_fetched = True
     except:
@@ -515,8 +515,8 @@ def get_stock_name_map(_api):
     code_to_name.update(TW_STOCK_FALLBACK)
     code_to_name.update(CRYPTO_FALLBACK)
 
-    # 檢查是否為 MockApi (連線衝突模式)
-    is_mock = hasattr(_api, 'list_accounts') and len(_api.list_accounts()) == 0 and not hasattr(_api, 'Contracts')
+    # 檢查是否為 MockApi (連線衝突模式) 或 API 尚未初始化
+    is_mock = _api is None or (hasattr(_api, 'list_accounts') and len(_api.list_accounts()) == 0 and not hasattr(_api, 'Contracts'))
 
     # --- 強化合約同步 (關鍵修復：解決 82 檔問題) ---
     if not is_mock and hasattr(_api, "Contracts") and hasattr(_api.Contracts, "Stocks"):
@@ -1190,13 +1190,16 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
     except:
         # 如果對應表還沒好，嘗試現場補抓合約 (這在 API 被重置後很有用)
         try:
-            api.fetch_contracts()
-            code_to_name = get_stock_name_map(api)
+            if api is not None:
+                api.fetch_contracts()
+                code_to_name = get_stock_name_map(api)
+            else:
+                code_to_name = {}
         except:
             code_to_name = {}
     
     # 再次檢查合約狀態，若未完成則現場補抓 (增加至 60 秒 Timeout)
-    if not st.session_state.get('contracts_fetched', False):
+    if api is not None and not st.session_state.get('contracts_fetched', False):
         try:
             api.fetch_contracts(contracts_timeout=60000)
             st.session_state.contracts_fetched = True
