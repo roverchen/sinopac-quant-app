@@ -207,6 +207,15 @@ def init_api():
             return api
         
         api.login(api_key=api_key, secret_key=secret_key)
+        
+        # [NEW] 登入後立即抓取合約，設定較長的 Timeout (60秒) 確保穩定
+        # fetch_contracts 是使用多數功能的先決條件
+        try:
+            api.fetch_contracts(contracts_timeout=60000)
+        except Exception as ce:
+            print(f"Initial contract fetch timeout/error: {ce}")
+            # 即使失敗也先返回 api，後續邏輯會再嘗試
+            
     except Exception as e:
         error_msg = str(e)
         if "451" in error_msg or "Too Many Connections" in error_msg:
@@ -1069,10 +1078,13 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
         except:
             code_to_name = {}
     
-    # 再次檢查合約狀態，若未完成則現場補抓
+    # 再次檢查合約狀態，若未完成則現場補抓 (增加至 60 秒 Timeout)
     if not st.session_state.get('contracts_fetched', False):
-        api.fetch_contracts()
-        st.session_state.contracts_fetched = True
+        try:
+            api.fetch_contracts(contracts_timeout=60000)
+            st.session_state.contracts_fetched = True
+        except Exception as e:
+            st.warning(f"⚠️ 合約資料抓取超時，系統將嘗試使用快取或局部數據：{str(e)[:50]}")
     
     # 紀錄是否已經在迴圈中嘗試過重抓合約，避免每檔都重抓
     has_retried_contracts = False
