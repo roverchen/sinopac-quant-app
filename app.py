@@ -1013,7 +1013,11 @@ if 'watchlist' not in st.session_state:
         from streamlit_javascript import st_javascript
         # 嘗試讀取 localStorage
         ls_value = st_javascript("localStorage.getItem('sinopac_watchlist');")
-        if ls_value and ls_value != "null" and ls_value != 0:
+        
+        if ls_value == 0:
+            st.stop()  # st_javascript 尚在等待前端回傳，暫停渲染以防載入預設值
+            
+        if ls_value and ls_value != "null":
             try:
                 st.session_state.watchlist = json.loads(ls_value)
             except:
