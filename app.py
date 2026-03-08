@@ -932,8 +932,7 @@ if 'scan_market' not in st.session_state:
 if 'active_page' not in st.session_state:
     st.session_state.active_page = "market"
 
-# --- 側邊欄額外功能 ---
-st.sidebar.markdown("---")
+
 if st.sidebar.button("📊 模擬交易儀表板", use_container_width=True):
     st.session_state.active_page = "simulation"
     st.rerun()
