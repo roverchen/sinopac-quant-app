@@ -659,11 +659,11 @@ def record_trade(user_id, category, symbol, name, price, reason, is_system=False
     return True
 
 def check_and_exit_trades(user_id, current_prices):
-    """檢查個人與系統的未平倉位，若達標則出場。"""
-    # 同時檢查「系統全域」與「用戶個人」的紀錄
+    """檢查個人與系統的未平倉位，若達標則進行結算或提醒。"""
     for log_id in ["system", user_id]:
         logs = load_trading_log(log_id)
         changed = False
+        is_sys_log = (log_id == "system")
         
         for log in logs:
             if log['status'] == 'Open' and log['symbol'] in current_prices:
@@ -682,14 +682,23 @@ def check_and_exit_trades(user_id, current_prices):
                     exit_reason = "Take Profit (+20%)"
                     
                 if exit_triggered:
-                    log['status'] = 'Closed'
-                    log['sell_time'] = get_now().strftime("%Y-%m-%d %H:%M:%S")
-                    log['sell_price'] = float(curr_price)
-                    log['pnl'] = float((curr_price - buy_price))
-                    log['pnl_percent'] = float(pnl_pct * 100)
-                    log['exit_reason'] = exit_reason
-                    changed = True
-                    st.toast(f"📉 {'系統' if log_id == 'system' else '個人'}平倉：{log['symbol']}", icon="🏁")
+                    if is_sys_log:
+                        # 系統紀錄：全自動平倉
+                        log['status'] = 'Closed'
+                        log['sell_time'] = get_now().strftime("%Y-%m-%d %H:%M:%S")
+                        log['sell_price'] = float(curr_price)
+                        log['pnl'] = float((curr_price - buy_price))
+                        log['pnl_percent'] = float(pnl_pct * 100)
+                        log['exit_reason'] = exit_reason
+                        changed = True
+                        st.toast(f"🤖 系統官方平倉：{log['symbol']} ({exit_reason})", icon="🏁")
+                    else:
+                        # 個人紀錄：僅通知，不自動平倉 (標記一個臨時狀態供 UI 顯示確認按鈕)
+                        # 我們在 session_state 中暫存這個提醒，避免反覆彈出
+                        toast_key = f"exit_toast_{log['trade_id']}"
+                        if toast_key not in st.session_state:
+                            st.toast(f"⚠️ 個人部位達標：{log['symbol']} {log['name']} ({exit_reason})。請至儀表板確認平倉。", icon="🔔")
+                            st.session_state[toast_key] = True
                     
         if changed:
             save_trading_log(log_id, logs)
@@ -719,7 +728,52 @@ def display_simulation_dashboard(user_id):
             st.markdown(f"#### 📥 {title}目前持倉")
             open_trades = [l for l in logs if l['status'] == 'Open']
             if open_trades:
-                st.dataframe(pd.DataFrame(open_trades)[['symbol', 'name', 'buy_time', 'buy_price', 'reason']], use_container_width=True, hide_index=True)
+                # 為了計算即時損益，嘗試從 session_state.results 拿價格 (如果有)
+                curr_prices = {}
+                if "results" in st.session_state:
+                    curr_prices = dict(zip(st.session_state.results['代碼'], st.session_state.results['最新價格']))
+                
+                for trade in open_trades:
+                    cols = st.columns([2, 2, 2, 2, 2])
+                    cols[0].write(f"**{trade['symbol']}**\n{trade['name']}")
+                    cols[1].write(f"買入: {trade['buy_price']}\n{trade['buy_time'][:10]}")
+                    
+                    # 計算即時損益
+                    if trade['symbol'] in curr_prices:
+                        cp = curr_prices[trade['symbol']]
+                        p_pct = (cp - trade['buy_price']) / trade['buy_price'] * 100
+                        color = "red" if p_pct >= 0 else "green"
+                        cols[2].markdown(f"現價: {cp}\n<span style='color:{color}'>{p_pct:+.2f}%</span>", unsafe_allow_html=True)
+                        
+                        # 如果是個人手動，且達標，顯示確認按鈕
+                        if log_id == user_id:
+                            is_reached = (p_pct <= -5 or p_pct >= 20)
+                            if is_reached:
+                                if cols[4].button("🏁 確認平倉", key=f"exit_{trade['trade_id']}"):
+                                    trade['status'] = 'Closed'
+                                    trade['sell_time'] = get_now().strftime("%Y-%m-%d %H:%M:%S")
+                                    trade['sell_price'] = float(cp)
+                                    trade['pnl'] = float(cp - trade['buy_price'])
+                                    trade['pnl_percent'] = float(p_pct)
+                                    trade['exit_reason'] = "Manual Confirm (SL/TP Reached)"
+                                    save_trading_log(log_id, logs)
+                                    st.success(f"✅ {trade['symbol']} 已平倉紀錄！")
+                                    st.rerun()
+                            else:
+                                if cols[4].button("提前平倉", key=f"exit_early_{trade['trade_id']}", help="手動提前結束此交易"):
+                                    trade['status'] = 'Closed'
+                                    trade['sell_time'] = get_now().strftime("%Y-%m-%d %H:%M:%S")
+                                    trade['sell_price'] = float(cp)
+                                    trade['pnl'] = float(cp - trade['buy_price'])
+                                    trade['pnl_percent'] = float(p_pct)
+                                    trade['exit_reason'] = "Manual Early Exit"
+                                    save_trading_log(log_id, logs)
+                                    st.rerun()
+                    else:
+                        cols[2].write("等待報價...")
+                    
+                    cols[3].caption(trade['reason'])
+                    st.divider()
             else:
                 st.write("目前無持倉。")
                 
@@ -1552,6 +1606,19 @@ def plot_financial_charts(df, title):
 current_watchlist_key = ",".join(watchlist)
 should_sync = False
 
+# --- 每日定時自動任務 (Taipei 09:05) ---
+now_tp = get_now()
+if now_tp.hour >= 9 and now_tp.minute >= 5:
+    today_str = now_tp.strftime("%Y-%m-%d")
+    # 檢查今日系統紀錄是否已存在
+    sys_logs = load_trading_log("system")
+    has_today = any(l['buy_time'].startswith(today_str) for l in sys_logs)
+    
+    if not has_today and st.session_state.active_page == "market":
+        # 觸發自動海選
+        st.session_state.trigger_daily_scan = True
+        st.info("⏰ 偵測到開盤時間，正在為您自動執行本日官方海選...")
+
 # --- 啟動時優先從磁碟載入快取 (行動端穩定性關鍵) ---
 # 使用具備回退機制的 user_id，確保隨時獲得隔離的快取
 if "results" not in st.session_state:
@@ -1577,6 +1644,10 @@ if "results" not in st.session_state:
             # 只有在 watchlist 不為空時才執行
             if watchlist:
                 should_sync = True
+            # 或者是有自動觸發標記
+            if st.session_state.get("trigger_daily_scan"):
+                should_sync = True
+                st.session_state.trigger_daily_scan = False
 
 elif st.session_state.get("last_watchlist") != current_watchlist_key:
     # 只有當追蹤清單「內容改變」時，才自動觸發同步
@@ -1589,10 +1660,11 @@ elif st.session_state.get("last_watchlist") != current_watchlist_key:
 # --- 掃描執行邏輯 ---
 if (big_scan_tw_btn or big_scan_us_btn or big_scan_crypto_btn or scan_btn or should_sync or st.session_state.get("force_rescan")):
     # 1. 決定市場與名單
-    if big_scan_tw_btn or big_scan_us_btn or big_scan_crypto_btn:
+    if big_scan_tw_btn or big_scan_us_btn or big_scan_crypto_btn or st.session_state.get("trigger_daily_scan"):
         if big_scan_tw_btn: m_type = 'TW'
         elif big_scan_us_btn: m_type = 'US'
-        else: m_type = 'CRYPTO'
+        elif big_scan_crypto_btn: m_type = 'CRYPTO'
+        else: m_type = 'TW' # 預設自動掃描為台股
         
         m_label = {"TW": "台灣", "US": "美國", "CRYPTO": "加密貨幣"}[m_type]
         st.session_state.is_big_scan = True
