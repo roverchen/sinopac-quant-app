@@ -248,8 +248,8 @@ with st.sidebar.expander("🛠️ API 進階設定"):
         st.cache_resource.clear()
         st.toast("已清除快取，請重新整理網頁。")
         st.rerun()
-    if sj_key_demo:
-        st.caption(f"🔑 永豐金 Key: {sj_key_demo[:4]}...")
+    if sj_key:
+        st.caption(f"🔑 永豐金 Key: {sj_key[:4]}...")
 
 # 核心連線狀態檢查 (背景邏輯)
 is_mock = hasattr(api, 'list_accounts') and len(api.list_accounts()) == 0 and not hasattr(api, 'Contracts')
