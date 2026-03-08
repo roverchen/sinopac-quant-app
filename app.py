@@ -67,18 +67,19 @@ except ImportError:
     get_script_run_ctx = None
 
 def get_session_uid():
-    """取得當前 Session 的識別碼，優先取網址參數，次之取 Streamlit 內部 ID"""
-    u = st.query_params.get("u")
-    if u:
-        return u
-    # 回退到 Streamlit 內部 session_id (至少能保證同一個分頁重整時儘量穩定)
+    """取得當前 Session 的識別碼，優先選用穩定且唯一的 session_id"""
     try:
         if get_script_run_ctx:
             ctx = get_script_run_ctx()
             if ctx:
-                return f"sess_{ctx.session_id[:8]}"
+                return f"s_{ctx.session_id[:8]}"
     except:
         pass
+    
+    # 回退到網址參數 (如果有的話)
+    u = st.query_params.get("u")
+    if u:
+        return u
     return "shared"
 
 def is_mobile_device():
@@ -754,56 +755,28 @@ def get_mass_scan_list(api, market='TW'):
     # 排序：台股按數字、美股按字母
     return sorted(filtered)
 
-# --- 🛠️ 核心隔離邏輯：強制身分識別障礙 ---
-# 在取得 UID 之前，嚴禁執行後續任何資料載入與 UI 渲染
-if "u" not in st.query_params:
-    st.markdown("""
-        <div style='display: flex; flex-direction: column; align-items: center; justify-content: center; height: 70vh;'>
-            <h2 style='color: #00d4ff;'>🛡️ 正在建立安全連線...</h2>
-            <p style='color: #888;'>正在為您的瀏覽器準備專屬隔離環境，請稍候。</p>
-            <div class="loader"></div>
-        </div>
-        <style>
-            .loader {
-                border: 4px solid #333;
-                border-top: 4px solid #00d4ff;
-                border-radius: 50%;
-                width: 40px;
-                height: 40px;
-                animation: spin 1s linear infinite;
-            }
-            @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        </style>
-    """, unsafe_allow_html=True)
-    
-    # 執行 JS Bridge 取得或產生 UID
-    st.components.v1.html("""
-        <script>
-            let uid = localStorage.getItem('sinopac_uid');
-            if (!uid) {
-                uid = Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
-                localStorage.setItem('sinopac_uid', uid);
-            }
-            const stored = localStorage.getItem('sinopac_watchlist');
-            const url = new URL(window.parent.location.href);
-            
-            url.searchParams.set('u', uid);
-            if (stored && stored !== '[]' && stored !== 'null') {
-                url.searchParams.set('w', btoa(stored));
-            }
-            window.parent.location.href = url.toString();
-        </script>
-    """, height=0)
-    
-    st.stop() # 🛑 絕對禁止後續代碼運行，防止資料串連
-
-# Get current user ID for cache isolation (Robust Hybrid Approach)
+# --- 🛠️ 核心隔離邏輯：Native Session ID 優先 ---
+# 使用 Streamlit 內置的 session_id 作為隔離主鍵，不再需要跳轉等待
 user_id = get_session_uid()
 
+# 1. Watchlist 初始化：優先取網址參數 (由 JS Bridge 懶加載提供)，其次取 LocalStorage
 if 'watchlist' not in st.session_state:
     st.session_state.watchlist = load_watchlist()
 
-# 2. Persistence: Always write the current session watchlist back to localStorage
+# 2. LocalStorage / URL Bridge (非阻塞式背景處理)
+# 這裡僅負責把 python 的 watchlist 同步給 JS 儲存，不再強制跳轉 UID
+if ("w" not in st.query_params) and "ls_init_attempted" not in st.session_state:
+    st.session_state.ls_init_attempted = True
+    st.components.v1.html("""
+        <script>
+            const stored = localStorage.getItem('sinopac_watchlist');
+            const url = new URL(window.parent.location.href);
+            if (!url.searchParams.has('w') && stored && stored !== '[]' && stored !== 'null') {
+                url.searchParams.set('w', btoa(stored));
+                window.parent.location.href = url.toString();
+            }
+        </script>
+# 3. Persistence: Always write the current session watchlist back to localStorage
 # This component re-renders and executes JS whenever st.session_state.watchlist changes
 if 'watchlist' in st.session_state:
     wl_json = json.dumps(st.session_state.watchlist)
