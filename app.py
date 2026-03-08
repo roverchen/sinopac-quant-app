@@ -596,6 +596,131 @@ def save_watchlist(watchlist):
     """Now purely session-based. Persistence is handled by the JS Bridge in the UI."""
     st.session_state.watchlist = watchlist
 
+# --- 🧪 模擬交易系統核心邏輯 (Paper Trading) ---
+
+def get_trading_log_path(user_id):
+    return os.path.join(CACHE_DIR, f"trading_log_{user_id}.json")
+
+def load_trading_log(user_id):
+    path = get_trading_log_path(user_id)
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except:
+            return []
+    return []
+
+def save_trading_log(user_id, logs):
+    path = get_trading_log_path(user_id)
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(logs, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"Error saving trading log: {e}")
+
+def record_trade(user_id, category, symbol, name, price, reason):
+    """記錄一筆新的模擬交易"""
+    logs = load_trading_log(user_id)
+    
+    # 檢查是否已持有該標的 (避免重複買入同一筆)
+    for log in logs:
+        if log['symbol'] == symbol and log['status'] == 'Open':
+            return False
+            
+    new_trade = {
+        "trade_id": str(uuid.uuid4())[:8],
+        "category": category, # "Auto" or "Manual"
+        "symbol": symbol,
+        "name": name,
+        "buy_time": get_now().strftime("%Y-%m-%d %H:%M:%S"),
+        "buy_price": float(price),
+        "reason": reason,
+        "status": "Open",
+        "sell_time": None,
+        "sell_price": None,
+        "pnl": None,
+        "pnl_percent": None
+    }
+    logs.append(new_trade)
+    save_trading_log(user_id, logs)
+    return True
+
+def check_and_exit_trades(user_id, current_prices):
+    """
+    檢查所有未平倉位，若達到停損 (-5%) 或停利 (+20%) 則自動出場。
+    current_prices: dict { symbol: price }
+    """
+    logs = load_trading_log(user_id)
+    changed = False
+    
+    for log in logs:
+        if log['status'] == 'Open' and log['symbol'] in current_prices:
+            curr_price = current_prices[log['symbol']]
+            buy_price = log['buy_price']
+            pnl_pct = (curr_price - buy_price) / buy_price
+            
+            # 策略：停損 -5%, 停利 +20%
+            exit_triggered = False
+            exit_reason = ""
+            if pnl_pct <= -0.05:
+                exit_triggered = True
+                exit_reason = "Stop Loss (-5%)"
+            elif pnl_pct >= 0.20:
+                exit_triggered = True
+                exit_reason = "Take Profit (+20%)"
+                
+            if exit_triggered:
+                log['status'] = 'Closed'
+                log['sell_time'] = get_now().strftime("%Y-%m-%d %H:%M:%S")
+                log['sell_price'] = float(curr_price)
+                log['pnl'] = float((curr_price - buy_price))
+                log['pnl_percent'] = float(pnl_pct * 100)
+                log['exit_reason'] = exit_reason
+                changed = True
+                st.toast(f"📉 模擬平倉：{log['symbol']} {exit_reason}", icon="🏁")
+                
+    if changed:
+        save_trading_log(user_id, logs)
+
+def display_simulation_dashboard(user_id):
+    """在 UI 中顯示模擬交易儀表板"""
+    st.markdown("## 📈 模擬交易儀表板 (Simulation Dashboard)")
+    logs = load_trading_log(user_id)
+    
+    if not logs:
+        st.info("📊 目前尚無模擬交易紀錄。執行「全市場掃描」或點擊「🧪 模擬下單」來開始！")
+        return
+
+    # 1. 績效總結
+    closed_trades = [l for l in logs if l['status'] == 'Closed']
+    total_pnl = sum(l['pnl'] for l in closed_trades) if closed_trades else 0
+    win_rate = (len([l for l in closed_trades if l['pnl'] > 0]) / len(closed_trades) * 100) if closed_trades else 0
+    
+    c1, c2, c3 = st.columns(3)
+    c1.metric("實現獲利 (PnL)", f"{total_pnl:,.1f}", delta=f"{total_pnl:,.1f}")
+    c2.metric("勝率 (Win Rate)", f"{win_rate:.1f}%")
+    c3.metric("完成交易總數", len(closed_trades))
+    
+    # 2. 目前持倉
+    st.markdown("### 📥 目前持倉 (Open Positions)")
+    open_trades = [l for l in logs if l['status'] == 'Open']
+    if open_trades:
+        df_open = pd.DataFrame(open_trades)[['trade_id', 'category', 'symbol', 'name', 'buy_time', 'buy_price', 'reason']]
+        st.dataframe(df_open, use_container_width=True, hide_index=True)
+    else:
+        st.write("目前無持倉。")
+        
+    # 3. 歷史紀錄
+    st.markdown("### 📜 歷史紀錄 (Trade History)")
+    if closed_trades:
+        df_closed = pd.DataFrame(closed_trades)[['trade_id', 'symbol', 'name', 'buy_price', 'sell_price', 'pnl_percent', 'exit_reason', 'sell_time', 'category']]
+        # 格式化百分比顯示
+        df_closed['pnl_percent'] = df_closed['pnl_percent'].apply(lambda x: f"{x:+.2f}%")
+        st.dataframe(df_closed.sort_values('sell_time', ascending=False), use_container_width=True, hide_index=True)
+    
+    st.divider()
+
 @st.cache_data(ttl=86400)
 def check_revenue_momentum(code):
     """
@@ -804,11 +929,22 @@ if 'is_big_scan' not in st.session_state:
 if 'scan_market' not in st.session_state:
     st.session_state.scan_market = None
 
+# --- 側邊欄額外功能 ---
+st.sidebar.markdown("---")
+show_sim = st.sidebar.checkbox("📊 顯示模擬交易儀表板", value=False)
+
+if show_sim:
+    display_simulation_dashboard(user_id)
+    st.divider()
+
+# 原有的側邊欄其它元素
+with st.sidebar.expander("🛠️ 進階定價/顯示設定"):
+
 # --- [NEW] 側邊欄：功能入口置頂 ---
 # 1. 掃描目前追蹤清單 (置頂且不隱藏)
 scan_btn = st.sidebar.button("🚀 掃描目前追蹤清單", use_container_width=True)
 
-st.sidebar.markdown("### � 大數據海選")
+st.sidebar.markdown("###  大數據海選")
 
 # 2. 台灣/美國股票海選 (使用 .desktop-only 包裹)
 with st.sidebar.container():
@@ -1465,6 +1601,17 @@ if (big_scan_tw_btn or big_scan_us_btn or big_scan_crypto_btn or scan_btn or sho
             # 存入磁碟快取
             save_results_cache(results, is_big_scan=st.session_state.is_big_scan, market=st.session_state.scan_market, user_id=user_id)
             st.toast("✅ 數據同步完成！", icon="📉")
+            
+            # --- 🧪 模擬交易：自動跟單 (第一類) ---
+            if st.session_state.is_big_scan:
+                top_stock = results.iloc[0]
+                reason = f"系統自動海選第一名 (綜合評分: {top_stock['綜合評分']:.1f})"
+                if record_trade(user_id, "Auto", top_stock['代碼'], top_stock['名稱'], top_stock['最新價格'], reason):
+                    st.toast(f"🤖 系統自動買入：{top_stock['代碼']}", icon="📥")
+            
+            # --- 🧪 模擬交易：檢查退場機制 ---
+            current_prices = dict(zip(results['代碼'], results['最新價格']))
+            check_and_exit_trades(user_id, current_prices)
         else:
             if st.session_state.is_big_scan:
                 st.error("❌ 全市場掃描未成功取得數據。")
@@ -1594,9 +1741,13 @@ if "results" in st.session_state:
         c1, c2 = st.columns(2)
         # 按鈕 1: 模擬下單 (永遠可用)
         if c1.button("🧪 執行模擬下單", use_container_width=True):
-            st.toast(f"🚀 已錄入 {row['代碼']} 模擬委託！", icon="✅")
-            st.session_state.last_order = f"{get_now().strftime('%H:%M:%S')} - 已模擬買入 {row['代碼']} {qty}股"
-            st.rerun()
+            reason = f"用戶手動選擇 ({row['操作建議']})"
+            if record_trade(user_id, "Manual", row['代碼'], row['名稱'], buy_price, reason):
+                st.toast(f"🚀 已錄入 {row['代碼']} 模擬委託！", icon="✅")
+                st.session_state.last_order = f"{get_now().strftime('%H:%M:%S')} - 已模擬買入 {row['代碼']}"
+                st.rerun()
+            else:
+                st.warning(f"⚠️ 您已經持有 {row['代碼']} 的未平倉位。")
             
         # 按鈕 2: 實盤下單
         is_crypto = "-USD" in str(row['代碼'])
