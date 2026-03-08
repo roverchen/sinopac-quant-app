@@ -252,7 +252,10 @@ with st.sidebar.expander("🛠️ API 進階設定"):
         st.caption(f"🔑 永豐金 Key: {sj_key[:4]}...")
 
 # 核心連線狀態檢查 (背景邏輯)
-is_mock = hasattr(api, 'list_accounts') and len(api.list_accounts()) == 0 and not hasattr(api, 'Contracts')
+# 如果 api 為 None，則視為未連線 (is_mock=True 以避免後續調用噴錯)
+is_mock = True
+if api is not None:
+    is_mock = hasattr(api, 'list_accounts') and len(api.list_accounts()) == 0 and not hasattr(api, 'Contracts')
 
 if max_api:
     bal = max_api.get_account_balance()
@@ -1142,7 +1145,9 @@ else:
 ca_active = False
 if person_id and ca_passwd and ca_exists:
     try:
-        if not is_mock:
+        if api is None:
+            st.sidebar.warning("⚠️ 請先在 Secrets 設定永豐 API 金鑰以連線")
+        elif not is_mock:
             api.activate_ca(ca_path=ca_path, ca_passwd=ca_passwd, person_id=person_id)
             st.sidebar.success("🔑 憑證已啟動 (可執行實盤)")
             ca_active = True
