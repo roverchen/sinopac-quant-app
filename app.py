@@ -1117,42 +1117,56 @@ with st.sidebar.form("add_stock_form", clear_on_submit=True):
                     st.rerun()
 
 # 4. 交易憑證設定 (移至側邊欄最下方)
-st.sidebar.divider()
-st.sidebar.subheader("🔒 交易憑證設定")
-person_id = st.sidebar.text_input("身分證字號", value=st.secrets.get("PERSON_ID", ""), type="default", help="啟動憑證所需")
-ca_passwd = st.sidebar.text_input("憑證密碼", value=st.secrets.get("CA_PASSWD", ""), type="password", help="Sinopac.pfx 的保護密碼")
-
-# [NEW] 支援動態上傳憑證
-uploaded_pfx = st.sidebar.file_uploader("上傳憑證 (.pfx)", type=["pfx"], help="若沒上傳，系統會嘗試讀取伺服器預設憑證")
-
-# 決定憑證路徑
+# 4. 交易憑證設定
 ca_path = os.path.join(os.path.dirname(__file__), "Sinopac.pfx")
 ca_exists = os.path.exists(ca_path)
 
-if uploaded_pfx is not None:
-    # 如果使用者有上傳，則存為暫存檔供 API 使用
-    import tempfile
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".pfx") as tmp_file:
-        tmp_file.write(uploaded_pfx.getbuffer())
-        ca_path = tmp_file.name
-        ca_exists = True
-    st.sidebar.caption("✅ 已使用上傳憑證")
-elif ca_exists:
-    st.sidebar.caption("📁 已偵測到伺服器預設憑證")
-else:
-    st.sidebar.error("❌ 找不到憑證檔案 (請上傳或放置 Sinopac.pfx)")
+# 優先讀取 Secrets
+person_id = st.secrets.get("PERSON_ID", "")
+ca_passwd = st.secrets.get("CA_PASSWD", "")
 
+# 啟動邏輯 (背景先試跑一次)
 ca_active = False
-if person_id and ca_passwd and ca_exists:
+if person_id and ca_passwd and ca_exists and not is_mock:
     try:
-        if api is None:
-            st.sidebar.warning("⚠️ 請先在 Secrets 設定永豐 API 金鑰以連線")
-        elif not is_mock:
+        if api:
             api.activate_ca(ca_path=ca_path, ca_passwd=ca_passwd, person_id=person_id)
-            st.sidebar.success("🔑 憑證已啟動 (可執行實盤)")
+            ca_active = True
+    except:
+        pass
+
+# UI 顯示邏輯：如果憑證已成功啟動且是預設檔案，則不顯示設定區塊
+if not (ca_active and ca_exists):
+    st.sidebar.divider()
+    st.sidebar.subheader("🔒 交易憑證設定")
+    person_id = st.sidebar.text_input("身分證字號", value=person_id, type="default", help="啟動憑證所需")
+    ca_passwd = st.sidebar.text_input("憑證密碼", value=ca_passwd, type="password", help="Sinopac.pfx 的保護密碼")
+    
+    uploaded_pfx = st.sidebar.file_uploader("上傳憑證 (.pfx)", type=["pfx"], help="若沒上傳，系統會嘗試讀取伺服器預設憑證")
+    if uploaded_pfx is not None:
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pfx") as tmp_file:
+            tmp_file.write(uploaded_pfx.getbuffer())
+            ca_path = tmp_file.name
+            ca_exists = True
+        st.sidebar.caption("✅ 已使用上傳憑證")
+    elif ca_exists:
+        st.sidebar.caption("📁 已偵測到伺服器預設憑證")
+    else:
+        st.sidebar.error("❌ 找不到憑證檔案 (請上傳或放置 Sinopac.pfx)")
+
+# 最終顯示成功狀態 (不管 UI 是否隱藏，成功都顯示綠勾)
+if ca_active:
+    st.sidebar.success("🔑 憑證已啟動 (可預約/執行實盤)")
+elif person_id and ca_passwd and ca_exists:
+    # 如果前面試跑失敗，這裡顯示報錯
+    try:
+        if api:
+            api.activate_ca(ca_path=ca_path, ca_passwd=ca_passwd, person_id=person_id)
+            st.sidebar.success("🔑 憑證已啟動 (可預約/執行實盤)")
             ca_active = True
         else:
-            st.sidebar.warning("⚠️ 目前為模擬/唯讀模式")
+            st.sidebar.warning("⚠️ 永豐 API 未連線，無法啟動憑證")
     except Exception as e:
         error_msg = str(e)
         if "invalid password" in error_msg.lower():
