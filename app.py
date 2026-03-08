@@ -253,16 +253,11 @@ is_mock = hasattr(api, 'list_accounts') and len(api.list_accounts()) == 0 and no
 
 if max_api:
     bal = max_api.get_account_balance()
-    st.session_state.max_balance = bal # [NEW] 存入 session_state 供下單視窗檢查
-    if 'error' not in bal:
-        twd = bal.get('twd', {}).get('balance', 0)
-        btc = bal.get('btc', {}).get('balance', 0)
-        eth = bal.get('eth', {}).get('balance', 0)
-        st.sidebar.caption(f"💰 餘額: {twd:,.0f} TWD | {btc:.4f} BTC | {eth:.4f} ETH")
-    else:
-        # 特別處理 404
+    st.session_state.max_balance = bal # 存入 session_state 供下單視窗檢查
+    if 'error' in bal:
+        # 僅在出錯時顯示提示，正常則隱藏餘額
         if "404" in str(bal['error']):
-            st.sidebar.caption(f"⚠️ MAX 連線無效 (404)。請檢查金鑰是否在 MAX 後台已被刪除或失效。")
+            st.sidebar.caption(f"⚠️ MAX 連線無效 (404)。請檢查金鑰。")
         else:
             st.sidebar.caption(f"⚠️ MAX 連線錯誤: {bal.get('error', 'Unknown')}")
 else:
