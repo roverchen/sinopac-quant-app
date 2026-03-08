@@ -950,7 +950,7 @@ if st.sidebar.button("📊 交易紀錄儀表板", use_container_width=True):
 
 # --- [NEW] 側邊欄：功能入口置頂 ---
 # 1. 掃描目前追蹤清單 (置頂且不隱藏)
-if st.sidebar.button("🚀 掃描目前追蹤清單", use_container_width=True):
+if st.sidebar.button("🚀 目前追蹤清單", use_container_width=True):
     st.session_state.active_page = "market"
     scan_btn = True # 模擬按鈕按下
 else:
@@ -1679,7 +1679,7 @@ if "results" in st.session_state:
         top_pick = results.iloc[0]
         st.success(f"🛡️ 今日最值得佈局：**{top_pick['代碼']} {top_pick['名稱']}** ({top_pick['操作建議']})")
     else:
-        st.warning("⚠️ 目前清單中尚無有效的分析結果，請點擊「🚀 掃描目前追蹤清單」。")
+        st.warning("⚠️ 目前清單中尚無有效的分析結果，請點擊「🚀 目前追蹤清單」。")
     
     # --- 指標說明 (動態調整) ---
     w_def = int(st.session_state.defense_weight * 100)
@@ -1976,4 +1976,4 @@ if "results" in st.session_state:
     # 互動式圖表已移至「下單確認」對話框內，此處保持簡潔
     pass
 else:
-    st.info("🔄 正在初始化市場數據，或請點擊左側「🚀 掃描目前追蹤清單」。")
+    st.info("🔄 正在初始化市場數據，或請點擊左側「🚀 目前追蹤清單」。")
