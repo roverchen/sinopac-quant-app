@@ -196,14 +196,12 @@ def init_max_api_v4():
 @st.cache_resource
 def init_api():
     api = sj.Shioaji()
-    # 優先從 st.secrets 讀取，若無則使用預設硬編碼內容
-    try:
-        api_key = st.secrets.get("API_KEY", "BPHcXm1CfdU8jw626rRVx3MXB9aqJ3HKaaovHGHkzYTn")
-        secret_key = st.secrets.get("SECRET_KEY", "AJvvVZqxQCaXDwPs5CE6jYhkU5pujBm7ujhFZNbfoM7a")
-    except Exception:
-        # 當找不到 secrets.toml 時，Streamlit 可能會拋出異常，此時回退到硬編碼
-        api_key = "BPHcXm1CfdU8jw626rRVx3MXB9aqJ3HKaaovHGHkzYTn"
-        secret_key = "AJvvVZqxQCaXDwPs5CE6jYhkU5pujBm7ujhFZNbfoM7a"
+    # 優先從 st.secrets 讀取
+    api_key = st.secrets.get("API_KEY", "")
+    secret_key = st.secrets.get("SECRET_KEY", "")
+    
+    # [NEW] 如果 secrets 為空，且 session_state 有手動輸入的 key，則使用手動的 (此處可擴充為 UI 輸入)
+    # 目前先確保不使用硬編碼覆蓋使用者想更換的 key
     
     try:
         # 避免重複連線，如果已經有 session 可以列出帳號代表已連線
@@ -237,16 +235,24 @@ def init_api():
 
 # 側邊欄：API 狀態
 api = init_api()
+sj_key_demo = st.secrets.get("API_KEY", "")
+
 # 初始化 API 狀態
-# 這裡特別印出偵測到的狀態供除錯，但不顯露完整金鑰
 m_api_status = "未設定"
 key_demo = os.getenv("MAX_API_KEY")
-if key_demo:
-    m_api_status = f"已偵測 (開頭: {key_demo[:4]}...)"
 
 max_api = init_max_api_v4()
 v_tag = f" v{max_api.VERSION}" if max_api else ""
 m_api_status = f"已偵測{v_tag} (開頭: {key_demo[:4]}...)" if key_demo else "待設定"
+
+# [NEW] 增加「重置快取」按鈕以解決 Secrets 無法更新問題
+with st.sidebar.expander("🛠️ API 進階設定"):
+    if st.button("🔄 重置 API 快取並重新登入", use_container_width=True):
+        st.cache_resource.clear()
+        st.toast("已清除快取，請重新整理網頁。")
+        st.rerun()
+    if sj_key_demo:
+        st.caption(f"🔑 永豐金 Key: {sj_key_demo[:4]}...")
 
 # 核心連線狀態檢查 (背景邏輯)
 is_mock = hasattr(api, 'list_accounts') and len(api.list_accounts()) == 0 and not hasattr(api, 'Contracts')
