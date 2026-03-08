@@ -1513,17 +1513,17 @@ if "results" in st.session_state:
     atr_mult = "3.0倍" if is_crypto else "2.5倍"
     pullback_target = "MA20/MA50" if is_crypto else "MA20"
     
-    with st.expander(f"💡 投資策略與操作建議 ({w_def}% 價值防禦 + {w_gro}% 強勢回測)"):
+    with st.expander(f"💡 Strategy & Tips ({w_def}% Value Defense + {w_gro}% Growth Momentum)"):
         st.markdown(f"""
-        本系統目前採用 **「{w_def}/{w_gro} 權重動態配置」** 策略，並透過「營收趨勢」與「成交量能 (Volume)」計算精確點位：
-        - **🛡️ 價值防禦 ({w_def}% 資金權重)**：
-            - **適用**：長線有撐的穩健標的。標註 `⚡` 代表具備 **「量增 + 站回5日線」** 的動能觸發訊號。
-            - **操作**：建議在 **靠近{def_ma}** 且具備動能時分批佈局，目標採 **1:2 風報比** 或固定 +20%，停損設於前波低點 (-5%)。
-        - **📈 強勢回測 ({w_gro}% 資金權重)**：
-            - **適用**：多頭趨勢成長股/主流幣。{ "⚠️ **幣圈流動性過濾**：當 24h 成交量萎縮時將自動扣分。" if is_crypto else "" }
-            - **操作**：回測 **{pullback_target}** 支撐時買進，停損設為 **{atr_mult} ATR**。
-            - **目標**：採 **1:3 風報比**；若成交量異常爆發，目標自動上修至 **1:4**。
-        - **MACD 狀態**：`🎯強勢金叉` (0軸上) 代表噴發力較強；`🩹弱勢金叉` (0軸下) 視為低檔技術性反彈。
+        This system uses a **[{w_def}/{w_gro} Dynamic Weight]** strategy, using Revenue Trend and Volume for precise entry:
+        - **🛡️ Value Defense ({w_def}%)**:
+            - **Target**: Stable stocks with long-term support. `⚡` indicates **[Volume Up + Back to MA5]** momentum trigger.
+            - **Action**: Buy near **{def_ma}** with momentum. Target **1:2 RR** or +20%. Stop at recent low (-5%).
+        - **📈 Growth Momentum ({w_gro}%)**:
+            - **Target**: Trending growth stocks/coins. { "⚠️ **Liquidity Filter**: Scores reduced when 24h volume drops." if is_crypto else "" }
+            - **Action**: Buy on **{pullback_target}** support. Stop at **{atr_mult} ATR**.
+            - **Goal**: **1:3 RR**. With volume breakout, target moves to **1:4**.
+        - **MACD State**: `🎯Strong` (above 0) = High explosive power; `🩹Weak` (below 0) = oversold bounce.
         """)
 
     # --- 自定義列表 ---
