@@ -776,6 +776,8 @@ if ("w" not in st.query_params) and "ls_init_attempted" not in st.session_state:
                 window.parent.location.href = url.toString();
             }
         </script>
+    """, height=0)
+
 # 3. Persistence: Always write the current session watchlist back to localStorage
 # This component re-renders and executes JS whenever st.session_state.watchlist changes
 if 'watchlist' in st.session_state:
