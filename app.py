@@ -1301,7 +1301,7 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
     return results_df
 
 def rescore_results(results_df, defense_weight):
-    """僅重新計算分數，不重新抓取資料 (直接使用 DataFrame 內的預分析資料，極速回應)"""
+    """Re-calculating scores without re-fetching data (using pre-analyzed data in DataFrame)."""
     if results_df.empty: return results_df
     
     # --- [修正] 結構檢查：防止快取版本不相容導致 KeyError ---
