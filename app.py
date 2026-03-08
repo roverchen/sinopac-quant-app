@@ -242,14 +242,7 @@ max_api = init_max_api_v5(max_key, max_secret)
 v_tag = f" v{max_api.VERSION}" if max_api else ""
 m_api_status = f"已偵測{v_tag} (開頭: {max_key[:4]}...)" if max_key else "待設定"
 
-# [NEW] 增加「重置快取」按鈕以解決 Secrets 無法更新問題
-with st.sidebar.expander("🛠️ API 進階設定"):
-    if st.button("🔄 重置 API 快取並重新登入", use_container_width=True):
-        st.cache_resource.clear()
-        st.toast("已清除快取，請重新整理網頁。")
-        st.rerun()
-    if sj_key:
-        st.caption(f"🔑 永豐金 Key: {sj_key[:4]}...")
+# [REMOVED] 依要求移除 API 進階設定區塊
 
 # 核心連線狀態檢查 (背景邏輯)
 # 如果 api 為 None，則視為未連線 (is_mock=True 以避免後續調用噴錯)
@@ -1135,8 +1128,8 @@ if person_id and ca_passwd and ca_exists and not is_mock:
     except:
         pass
 
-# UI 顯示邏輯：如果憑證已成功啟動且是預設檔案，則不顯示設定區塊
-if not (ca_active and ca_exists):
+# UI 顯示邏輯：只要偵測到預設檔案且不是手動上傳模式，就隱藏輸入框
+if not ca_exists:
     st.sidebar.divider()
     st.sidebar.subheader("🔒 交易憑證設定")
     person_id = st.sidebar.text_input("身分證字號", value=person_id, type="default", help="啟動憑證所需")
@@ -1150,8 +1143,6 @@ if not (ca_active and ca_exists):
             ca_path = tmp_file.name
             ca_exists = True
         st.sidebar.caption("✅ 已使用上傳憑證")
-    elif ca_exists:
-        st.sidebar.caption("📁 已偵測到伺服器預設憑證")
     else:
         st.sidebar.error("❌ 找不到憑證檔案 (請上傳或放置 Sinopac.pfx)")
 
