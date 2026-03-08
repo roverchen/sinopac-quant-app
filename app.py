@@ -1116,14 +1116,25 @@ st.sidebar.subheader("🔒 交易憑證設定")
 person_id = st.sidebar.text_input("身分證字號", value=st.secrets.get("PERSON_ID", ""), type="default", help="啟動憑證所需")
 ca_passwd = st.sidebar.text_input("憑證密碼", value=st.secrets.get("CA_PASSWD", ""), type="password", help="Sinopac.pfx 的保護密碼")
 
-# 使用絕對路徑確保能抓到憑證
+# [NEW] 支援動態上傳憑證
+uploaded_pfx = st.sidebar.file_uploader("上傳憑證 (.pfx)", type=["pfx"], help="若沒上傳，系統會嘗試讀取伺服器預設憑證")
+
+# 決定憑證路徑
 ca_path = os.path.join(os.path.dirname(__file__), "Sinopac.pfx")
 ca_exists = os.path.exists(ca_path)
 
-if not ca_exists:
-    st.sidebar.error("❌ 找不到憑證檔案 (Sinopac.pfx)\n請確認檔案已放在程式同目錄下。")
+if uploaded_pfx is not None:
+    # 如果使用者有上傳，則存為暫存檔供 API 使用
+    import tempfile
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pfx") as tmp_file:
+        tmp_file.write(uploaded_pfx.getbuffer())
+        ca_path = tmp_file.name
+        ca_exists = True
+    st.sidebar.caption("✅ 已使用上傳憑證")
+elif ca_exists:
+    st.sidebar.caption("📁 已偵測到伺服器預設憑證")
 else:
-    st.sidebar.caption("📁 憑證檔案: 偵測到")
+    st.sidebar.error("❌ 找不到憑證檔案 (請上傳或放置 Sinopac.pfx)")
 
 ca_active = False
 if person_id and ca_passwd and ca_exists:
