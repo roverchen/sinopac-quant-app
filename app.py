@@ -57,6 +57,9 @@ import pickle
 
 # 導入外掛 API
 try:
+    import importlib
+    import max_api
+    importlib.reload(max_api) # 強制重新載入以套用 get_markets 改動
     from max_api import MaxExchangeAPI
 except ImportError:
     MaxExchangeAPI = None
