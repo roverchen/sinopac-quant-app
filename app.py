@@ -550,8 +550,11 @@ def get_stock_name_map(_api):
             with st.spinner("📦 正在深度同步市場數據 (預計 15 秒)..."):
                 try:
                     _api.fetch_contracts(contract_download=True)
-                except:
-                    _api.fetch_contracts()
+                except Exception as e:
+                    try:
+                        _api.fetch_contracts()
+                    except Exception as e2:
+                        print(f"Fetch contracts failed in get_stock_name_map: {e2}")
     
     if not is_mock and hasattr(_api, "Contracts") and hasattr(_api.Contracts, "Stocks"):
         stocks = _api.Contracts.Stocks
