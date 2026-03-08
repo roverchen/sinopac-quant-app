@@ -1257,7 +1257,11 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
             api.fetch_contracts(contracts_timeout=60000)
             st.session_state.contracts_fetched = True
         except Exception as e:
-            st.warning(f"⚠️ 合約資料抓取超時，系統將嘗試使用快取或局部數據：{str(e)[:50]}")
+            # 如果已有足夠快取，則不打擾用戶；否則僅顯示輕量 Toast
+            if len(code_to_name) > 1000:
+                print(f"Background contract sync timeout. Fallback cache is healthy ({len(code_to_name)} items).")
+            else:
+                st.toast(f"⚠️ 合約即時同步超時，已切換至快取模式。")
     
     # 紀錄是否已經在迴圈中嘗試過重抓合約，避免每檔都重抓
     has_retried_contracts = False
