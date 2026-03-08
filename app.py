@@ -1513,24 +1513,24 @@ if "results" in st.session_state:
     atr_mult = "3.0倍" if is_crypto else "2.5倍"
     pullback_target = "MA20/MA50" if is_crypto else "MA20"
     
-    with st.expander(f"💡 Strategy & Tips ({w_def}% Value Defense + {w_gro}% Growth Momentum)"):
+    with st.expander(f"Strategy and Tips ({w_def}% Value Defense + {w_gro}% Growth Momentum)"):
         st.markdown(f"""
         This system uses a **[{w_def}/{w_gro} Dynamic Weight]** strategy, using Revenue Trend and Volume for precise entry:
-        - **🛡️ Value Defense ({w_def}%)**:
-            - **Target**: Stable stocks with long-term support. `⚡` indicates **[Volume Up + Back to MA5]** momentum trigger.
+        - **Value Defense ({w_def}%)**:
+            - **Target**: Stable stocks with long-term support. [M] indicates [Volume Up + Back to MA5] momentum trigger.
             - **Action**: Buy near **{def_ma}** with momentum. Target **1:2 RR** or +20%. Stop at recent low (-5%).
-        - **📈 Growth Momentum ({w_gro}%)**:
-            - **Target**: Trending growth stocks/coins. { "⚠️ **Liquidity Filter**: Scores reduced when 24h volume drops." if is_crypto else "" }
+        - **Growth Momentum ({w_gro}%)**:
+            - **Target**: Trending growth stocks/coins. { "!! Liquidity Filter: Scores reduced when 24h volume drops." if is_crypto else "" }
             - **Action**: Buy on **{pullback_target}** support. Stop at **{atr_mult} ATR**.
             - **Goal**: **1:3 RR**. With volume breakout, target moves to **1:4**.
-        - **MACD State**: `🎯Strong` (above 0) = High explosive power; `🩹Weak` (below 0) = oversold bounce.
+        - **MACD State**: [Strong] (above 0) = High explosive power; [Weak] (below 0) = oversold bounce.
         """)
 
     # --- 自定義列表 ---
     is_big = st.session_state.get("is_big_scan", False)
     scan_market = st.session_state.get("scan_market", "TW")
-    market_label = {"TW": "台灣", "US": "美國", "CRYPTO": "加密貨幣"}.get(scan_market, "未知")
-    list_title = f"🏆 {market_label}全市場大選股排行榜" if is_big else "📊 目前追蹤清單"
+    market_label = {"TW": "TW", "US": "US", "CRYPTO": "Crypto"}.get(scan_market, "Unknown")
+    list_title = f"{market_label} Market Ranking" if is_big else "My Watchlist"
     st.markdown(f"### {list_title}")
     
     # 分頁計算
