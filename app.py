@@ -187,10 +187,20 @@ st.title("📈 金融商品市場報明牌系統")
 @st.cache_resource
 def init_max_api_v2():
     if MaxExchangeAPI:
+        # --- 除錯資訊 ---
+        # st.sidebar.write(f"DEBUG: MaxExchangeAPI methods: {[m for m in dir(MaxExchangeAPI) if not m.startswith('_')]}") 
+        # ---
         key = os.getenv("MAX_API_KEY")
         secret = os.getenv("MAX_API_SECRET")
-        if key and secret:
-            return MaxExchangeAPI(key, secret)
+        if key and secret and len(key) > 10:
+            api_obj = MaxExchangeAPI(key, secret)
+            # 強制檢查是否有 get_markets
+            if not hasattr(api_obj, "get_markets"):
+                print("!!! CRITICAL: MaxExchangeAPI instance is missing get_markets !!!")
+                # 備援：動態注入 (防止 app 崩潰)
+                from max_api import MaxExchangeAPI as RefinedAPI
+                return RefinedAPI(key, secret)
+            return api_obj
     return None
 
 @st.cache_resource
