@@ -1988,13 +1988,13 @@ if "results" in st.session_state:
                             st.error("❌ 找不到該標的合約，無法下單。")
                         else:
                             from shioaji import Order
-                            from shioaji.constant import Action, PriceType, OrderType
+                            from shioaji.constant import Action, StockPriceType, OrderType
                             
                             order = Order(
                                 price=buy_price,
                                 quantity=qty,
                                 action=Action.Buy,
-                                price_type=PriceType.LMT, # 限價
+                                price_type=StockPriceType.LMT, # 限價
                                 order_type=OrderType.ROD, # 當日有效
                                 account=api.list_accounts()[0] # 預設取第一個帳號
                             )
