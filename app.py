@@ -1668,24 +1668,24 @@ if "results" in st.session_state:
     atr_mult = "3.0倍" if is_crypto else "2.5倍"
     pullback_target = "MA20/MA50" if is_crypto else "MA20"
     
-    with st.expander(f"Strategy and Tips ({w_def}% Value Defense + {w_gro}% Growth Momentum)"):
+    with st.expander(f"💡 策略心法與操作建議 ({w_def}% 價值防禦 + {w_gro}% 強勢平回)"):
         st.markdown(f"""
-        This system uses a **[{w_def}/{w_gro} Dynamic Weight]** strategy, using Revenue Trend and Volume for precise entry:
-        - **Value Defense ({w_def}%)**:
-            - **Target**: Stable stocks with long-term support. [M] indicates [Volume Up + Back to MA5] momentum trigger.
-            - **Action**: Buy near **{def_ma}** with momentum. Target **1:2 RR** or +20%. Stop at recent low (-5%).
-        - **Growth Momentum ({w_gro}%)**:
-            - **Target**: Trending growth stocks/coins. { "!! Liquidity Filter: Scores reduced when 24h volume drops." if is_crypto else "" }
-            - **Action**: Buy on **{pullback_target}** support. Stop at **{atr_mult} ATR**.
-            - **Goal**: **1:3 RR**. With volume breakout, target moves to **1:4**.
-        - **MACD State**: [Strong] (above 0) = High explosive power; [Weak] (below 0) = oversold bounce.
+        本系統採用 **({w_def}/{w_gro} 權重動態配置)** 策略，透過營收趨勢與成交量能計算精確點位：
+        - **🛡️ 價值防禦 ({w_def}%)**:
+            - **標的**: 基本面優質、具備長期支撐。 (M) 標示為 (量能激增 + 重回 5 日線) 動能觸發。
+            - **進場**: 參考 **{def_ma}** 支撐。設定 **1:2 盈虧比** 或預期 +20%。停損位設於近期低點 (-5%)。
+        - **📈 強勢平回 ({w_gro}%)**:
+            - **標的**: 強勢趨勢股/加密貨幣。 { "!! 流動性過濾: 若 24h 成交量大幅萎縮，則評分遞減。" if is_crypto else "" }
+            - **進場**: 參考 **{pullback_target}** 支撐進場。停損位設於 **{atr_mult} 倍 ATR**。
+            - **目標**: 預期 **1:3 盈虧比**。若帶量突破，目標上看 **1:4**。
+        - **MACD 狀態**: (🎯強勢) (大於 0) = 高爆發力階段；(🩹弱勢) (小於 0) = 超跌反彈階段。
         """)
 
     # --- 自定義列表 ---
     is_big = st.session_state.get("is_big_scan", False)
     scan_market = st.session_state.get("scan_market", "TW")
-    market_label = {"TW": "TW", "US": "US", "CRYPTO": "Crypto"}.get(scan_market, "Unknown")
-    list_title = f"{market_label} Market Ranking" if is_big else "My Watchlist"
+    market_label = {"TW": "台灣", "US": "美國", "CRYPTO": "加密貨幣"}.get(scan_market, "未知")
+    list_title = f"🏆 {market_label}全市場大選股排行榜" if is_big else "📊 目前追蹤清單"
     st.markdown(f"### {list_title}")
     
     # 分頁計算
