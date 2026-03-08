@@ -621,15 +621,14 @@ def save_trading_log(user_id, logs):
     except Exception as e:
         print(f"Error saving trading log: {e}")
 
-def record_trade(user_id, category, symbol, name, price, reason, is_system=False):
-    """記錄一筆新的模擬交易。is_system=True 會記入全域共享檔。"""
+def record_trade(user_id, category, symbol, name, price, reason, is_system=False, trade_type="Simulated", shares=1000):
+    """記錄一筆新的模擬或實盤交易。is_system=True 會記入全域共享檔。"""
     log_id = "system" if is_system else user_id
     logs = load_trading_log(log_id)
     
     # 1. 系統自動規則：每日每市場僅限一筆
     if is_system:
         today_str = get_now().strftime("%Y-%m-%d")
-        # 檢查今天是否已經有該市場的系統下單 (reason 內含市場標示)
         market_mark = reason.split(")")[0].split("(")[-1] if "(" in reason else ""
         for log in logs:
             if log['buy_time'].startswith(today_str) and market_mark in log['reason']:
@@ -643,6 +642,8 @@ def record_trade(user_id, category, symbol, name, price, reason, is_system=False
     new_trade = {
         "trade_id": str(uuid.uuid4())[:8],
         "category": "System" if is_system else "Manual",
+        "trade_type": trade_type, # "Simulated" or "Real"
+        "shares": int(shares),
         "symbol": symbol,
         "name": name,
         "buy_time": get_now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -734,9 +735,15 @@ def display_simulation_dashboard(user_id):
                     curr_prices = dict(zip(st.session_state.results['代碼'], st.session_state.results['最新價格']))
                 
                 for trade in open_trades:
-                    cols = st.columns([2, 2, 2, 2, 2])
-                    cols[0].write(f"**{trade['symbol']}**\n{trade['name']}")
-                    cols[1].write(f"買入: {trade['buy_price']}\n{trade['buy_time'][:10]}")
+                    cols = st.columns([1, 2, 2, 2, 2])
+                    
+                    # 顯示 模擬/實盤 與 股數
+                    t_type = "🧪 模擬" if trade.get("trade_type") == "Simulated" else "💰 實盤"
+                    shares = trade.get("shares", 0)
+                    cols[0].markdown(f"<span style='font-size:0.8rem'>{t_type}</span>\n\n**{shares:,.0f} 股**", unsafe_allow_html=True)
+                    
+                    cols[1].write(f"**{trade['symbol']}**\n{trade['name']}")
+                    cols[2].write(f"買入: {trade['buy_price']}\n{trade['buy_time'][:10]}")
                     
                     # 計算即時損益
                     if trade['symbol'] in curr_prices:
@@ -1843,9 +1850,9 @@ if "results" in st.session_state:
         # 按鈕 1: 模擬下單 (永遠可用)
         if c1.button("🧪 執行模擬下單", use_container_width=True):
             reason = f"用戶手動選擇 ({row['操作建議']})"
-            # 手動下單強制 is_system=False (進入個人隔離紀錄)
-            if record_trade(user_id, "Manual", row['代碼'], row['名稱'], buy_price, reason, is_system=False):
-                st.toast(f"🚀 已錄入 {row['代碼']} 個人模擬委託！", icon="✅")
+            # 手動下單強制 is_system=False, 並記錄 股數 與 類型
+            if record_trade(user_id, "Manual", row['代碼'], row['名稱'], buy_price, reason, is_system=False, trade_type="Simulated", shares=qty):
+                st.toast(f"🚀 已錄入 {row['代碼']} 個人模擬委託 ({qty} 股)！", icon="✅")
                 st.session_state.last_order = f"{get_now().strftime('%H:%M:%S')} - 已模擬買入 {row['代碼']}"
                 st.rerun()
             else:
@@ -1879,8 +1886,13 @@ if "results" in st.session_state:
                         if 'error' in trade:
                             st.error(f"❌ MAX 下單失敗: {trade['error']}")
                         else:
+                            # [NEW] 成功後也記錄在「個人紀錄」中作為持倉追蹤 (類型為 Real)
+                            reason = f"MAX 實盤買入 ({trade.get('id', 'N/A')})"
+                            record_trade(user_id, "Manual", row['代碼'], row['名稱'], buy_price, reason, is_system=False, trade_type="Real", shares=qty)
+                            
                             st.session_state.last_order = f"{get_now().strftime('%H:%M:%S')} - MAX 已送出 {raw_code.upper()} {qty}顆 (限價:{buy_price})"
-                            st.toast("✅ MAX 委託已送出！", icon="🚀")
+                            st.toast("✅ MAX 委託已送出！已加入持倉紀錄。", icon="🚀")
+                            st.rerun()
                             st.rerun()
                     except Exception as e:
                         st.error(f"❌ MAX 系統異常: {e}")
@@ -1915,8 +1927,15 @@ if "results" in st.session_state:
                             )
                             
                             trade = api.place_order(contract, order)
-                            st.session_state.last_order = f"{get_now().strftime('%H:%M:%S')} - API 已送出 {row['代碼']} {qty}股 (限價:{buy_price})"
-                            st.toast("✅ API 委託已送出！", icon="🚀")
+                            # Shioaji place_order returns a Trade object, not a dict with 'error'.
+                            # Error handling is typically done via exceptions or checking trade status.
+                            # Assuming a successful placement if no exception is raised.
+                            # [NEW] 成功後也記錄在「個人紀錄」中作為持倉追蹤 (類型為 Real)
+                            reason = f"永豐金實盤買入 (委託號: {trade.order.id})" # Use trade.order.id for order ID
+                            record_trade(user_id, "Manual", row['代碼'], row['名稱'], buy_price, reason, is_system=False, trade_type="Real", shares=qty)
+                            
+                            st.session_state.last_order = f"{get_now().strftime('%H:%M:%S')} - 永豐金已送出 {row['代碼']} {qty}股 (限價:{buy_price})"
+                            st.toast("✅ 永豐金委託已送出！已加入持倉紀錄。", icon="🚀")
                             st.rerun()
                     except Exception as e:
                         st.error(f"❌ API 下單失敗: {e}")
