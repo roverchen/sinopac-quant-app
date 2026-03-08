@@ -224,6 +224,31 @@ st.markdown("""
             .stButton button {
                 font-size: 0.85rem !important;
             }
+
+            /* --- [NEW] 行動端快捷導航頂部 CSS --- */
+            .mobile-nav-container {
+                display: flex !important;
+                flex-wrap: wrap !important;
+                justify-content: space-between !important;
+                gap: 8px !important;
+                margin-bottom: 20px !important;
+                padding: 10px !important;
+                background: rgba(255, 255, 255, 0.03) !important;
+                border-radius: 12px !important;
+                border: 1px solid rgba(255, 255, 255, 0.1) !important;
+                backdrop-filter: blur(10px) !important;
+            }
+            .nav-card {
+                flex: 1 1 18% !important;
+                min-width: 60px !important;
+                text-align: center !important;
+            }
+            .nav-label {
+                font-size: 0.7rem !important;
+                margin-top: 4px !important;
+                color: #aaa !important;
+                display: block !important;
+            }
         }
 </style>
 """, unsafe_allow_html=True)
@@ -231,6 +256,51 @@ st.markdown("""
 
 # 預設時區工具
 st.title("📈 金融商品市場報明牌系統")
+
+# --- [NEW] 行動端專屬：頂部快捷導航列 (方案 A+B) ---
+if is_mobile_device():
+    st.markdown('<div class="mobile-nav-container">', unsafe_allow_html=True)
+    m_col1, m_col2, m_col3, m_col4, m_col5 = st.columns(5)
+    
+    with m_col1:
+        if st.button("🇹🇼", key="m_nav_tw", help="台股海選", use_container_width=True):
+            st.session_state.scan_market = "TW"
+            st.session_state.is_big_scan = True
+            st.session_state.trigger_daily_scan = True
+            st.rerun()
+        st.markdown('<span class="nav-label">台股</span>', unsafe_allow_html=True)
+        
+    with m_col2:
+        if st.button("🇺🇸", key="m_nav_us", help="美股海選", use_container_width=True):
+            st.session_state.scan_market = "US"
+            st.session_state.is_big_scan = True
+            st.session_state.trigger_daily_scan = True
+            st.rerun()
+        st.markdown('<span class="nav-label">美股</span>', unsafe_allow_html=True)
+        
+    with m_col3:
+        if st.button("🪙", key="m_nav_crypto", help="虛擬幣海選", use_container_width=True):
+            st.session_state.scan_market = "CRYPTO"
+            st.session_state.is_big_scan = True
+            st.session_state.trigger_daily_scan = True
+            st.rerun()
+        st.markdown('<span class="nav-label">虛擬幣</span>', unsafe_allow_html=True)
+        
+    with m_col4:
+        if st.button("📋", key="m_nav_wl", help="目前追蹤", use_container_width=True):
+            st.session_state.active_page = "market"
+            st.session_state.is_big_scan = False
+            st.session_state.scan_market = None
+            st.session_state.force_rescan = True
+            st.rerun()
+        st.markdown('<span class="nav-label">清單</span>', unsafe_allow_html=True)
+        
+    with m_col5:
+        if st.button("📊", key="m_nav_sim", help="交易儀表板", use_container_width=True):
+            st.session_state.active_page = "simulation"
+            st.rerun()
+        st.markdown('<span class="nav-label">儀表板</span>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # --- 手機版側邊欄提示 ---
 
@@ -1061,19 +1131,23 @@ if 'active_page' not in st.session_state:
     st.session_state.active_page = "market"
 
 
+st.sidebar.markdown('<div class="desktop-only">', unsafe_allow_html=True)
 if st.sidebar.button("📊 交易紀錄儀表板", use_container_width=True):
     auto_close_sidebar()
     st.session_state.active_page = "simulation"
     st.rerun()
+st.markdown('</div>', unsafe_allow_html=True)
 
 # --- [NEW] 側邊欄：功能入口置頂 ---
 # 1. 掃描目前追蹤清單 (置頂且不隱藏)
+st.sidebar.markdown('<div class="desktop-only">', unsafe_allow_html=True)
 if st.sidebar.button("🚀 目前追蹤清單", use_container_width=True):
     auto_close_sidebar()
     st.session_state.active_page = "market"
     scan_btn = True # 模擬按鈕按下
 else:
     scan_btn = False
+st.markdown('</div>', unsafe_allow_html=True)
 
 st.sidebar.markdown("###  大數據海選")
 
