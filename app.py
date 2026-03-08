@@ -630,16 +630,7 @@ def get_stock_name_map(_api):
 WATCHLIST_FILE = "watchlist.json"
 
 def load_watchlist():
-    # Priority 1: URL Parameters (passed from LocalStorage by JS Bridge)
-    if "w" in st.query_params:
-        try:
-            encoded_w = st.query_params["w"]
-            decoded_w = base64.b64decode(encoded_w).decode('utf-8')
-            return json.loads(decoded_w)
-        except:
-            pass
-
-    # Priority 2: Legacy Server File (Transition phase)
+    # Priority 1: Legacy Server File (Transition phase)
     if os.path.exists(WATCHLIST_FILE):
         try:
             with open(WATCHLIST_FILE, "r") as f:
@@ -647,7 +638,7 @@ def load_watchlist():
         except:
             pass
 
-    # Priority 3: Defaults
+    # Priority 2: Defaults
     return ["2330", "2317", "0050"]
 
 def save_watchlist(watchlist):
@@ -1015,26 +1006,29 @@ def get_mass_scan_list(api, market='TW'):
 # 使用 Streamlit 內置的 session_id 作為隔離主鍵，不再需要跳轉等待
 user_id = get_session_uid()
 
-# 1. Watchlist 初始化：優先取網址參數 (由 JS Bridge 懶加載提供)，其次取 LocalStorage
+# 1. 初始化 Watchlist
+# 使用 streamlit-javascript 直接從瀏覽器讀取 localStorage，不依賴網址參數
 if 'watchlist' not in st.session_state:
-    st.session_state.watchlist = load_watchlist()
+    try:
+        from streamlit_javascript import st_javascript
+        # 嘗試讀取 localStorage
+        ls_value = st_javascript("localStorage.getItem('sinopac_watchlist');")
+        if ls_value and ls_value != "null" and ls_value != 0:
+            try:
+                st.session_state.watchlist = json.loads(ls_value)
+            except:
+                st.session_state.watchlist = load_watchlist()
+        else:
+             st.session_state.watchlist = load_watchlist()
+    except Exception as e:
+        print(f"Failed to load from javascript: {e}")
+        st.session_state.watchlist = load_watchlist()
 
-# 2. LocalStorage / URL Bridge (非阻塞式背景處理)
-# 這裡僅負責把 python 的 watchlist 同步給 JS 儲存，不再強制跳轉 UID
-if ("w" not in st.query_params) and "ls_init_attempted" not in st.session_state:
-    st.session_state.ls_init_attempted = True
-    st.components.v1.html("""
-        <script>
-            const stored = localStorage.getItem('sinopac_watchlist');
-            const url = new URL(window.parent.location.href);
-            if (!url.searchParams.has('w') && stored && stored !== '[]' && stored !== 'null') {
-                url.searchParams.set('w', btoa(stored));
-                window.parent.location.href = url.toString();
-            }
-        </script>
-    """, height=0)
+# 此外，若網址上還殘留舊版的 w 參數，將其清除以保證網址純淨
+if "w" in st.query_params:
+    del st.query_params["w"]
 
-# 3. Persistence: Only write back to localStorage if the watchlist has actually changed
+# 2. Persistence: 僅透過 JS 將更新寫回 LocalStorage，不再修改網址
 # This prevents the JS iframe from stealing focus on every re-run (Character typed, etc.)
 if 'watchlist' in st.session_state:
     current_wl_json = json.dumps(st.session_state.watchlist)
@@ -1044,11 +1038,6 @@ if 'watchlist' in st.session_state:
             <script>
                 // 更新 LocalStorage
                 localStorage.setItem('sinopac_watchlist', '{current_wl_json}');
-                
-                // 同步更新網址參數，防止重新整理後從舊網址還原
-                const url = new URL(window.parent.location.href);
-                url.searchParams.set('w', btoa('{current_wl_json}'));
-                window.parent.history.replaceState(null, '', url.toString());
             </script>
         """, height=0)
 
