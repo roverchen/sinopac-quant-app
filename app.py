@@ -3,6 +3,7 @@ import os
 import time
 import base64
 import json
+import uuid
 from dotenv import load_dotenv
 
 # 載入環境變數 (如 MAX API Keys)
@@ -72,20 +73,15 @@ except ImportError:
     get_script_run_ctx = None
 
 def get_session_uid():
-    """取得當前 Session 的識別碼，優先選用穩定且唯一的 session_id"""
-    try:
-        if get_script_run_ctx:
-            ctx = get_script_run_ctx()
-            if ctx:
-                return f"s_{ctx.session_id[:8]}"
-    except:
-        pass
+    """取得當前 Session 的識別碼，利用簡短網址參數作持久化"""
+    # 優先從網址讀取短 ID
+    if "u" in st.query_params:
+        return st.query_params["u"]
     
-    # 回退到網址參數 (如果有的話)
-    u = st.query_params.get("u")
-    if u:
-        return u
-    return "shared"
+    # 如果沒有，產生一個新的並立即寫入網址
+    new_uid = f"u_{uuid.uuid4().hex[:6]}"
+    st.query_params["u"] = new_uid
+    return new_uid
 
 def is_mobile_device():
     """透過 User-Agent 簡易判斷是否為行動裝置"""
