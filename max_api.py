@@ -103,6 +103,20 @@ class MaxExchangeAPI:
         except Exception as e:
             return {"error": str(e)}
 
+    def get_markets(self) -> list:
+        """
+        獲取所有可交易的市場清單
+        """
+        url = f"{self.base_url}/api/v2/markets"
+        try:
+            response = requests.get(url)
+            if response.status_code == 200:
+                return response.json()
+            else:
+                return []
+        except Exception:
+            return []
+
 if __name__ == "__main__":
     from dotenv import load_dotenv
     import os

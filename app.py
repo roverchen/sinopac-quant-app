@@ -1844,6 +1844,26 @@ if "results" in st.session_state:
         with col2:
             qty = st.number_input("委託股數", min_value=1, value=1000, step=100)
             
+        # --- [NEW] MAX 市場智慧識別 ---
+        max_market_id = None
+        if max_api:
+            # 取得 MAX 所有市場清單 (使用會話級快取避免頻繁請求)
+            if "max_markets" not in st.session_state:
+                st.session_state.max_markets = max_api.get_markets()
+            
+            # 轉換邏輯：MATIC -> POL, BTC-USD -> btctwd
+            raw_symbol = str(row['代碼']).split('-')[0].lower()
+            # 內建更名表
+            rename_map = {"matic": "pol", "fb": "meta", "goog": "googl"}
+            base_coin = rename_map.get(raw_symbol, raw_symbol)
+            
+            # 優先找 TWD 交易對，再找 USDT
+            available_ids = [m['id'] for m in st.session_state.max_markets]
+            if f"{base_coin}twd" in available_ids:
+                max_market_id = f"{base_coin}twd"
+            elif f"{base_coin}usdt" in available_ids:
+                max_market_id = f"{base_coin}usdt"
+            
         st.success(f"💡 預估委託金額: **{buy_price * qty:,.0f}** 元")
         
         st.divider()
@@ -1865,19 +1885,12 @@ if "results" in st.session_state:
         if is_crypto:
             # 針對加密貨幣透過 MAX API 下單
             if max_api:
-                if c2.button("💰 MAX 實盤下單", use_container_width=True, type="primary"):
+                btn_label = f"💰 MAX 實盤下單 ({max_market_id.upper()})" if max_market_id else "❌ MAX 不支援此幣"
+                if c2.button(btn_label, use_container_width=True, type="primary", disabled=(not max_market_id)):
                     try:
-                        # 處理 Yahoo 代碼轉換為 MAX 支持的交易對格式 (例如 BTC-USD -> btctwd)
-                        raw_code = row['代碼'].split('-')[0].lower()
-                        # 處理有夾帶數字的雅虎代碼
-                        for clean_t in ["pol", "uni", "apt", "stx", "imx"]:
-                            if clean_t in raw_code: raw_code = clean_t
-                            
-                        max_market = f"{raw_code}twd"
-                        
                         # 呼叫 MAX API 送出限價單
                         trade = max_api.place_order(
-                            market=max_market,
+                            market=max_market_id,
                             side="buy",
                             volume=qty,
                             price=buy_price,
@@ -1891,14 +1904,13 @@ if "results" in st.session_state:
                             reason = f"MAX 實盤買入 ({trade.get('id', 'N/A')})"
                             record_trade(user_id, "Manual", row['代碼'], row['名稱'], buy_price, reason, is_system=False, trade_type="Real", shares=qty)
                             
-                            st.session_state.last_order = f"{get_now().strftime('%H:%M:%S')} - MAX 已送出 {raw_code.upper()} {qty}顆 (限價:{buy_price})"
-                            st.toast("✅ MAX 委託已送出！已加入持倉紀錄。", icon="🚀")
-                            st.rerun()
+                            st.session_state.last_order = f"{get_now().strftime('%H:%M:%S')} - MAX 已送出 {max_market_id.upper()} {qty}顆 (限價:{buy_price})"
+                            st.toast(f"✅ MAX 委託已送出 ({max_market_id.upper()})！已加入持倉紀錄。", icon="🚀")
                             st.rerun()
                     except Exception as e:
                         st.error(f"❌ MAX 系統異常: {e}")
             else:
-                c2.button("💰 MAX 未連線", use_container_width=True, disabled=True)
+                c2.info("🔴 MAX API 未設定")
         else:
             # 針對一般股票透過 Shioaji 永豐金 API 下單
             if ca_active:
