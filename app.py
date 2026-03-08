@@ -737,10 +737,11 @@ def display_simulation_dashboard(user_id):
                 for trade in open_trades:
                     cols = st.columns([1, 2, 2, 2, 2])
                     
-                    # 顯示 模擬/實盤 與 股數
-                    t_type = "🧪 模擬" if trade.get("trade_type") == "Simulated" else "💰 實盤"
-                    shares = trade.get("shares", 0)
-                    cols[0].markdown(f"<span style='font-size:0.8rem'>{t_type}</span>\n\n**{shares:,.0f} 股**", unsafe_allow_html=True)
+                    # 顯示 模擬/實盤 (模擬不顯股數，實盤顯股數)
+                    is_real = (trade.get("trade_type") == "Real")
+                    t_type = "💰 實盤" if is_real else "🧪 模擬"
+                    shares_text = f"**{trade.get('shares', 0):,.0f} 股**" if is_real else ""
+                    cols[0].markdown(f"<span style='font-size:0.8rem'>{t_type}</span>\n\n{shares_text}", unsafe_allow_html=True)
                     
                     cols[1].write(f"**{trade['symbol']}**\n{trade['name']}")
                     cols[2].write(f"買入: {trade['buy_price']}\n{trade['buy_time'][:10]}")
