@@ -629,8 +629,19 @@ def get_stock_name_map(_api):
 # --- 輔助函式 ---
 WATCHLIST_FILE = "watchlist.json"
 
-def load_watchlist():
-    # Priority 1: Legacy Server File (Transition phase)
+def get_watchlist_path(user_id):
+    return os.path.join(CACHE_DIR, f"watchlist_{user_id}.json")
+
+def load_watchlist(user_id):
+    path = get_watchlist_path(user_id)
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except:
+            pass
+    
+    # Priority 2: Legacy Server File (Transition phase for old users)
     if os.path.exists(WATCHLIST_FILE):
         try:
             with open(WATCHLIST_FILE, "r") as f:
@@ -638,12 +649,18 @@ def load_watchlist():
         except:
             pass
 
-    # Priority 2: Defaults
+    # Priority 3: Defaults
     return ["2330", "2317", "0050"]
 
-def save_watchlist(watchlist):
-    """Now purely session-based. Persistence is handled by the JS Bridge in the UI."""
+def save_watchlist(watchlist, user_id):
+    """Save watchlist to backend JSON file tied to session ID"""
     st.session_state.watchlist = watchlist
+    path = get_watchlist_path(user_id)
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(watchlist, f, ensure_ascii=False, indent=4)
+    except Exception as e:
+        print(f"Error saving watchlist: {e}")
 
 # --- 🧪 模擬交易系統核心邏輯 (Paper Trading) ---
 
@@ -1006,44 +1023,14 @@ def get_mass_scan_list(api, market='TW'):
 # 使用 Streamlit 內置的 session_id 作為隔離主鍵，不再需要跳轉等待
 user_id = get_session_uid()
 
-# 1. 初始化 Watchlist
-# 使用 streamlit-javascript 直接從瀏覽器讀取 localStorage，不依賴網址參數
+# 1. 初始化 Watchlist (直接從後端 JSON 讀取，拋棄不穩定的 LocalStorage)
 if 'watchlist' not in st.session_state:
-    try:
-        from streamlit_javascript import st_javascript
-        # 嘗試讀取 window.parent.localStorage 確保與主網域同步
-        ls_value = st_javascript("window.parent.localStorage.getItem('sinopac_watchlist');")
-        
-        if ls_value == 0:
-            st.stop()  # st_javascript 尚在等待前端回傳，暫停渲染以防載入預設值
-            
-        if ls_value and ls_value != "null":
-            try:
-                st.session_state.watchlist = json.loads(ls_value)
-            except:
-                st.session_state.watchlist = load_watchlist()
-        else:
-             st.session_state.watchlist = load_watchlist()
-    except Exception as e:
-        print(f"Failed to load from javascript: {e}")
-        st.session_state.watchlist = load_watchlist()
+    st.session_state.watchlist = load_watchlist(user_id)
 
-# 此外，若網址上還殘留舊版的 w 參數，將其清除以保證網址純淨
+# 若網址上還殘留舊版的 w 參數，將其清除以保證網址純淨
 if "w" in st.query_params:
     del st.query_params["w"]
 
-# 2. Persistence: 僅透過 JS 將更新寫回 LocalStorage，不再修改網址
-# This prevents the JS iframe from stealing focus on every re-run (Character typed, etc.)
-if 'watchlist' in st.session_state:
-    current_wl_json = json.dumps(st.session_state.watchlist)
-    if st.session_state.get('last_synced_wl') != current_wl_json:
-        st.session_state.last_synced_wl = current_wl_json
-        st.components.v1.html(f"""
-            <script>
-                // 寫入主網域 LocalStorage
-                window.parent.localStorage.setItem('sinopac_watchlist', '{current_wl_json}');
-            </script>
-        """, height=0)
 
 if 'resolved_code' not in st.session_state:
     st.session_state.resolved_code = None
@@ -1145,7 +1132,7 @@ with st.sidebar.form("add_stock_form", clear_on_submit=True):
             auto_close_sidebar()
             if resolved_code not in st.session_state.watchlist:
                 st.session_state.watchlist.append(resolved_code)
-                save_watchlist(st.session_state.watchlist)
+                save_watchlist(st.session_state.watchlist, user_id)
                 st.session_state.active_page = "market"
                 # 成功找到代碼，清除建議並準備同步
                 if "last_suggestions" in st.session_state:
@@ -1170,7 +1157,7 @@ with st.sidebar.form("add_stock_form", clear_on_submit=True):
                 auto_close_sidebar()
                 if code not in st.session_state.watchlist:
                     st.session_state.watchlist.append(code)
-                    save_watchlist(st.session_state.watchlist)
+                    save_watchlist(st.session_state.watchlist, user_id)
                     del st.session_state.last_suggestions
                     st.rerun()
 
@@ -2178,7 +2165,7 @@ if "results" in st.session_state:
                     if row['代碼'] not in st.session_state.watchlist:
                         st.session_state.watchlist.append(row['代碼'])
                         st.toast(f"✅ 已加入追蹤清單 {row['代碼']} {row['名稱']}")
-                        save_watchlist(st.session_state.watchlist)
+                        save_watchlist(st.session_state.watchlist, user_id)
                     else:
                         st.toast(f"ℹ️ {row['代碼']} 已在清單中")
                 else:
@@ -2197,7 +2184,7 @@ if "results" in st.session_state:
                         if "results" in st.session_state:
                             del st.session_state.results
                     
-                    save_watchlist(st.session_state.watchlist)
+                    save_watchlist(st.session_state.watchlist, user_id)
                     st.rerun()
 
     # --- 分頁導航 ---
