@@ -175,35 +175,41 @@ st.markdown("""
             .mobile-only { display: block !important; }
             .mobile-label { display: inline-block !important; color: #888; font-size: 0.8rem; margin-right: 6px; width: 70px; }
 
-            /* --- 恢復股票卡片專屬的垂直堆疊 (防止被誤傷) --- */
-            [data-testid="stVerticalBlockBorderWrapper"] [data-testid="column"] {
+            /* --- 恢復股票卡片專屬的垂直堆疊 (僅針對結果清單，不傷及分頁) --- */
+            [data-testid="stVerticalBlockBorderWrapper"]:not(.pagination-container) [data-testid="column"] {
                 width: 100% !important;
                 flex: 1 1 100% !important;
                 min-width: 100% !important;
                 margin-bottom: 2px !important;
             }
-            [data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stHorizontalBlock"] {
+            [data-testid="stVerticalBlockBorderWrapper"]:not(.pagination-container) div[data-testid="stHorizontalBlock"] {
                 flex-direction: column !important;
             }
 
-            /* --- 移除所有不穩定的 st-emotion-cache 依賴，改用穩定選擇器 --- */
+            /* --- 確保分頁導航維持水平並排 --- */
             .pagination-container {
                 display: flex !important;
                 flex-direction: row !important;
                 flex-wrap: nowrap !important;
                 align-items: center !important;
-                justify-content: center !important;
-                gap: 10px !important;
+                justify-content: space-between !important;
                 width: 100% !important;
-                margin: 10px 0 !important;
-                padding: 5px !important;
+                margin: 20px 0 !important;
+                padding: 10px 5px !important;
+                background: rgba(255,255,255,0.05); /* 輕微底色增加區隔感 */
+                border-radius: 8px;
             }
             
-            /* 強制讓分頁內的按鈕容器保持水平 */
-            .pagination-container > div {
-                flex: 1 !important;
+            .pagination-container [data-testid="column"] {
+                width: 30% !important;
+                min-width: 30% !important;
+                flex: 0 0 30% !important;
+            }
+
+            .pagination-container div[data-testid="stHorizontalBlock"] {
+                flex-direction: row !important; 
                 display: flex !important;
-                justify-content: center !important;
+                width: 100% !important;
             }
 
             /* 恢復卡片樣式 */
