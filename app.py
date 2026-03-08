@@ -1876,7 +1876,18 @@ if "results" in st.session_state:
         if max_api:
             # 取得 MAX 所有市場清單 (使用會話級快取避免頻繁請求)
             if "max_markets" not in st.session_state:
-                st.session_state.max_markets = max_api.get_markets()
+                try:
+                    # 如果是因為快取問題導致找不到屬性，這裡做最後一次嘗試
+                    if hasattr(max_api, "get_markets"):
+                        st.session_state.max_markets = max_api.get_markets()
+                    else:
+                        # 嘗試手動從模組獲取並注入 (極端手段)
+                        from max_api import MaxExchangeAPI as SafeAPI
+                        temp_api = SafeAPI(os.getenv("MAX_API_KEY"), os.getenv("MAX_API_SECRET"))
+                        st.session_state.max_markets = temp_api.get_markets()
+                except Exception as e:
+                    print(f"Error fetching MAX markets: {e}")
+                    st.session_state.max_markets = []
             
             # 轉換邏輯：MATIC -> POL, BTC-USD -> btctwd
             raw_symbol = str(row['代碼']).split('-')[0].lower()
@@ -1885,7 +1896,7 @@ if "results" in st.session_state:
             base_coin = rename_map.get(raw_symbol, raw_symbol)
             
             # 優先找 TWD 交易對，再找 USDT
-            available_ids = [m['id'] for m in st.session_state.max_markets]
+            available_ids = [m['id'] for m in st.session_state.get('max_markets', [])]
             if f"{base_coin}twd" in available_ids:
                 max_market_id = f"{base_coin}twd"
             elif f"{base_coin}usdt" in available_ids:
