@@ -175,97 +175,62 @@ st.markdown("""
             .mobile-only { display: block !important; }
             .mobile-label { display: inline-block !important; color: #888; font-size: 0.8rem; margin-right: 6px; width: 70px; }
 
-            /* --- 恢復股票卡片專屬的垂直堆疊 (僅針對結果清單，不傷及分頁) --- */
-            [data-testid="stVerticalBlockBorderWrapper"]:not(.pagination-container) [data-testid="column"] {
+            /* --- [NEW] 金剛不壞橫向排版 (Foolproof Horizontal Layout) --- */
+            /* 1. 股票卡片：維持垂直堆疊 (行動端好讀) */
+            [data-testid="stVerticalBlockBorderWrapper"]:not(.pagination-container):not(.nav-container) [data-testid="column"] {
                 width: 100% !important;
                 flex: 1 1 100% !important;
                 min-width: 100% !important;
                 margin-bottom: 2px !important;
             }
-            [data-testid="stVerticalBlockBorderWrapper"]:not(.pagination-container) div[data-testid="stHorizontalBlock"] {
+            [data-testid="stVerticalBlockBorderWrapper"]:not(.pagination-container):not(.nav-container) div[data-testid="stHorizontalBlock"] {
                 flex-direction: column !important;
             }
 
-            /* --- 確保分頁導航維持水平並排 --- */
-            .pagination-container {
+            /* 2. 強制橫向排版：只要有 .mobile-horiz-row 類別，內容絕對不橫跨多列 */
+            .mobile-horiz-row div[data-testid="stHorizontalBlock"] {
                 display: flex !important;
                 flex-direction: row !important;
                 flex-wrap: nowrap !important;
                 align-items: center !important;
                 justify-content: space-between !important;
                 width: 100% !important;
-                margin: 20px 0 !important;
-                padding: 10px 5px !important;
-                background: rgba(255,255,255,0.05); /* 輕微底色增加區隔感 */
-                border-radius: 8px;
+                gap: 4px !important;
             }
-            
-            .pagination-container [data-testid="column"] {
-                width: 30% !important;
-                min-width: 30% !important;
-                flex: 0 0 30% !important;
+            .mobile-horiz-row [data-testid="column"] {
+                flex: 1 1 0% !important;
+                min-width: 0 !important;
+                width: auto !important;
             }
 
-            .pagination-container div[data-testid="stHorizontalBlock"] {
-                flex-direction: row !important; 
-                display: flex !important;
-                width: 100% !important;
-            }
-
-            /* 恢復卡片樣式 */
-            [data-testid="stVerticalBlockBorderWrapper"] {
-                border-left: 5px solid #00d4ff !important;
-                background-color: #1e1e1e !important;
-                border-radius: 12px !important;
-                margin-bottom: 12px !important;
-                padding: 10px !important;
-            }
-            
-            .stButton button {
-                font-size: 0.85rem !important;
-            }
-
-            /* --- [NEW] 行動端快捷導航頂部 CSS --- */
-            .mobile-nav-container {
-                width: 100% !important;
-                margin-bottom: 20px !important;
+            /* 導航列樣式微調 */
+            .nav-container {
                 padding: 10px 5px !important;
                 background: rgba(255, 255, 255, 0.05) !important;
                 border-radius: 12px !important;
-                border: 1px solid rgba(255, 255, 255, 0.1) !important;
-                backdrop-filter: blur(10px) !important;
+                margin-bottom: 20px !important;
+                border: 1px solid rgba(255,255,255,0.1) !important;
             }
-            
-            /* 強制內層的 stHorizontalBlock (columns) 保持水平不換行 */
-            .mobile-nav-container div[data-testid="stHorizontalBlock"] {
-                display: flex !important;
-                flex-direction: row !important;
-                flex-wrap: nowrap !important;
-                align-items: flex-start !important;
-                justify-content: space-between !important;
-                width: 100% !important;
-            }
-
-            /* 每個按鈕容器佔 19% 左右 */
-            .mobile-nav-container [data-testid="column"] {
-                flex: 1 1 19% !important;
-                min-width: 0 !important;
-                width: 19% !important;
-                text-align: center !important;
-            }
-            
             .nav-label {
-                font-size: 0.65rem !important;
-                margin-top: 4px !important;
-                color: #aaa !important;
+                font-size: 0.6rem !important;
+                margin-top: 3px !important;
+                color: #888 !important;
                 display: block !important;
+                text-align: center !important;
                 white-space: nowrap !important;
             }
             
-            .mobile-nav-container button {
-                padding: 4px !important;
-                height: 40px !important;
-                min-height: 40px !important;
+            /* 分頁列樣式微調 */
+            .pagination-container {
+                margin: 20px 0 !important;
+                padding: 10px 5px !important;
+                background: rgba(255, 255, 255, 0.03) !important;
+                border-radius: 8px !important;
+            }
+
+            .stButton button {
+                font-size: 0.8rem !important;
+                padding: 4px 8px !important;
             }
         }
 </style>
