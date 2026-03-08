@@ -194,56 +194,53 @@ def init_max_api_v4():
     return None
 
 @st.cache_resource
-def init_api():
+def init_api(api_key, secret_key):
+    """
+    初始化永豐金 API。將金鑰作為參數傳入，當 Secrets 更新時，
+    Streamlit 會因參數改變而自動重新執行此函式 (快取失效)。
+    """
+    if not api_key or not secret_key:
+        return None
+        
     api = sj.Shioaji()
-    # 優先從 st.secrets 讀取
-    api_key = st.secrets.get("API_KEY", "")
-    secret_key = st.secrets.get("SECRET_KEY", "")
-    
-    # [NEW] 如果 secrets 為空，且 session_state 有手動輸入的 key，則使用手動的 (此處可擴充為 UI 輸入)
-    # 目前先確保不使用硬編碼覆蓋使用者想更換的 key
-    
     try:
-        # 避免重複連線，如果已經有 session 可以列出帳號代表已連線
-        if len(api.list_accounts()) > 0:
-            return api
-        
         api.login(api_key=api_key, secret_key=secret_key)
-        
-        # [NEW] 登入後立即抓取合約，設定較長的 Timeout (60秒) 確保穩定
-        # fetch_contracts 是使用多數功能的先決條件
+        # 登入後立即抓取合約
         try:
             api.fetch_contracts(contracts_timeout=60000)
         except Exception as ce:
-            print(f"Initial contract fetch timeout/error: {ce}")
-            # 即使失敗也先返回 api，後續邏輯會再嘗試
-            
+            print(f"Initial contract fetch warning: {ce}")
     except Exception as e:
         error_msg = str(e)
         if "451" in error_msg or "Too Many Connections" in error_msg:
-            st.sidebar.error("⚠️ **API 連線衝突**")
-            st.sidebar.warning("目前有其他分頁正連線中，或剛才重啟過於頻繁。")
-            st.sidebar.info("💡 系統已鎖定，5 分鐘內請勿頻繁重新整理。")
-            # 在全連線衝突時，建立一個空的 mock api 對象避免後續程式當掉
+            # 在連線衝突時，建立一個空的 mock api 對象
             class MockApi:
                 def list_accounts(self): return []
                 def fetch_contracts(self, **kwargs): pass
             return MockApi()
         else:
-            st.error(f"API 登入失敗: {e}")
+            print(f"API Login Failed: {e}")
+            return None
     return api
 
+# @st.cache_resource 為了讓 Secrets 更新能立即生效，這裡也把金鑰當成參數
+def init_max_api_v5(key, secret):
+    if MaxExchangeAPI and key and secret and len(key) > 10:
+        return MaxExchangeAPI(key, secret)
+    return None
+
 # 側邊欄：API 狀態
-api = init_api()
-sj_key_demo = st.secrets.get("API_KEY", "")
+sj_key = st.secrets.get("API_KEY", "")
+sj_secret = st.secrets.get("SECRET_KEY", "")
+api = init_api(sj_key, sj_secret)
 
-# 初始化 API 狀態
-m_api_status = "未設定"
-key_demo = os.getenv("MAX_API_KEY")
+max_key = st.secrets.get("MAX_API_KEY") or os.getenv("MAX_API_KEY")
+max_secret = st.secrets.get("MAX_API_SECRET") or os.getenv("MAX_API_SECRET")
+max_api = init_max_api_v5(max_key, max_secret)
 
-max_api = init_max_api_v4()
+# 初始化 API 狀態文字
 v_tag = f" v{max_api.VERSION}" if max_api else ""
-m_api_status = f"已偵測{v_tag} (開頭: {key_demo[:4]}...)" if key_demo else "待設定"
+m_api_status = f"已偵測{v_tag} (開頭: {max_key[:4]}...)" if max_key else "待設定"
 
 # [NEW] 增加「重置快取」按鈕以解決 Secrets 無法更新問題
 with st.sidebar.expander("🛠️ API 進階設定"):
