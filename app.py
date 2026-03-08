@@ -102,21 +102,36 @@ def auto_close_sidebar():
         st.session_state.should_close_sidebar = True
 
 def render_sidebar_closer():
-    """如果標記為真，則注入 JS 關閉側邊欄 (使用 st.markdown 避免 iframe 限制)"""
+    """如果標記為真，則注入 JS 關閉側邊欄 (使用 components.html 確保 JS 能執行)"""
     if st.session_state.get('should_close_sidebar', False):
-        st.markdown(
+        import streamlit.components.v1 as components
+        components.html(
             """
             <script>
-                // 使用 setTimeout 確保 DOM 渲染完成
-                setTimeout(function() {
-                    var closeBtn = window.parent.document.querySelector('[data-testid="stSidebar"] button[aria-label="Close"]');
-                    if (closeBtn) {
-                        closeBtn.click();
+            setTimeout(function() {
+                var doc = window.parent.document;
+                
+                // 方法 1: 模擬按下 ESC 鍵 (通常可關閉手機版選單)
+                doc.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true}));
+                
+                // 方法 2: 嘗試點擊各種可能的隱藏/關閉按鈕
+                var selectors = [
+                    '[data-testid="stSidebarCollapseButton"]',
+                    'button[aria-label="Collapse sidebar"]',
+                    'button[title="Collapse sidebar"]',
+                    'button[aria-label="Close"]'
+                ];
+                for (var i = 0; i < selectors.length; i++) {
+                    var btn = doc.querySelector(selectors[i]);
+                    if (btn) {
+                        btn.click();
+                        break;
                     }
-                }, 100);
+                }
+            }, 100);
             </script>
             """,
-            unsafe_allow_html=True
+            height=0, width=0
         )
         st.session_state.should_close_sidebar = False
 
