@@ -1011,8 +1011,8 @@ user_id = get_session_uid()
 if 'watchlist' not in st.session_state:
     try:
         from streamlit_javascript import st_javascript
-        # 嘗試讀取 localStorage
-        ls_value = st_javascript("localStorage.getItem('sinopac_watchlist');")
+        # 嘗試讀取 window.parent.localStorage 確保與主網域同步
+        ls_value = st_javascript("window.parent.localStorage.getItem('sinopac_watchlist');")
         
         if ls_value == 0:
             st.stop()  # st_javascript 尚在等待前端回傳，暫停渲染以防載入預設值
@@ -1040,8 +1040,8 @@ if 'watchlist' in st.session_state:
         st.session_state.last_synced_wl = current_wl_json
         st.components.v1.html(f"""
             <script>
-                // 更新 LocalStorage
-                localStorage.setItem('sinopac_watchlist', '{current_wl_json}');
+                // 寫入主網域 LocalStorage
+                window.parent.localStorage.setItem('sinopac_watchlist', '{current_wl_json}');
             </script>
         """, height=0)
 
