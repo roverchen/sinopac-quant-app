@@ -190,15 +190,28 @@ st.markdown("""
             .mobile-only { display: block !important; }
             .mobile-label { display: inline-block !important; color: #888; font-size: 0.8rem; margin-right: 6px; width: 70px; }
 
-            /* --- [ULTIMATE FIX] 全自定義行動端元件 (Table-based for horizontal row) --- */
-            .custom-table { width: 100% !important; border-collapse: collapse !important; border: none !important; margin-bottom: 10px !important; }
-            .custom-table td { padding: 4px !important; border: none !important; vertical-align: middle !important; }
+            /* --- [ULTIMATE FIX] 全自定義行動端元件 (Row-based for horizontal layout) --- */
+            .custom-row { 
+                display: flex !important; 
+                flex-direction: row !important; 
+                flex-wrap: nowrap !important; 
+                justify-content: space-between !important; 
+                align-items: center !important; 
+                width: 100% !important; 
+                gap: 5px !important; 
+                margin: 10px 0 !important;
+            }
+            .custom-col { 
+                flex: 1 !important; 
+                margin: 0 !important;
+                padding: 0 !important;
+            }
             
             .custom-btn {
                 background: rgba(255,255,255,0.08) !important;
                 border: 1px solid rgba(255,255,255,0.1) !important;
                 border-radius: 8px !important;
-                padding: 8px 2px !important;
+                padding: 10px 2px !important;
                 text-align: center !important;
                 cursor: pointer !important;
                 transition: background 0.2s !important;
@@ -208,22 +221,25 @@ st.markdown("""
             .custom-btn:active {
                 background: rgba(255,255,255,0.15) !important;
             }
-            .custom-btn-icon { font-size: 1.2rem !important; margin-bottom: 2px !important; }
-            .custom-btn-label { font-size: 0.6rem !important; color: #ccc !important; display: block !important; }
+            .custom-btn-icon { font-size: 1.3rem !important; margin-bottom: 2px !important; }
+            .custom-btn-label { font-size: 0.65rem !important; color: #ccc !important; display: block !important; }
             
-            .custom-pg-num { font-size: 0.9rem !important; font-weight: bold !important; text-align: center !important; color: #fff !important; }
+            .custom-pg-num { font-size: 1rem !important; font-weight: bold !important; text-align: center !important; color: #fff !important; min-width: 60px; }
             
-            /* 隱藏真正觸發邏輯的 st 原始按鈕 */
-            .hidden-trigger { display: none !important; }
+            /* --- 關鍵：隱藏包含 .logic-sink 的整個 Streamlit 容器 --- */
+            [data-testid="stVerticalBlock"]:has(.logic-sink),
+            [data-testid="stVerticalBlockBorderWrapper"]:has(.logic-sink) {
+                display: none !important;
+            }
             
             /* 行動端專屬容器 */
-            .mobile-ui-container { display: block !important; }
+            .mobile-ui-container { display: flex !important; }
             .desktop-ui-container { display: none !important; }
         }
         
         /* 非行動端預設隱藏 */
-        .mobile-ui-container { display: none; }
-        .desktop-ui-container { display: block; }
+        .mobile-ui-container { display: none !important; }
+        .desktop-ui-container { display: block !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -247,17 +263,18 @@ st.markdown("""
     </script>
 """, unsafe_allow_html=True)
 
-# --- [NEW] 行動端專屬：頂部快捷導航列 (方案 D: CSS Media Query + Table) ---
-# 1. 隱藏觸發器 (Logic Sink) - 始終渲染但隱藏
-st.markdown('<div class="hidden-trigger">', unsafe_allow_html=True)
-h_tw = st.button("H_TW", key="h_nav_tw")
-h_us = st.button("H_US", key="h_nav_us")
-h_cy = st.button("H_CRYPTO", key="h_nav_crypto")
-h_wl = st.button("H_WL", key="h_nav_wl")
-h_sim = st.button("H_SIM", key="h_nav_sim")
-st.markdown('</div>', unsafe_allow_html=True)
+# --- [NEW] 行動端專屬：頂部快捷導航列 ---
+# 1. 隱藏邏輯池 (Logic Sink)
+with st.container():
+    st.markdown('<div class="logic-sink"></div>', unsafe_allow_html=True)
+    btns = st.columns(5)
+    h_tw = btns[0].button("H_TW", key="h_nav_tw")
+    h_us = btns[1].button("H_US", key="h_nav_us")
+    h_cy = btns[2].button("H_CRYPTO", key="h_nav_crypto")
+    h_wl = btns[3].button("H_WL", key="h_nav_wl")
+    h_sim = btns[4].button("H_SIM", key="h_nav_sim")
 
-# 執行邏輯 (按鈕觸發後執行)
+# 執行邏輯
 if h_tw:
     st.session_state.scan_market = "TW"
     st.session_state.is_big_scan = True
@@ -283,18 +300,16 @@ if h_sim:
     st.session_state.active_page = "simulation"
     st.rerun()
 
-# 2. 透過 CSS 控制顯示的自定義組件
+# 2. 顯示組件 (透過 CSS 控制)
 st.markdown("""
     <div class="mobile-ui-container">
-        <table class="custom-table">
-            <tr>
-                <td style="width:20%;"><div class="custom-btn" onclick="triggerSt('H_TW')"><div class="custom-btn-icon">🇹🇼</div><div class="custom-btn-label">台股</div></div></td>
-                <td style="width:20%;"><div class="custom-btn" onclick="triggerSt('H_US')"><div class="custom-btn-icon">🇺🇸</div><div class="custom-btn-label">美股</div></div></td>
-                <td style="width:20%;"><div class="custom-btn" onclick="triggerSt('H_CRYPTO')"><div class="custom-btn-icon">🪙</div><div class="custom-btn-label">加密</div></div></td>
-                <td style="width:20%;"><div class="custom-btn" onclick="triggerSt('H_WL')"><div class="custom-btn-icon">📋</div><div class="custom-btn-label">清單</div></div></td>
-                <td style="width:20%;"><div class="custom-btn" onclick="triggerSt('H_SIM')"><div class="custom-btn-icon">📊</div><div class="custom-btn-label">紀錄</div></div></td>
-            </tr>
-        </table>
+        <div class="custom-row">
+            <div class="custom-col"><div class="custom-btn" onclick="triggerSt('H_TW')"><div class="custom-btn-icon">🇹🇼</div><div class="custom-btn-label">台股</div></div></div>
+            <div class="custom-col"><div class="custom-btn" onclick="triggerSt('H_US')"><div class="custom-btn-icon">🇺🇸</div><div class="custom-btn-label">美股</div></div></div>
+            <div class="custom-col"><div class="custom-btn" onclick="triggerSt('H_CRYPTO')"><div class="custom-btn-icon">🪙</div><div class="custom-btn-label">加密</div></div></div>
+            <div class="custom-col"><div class="custom-btn" onclick="triggerSt('H_WL')"><div class="custom-btn-icon">📋</div><div class="custom-btn-label">清單</div></div></div>
+            <div class="custom-col"><div class="custom-btn" onclick="triggerSt('H_SIM')"><div class="custom-btn-icon">📊</div><div class="custom-btn-label">紀錄</div></div></div>
+        </div>
     </div>
 """, unsafe_allow_html=True)
 
@@ -2304,12 +2319,13 @@ if "results" in st.session_state:
     # --- 分頁導航 ---
     if total_pages > 1:
         st.divider()
-        # --- 🚀 [FINAL FIX] 物理性橫向分頁欄 (Table-based) ---
+        # --- 🚀 [FINAL FIX] 物理性橫向分頁欄 (Row-based) ---
         # 1. 隱藏觸發器
-        st.markdown('<div class="hidden-trigger">', unsafe_allow_html=True)
-        h_prev = st.button("ST_PREV", key="h_pg_prev")
-        h_next = st.button("ST_NEXT", key="h_pg_next")
-        st.markdown('</div>', unsafe_allow_html=True)
+        with st.container():
+            st.markdown('<div class="logic-sink"></div>', unsafe_allow_html=True)
+            p_cols = st.columns(2)
+            h_prev = p_cols[0].button("ST_PREV", key="h_pg_prev")
+            h_next = p_cols[1].button("ST_NEXT", key="h_pg_next")
         
         if h_prev:
             st.session_state.current_page -= 1
@@ -2318,20 +2334,18 @@ if "results" in st.session_state:
             st.session_state.current_page += 1
             st.rerun()
 
-        # 2. 顯示元件
+        # 2. 顯示組件 (透過 CSS 控制)
         is_mob = is_mobile_device()
         prev_label = "◀️" if is_mob else "◀️ 上一頁"
         next_label = "▶️" if is_mob else "下一頁 ▶️"
         
         st.markdown(f"""
             <div class="mobile-ui-container">
-                <table class="custom-table" style="margin-top:20px;">
-                    <tr>
-                        <td style="width:35%;"><div class="custom-btn" onclick="triggerSt('ST_PREV')">{prev_label}</div></td>
-                        <td style="width:30%; text-align:center;"><div class="custom-pg-num">{st.session_state.current_page + 1} / {total_pages}</div></td>
-                        <td style="width:35%;"><div class="custom-btn" onclick="triggerSt('ST_NEXT')">{next_label}</div></td>
-                    </tr>
-                </table>
+                <div class="custom-row" style="margin-top:20px;">
+                    <div class="custom-col"><div class="custom-btn" onclick="triggerSt('ST_PREV')">{prev_label}</div></div>
+                    <div class="custom-pg-num">{st.session_state.current_page + 1} / {total_pages}</div>
+                    <div class="custom-col"><div class="custom-btn" onclick="triggerSt('ST_NEXT')">{next_label}</div></div>
+                </div>
             </div>
         """, unsafe_allow_html=True)
     
