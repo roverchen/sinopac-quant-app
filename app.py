@@ -2161,9 +2161,6 @@ if (big_scan_tw_btn or big_scan_us_btn or big_scan_crypto_btn or scan_btn or sho
 
 # --- 頁面路由切換 ---
 if st.session_state.active_page == "simulation":
-    if st.button("🏠 返回行情掃描 (Market)"):
-        st.session_state.active_page = "market"
-        st.rerun()
     display_simulation_dashboard(user_id)
     st.stop()
 
@@ -2201,24 +2198,6 @@ if "results" in st.session_state:
     else:
         st.warning("⚠️ 目前清單中尚無有效的分析結果，請點擊「🚀 目前追蹤清單」。")
     
-    # --- 指標說明 (動態調整) ---
-    w_def = int(st.session_state.defense_weight * 100)
-    w_gro = 100 - w_def
-    is_crypto = st.session_state.get("scan_market") == "CRYPTO"
-    
-    # 策略文字變數
-    def_ma = "100日線" if is_crypto else "年線"
-    atr_mult = "3.0倍" if is_crypto else "2.5倍"
-    pullback_target = "MA20/MA50" if is_crypto else "MA20"
-    
-    msg = "本系統採用 (" + str(w_def) + "/" + str(w_gro) + " 權重動態配置) 策略，透過營收趨勢與成交量能計算精確點位：\n\n"
-    msg += "🛡️ 價值防禦: 標的: 基本面優質、具備長期支撐。 (M) 標示為 (量能激增 + 重回 5 日線) 動能觸發。\n"
-    msg += "進場: 參考 " + def_ma + " 支撐。設定 1:2 盈虧比 或預期 +20%。停損位設於近期低點 (-5%)。\n"
-    msg += "📈 強勢平回: 標的: 強勢趨勢股/加密貨幣。" + (" !! 流動性過濾: 若 24h 成交量大幅萎縮，則評分遞減。" if is_crypto else "") + "\n"
-    msg += "進場: 參考 " + pullback_target + " 支撐進場。停損位設於 " + atr_mult + " ATR。 目標: 預期 1:3 盈虧比。若帶量突破，目標上看 1:4。\n"
-    msg += "MACD 狀態: (🎯強勢) (大於 0) = 高爆發力階段；(🩹弱勢) (小於 0) = 超跌反彈階段。"
-    with st.expander(f"💡 策略心法與操作建議 ({w_def}% 價值防禦 + {w_gro}% 強勢平回)"):
-        st.markdown(msg)
 
     # --- 自定義列表 ---
     is_big = st.session_state.get("is_big_scan", False)
