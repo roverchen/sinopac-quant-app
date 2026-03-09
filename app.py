@@ -49,9 +49,7 @@ def get_file_time(path):
     except Exception:
         return datetime.fromtimestamp(ts)
 from plotly.subplots import make_subplots
-import os
 import difflib
-import json
 import requests
 import yfinance as yf
 import math
@@ -67,7 +65,6 @@ except ImportError:
     MaxExchangeAPI = None
 
 # --- 🎯 設備檢測與識別碼工具 ---
-import uuid
 try:
     from streamlit.runtime.scriptrunner import get_script_run_ctx
 except ImportError:
@@ -82,44 +79,42 @@ def get_session_uid():
     ctx = get_script_run_ctx()
     internal_id = "u_" + (ctx.session_id[:8] if ctx else uuid.uuid4().hex[:6])
     
-    # 3. 檢查網址參數 (高優先級)
+    # 3. 檢查網址參數 (最高優先級)
     url_u = st.query_params.get('u')
     if url_u:
-        final_uid = str(url_u)
-        st.session_state.user_id = final_uid
-        # 非同步寫入 LocalStorage (不等待回應)
-        try:
-            st_javascript(f"localStorage.setItem('sinopac_user_id', '{final_uid}');")
-        except: pass
-        return final_uid
+        st.session_state.user_id = str(url_u)
+        return str(url_u)
 
-    # 4. 嘗試從 LocalStorage 讀取
+    # 4. 嘗試從 LocalStorage 讀取 (使用 st_javascript)
     try:
-        # 使用 st_javascript 獲取資料，但「不等待」它
+        # 使用 st_javascript 獲取資料
         js_get = "localStorage.getItem('sinopac_user_id');"
         stored_uid = st_javascript(js_get)
         
-        # 如果 JS 已經有回應
+        # 如果 JS 已經有回應且有效
         if stored_uid != 0 and stored_uid is not None and str(stored_uid) != "null":
             final_uid = str(stored_uid)
             st.session_state.user_id = final_uid
             return final_uid
+            
+        # 5. 如果 JS 還在跑 (0) 或沒資料，先寫入當前 internal_id 並回傳 (非同步)
+        st_javascript(f"localStorage.setItem('sinopac_user_id', '{internal_id}');")
     except:
         pass
 
-    # 5. 如果 JS 還沒回應或失敗，直接回傳內部 ID 作為備援，不使用 st.stop()
-    # 這樣程式可以繼續往下跑，等 JS 真的有回應觸發 rerun 時再更新即可
+    # 6. 回傳備援 ID
     return internal_id
 
 def is_mobile_device():
-    """透過 User-Agent 與 Query Parameter 判斷是否為行動裝置"""
+    """透過 User-Agent 與 Query Parameter 判斷是否為行動裝置 (優化版)"""
     try:
         # 1. 優先檢查 Query Parameter (?mobile=1)
         if st.query_params.get("mobile") == "1":
             return True
-        # 2. 檢查 User-Agent
+        # 2. 檢查 User-Agent (擴展關鍵字)
         ua = st.context.headers.get("User-Agent", "").lower()
-        return any(m in ua for m in ["mobile", "android", "iphone", "ipad"])
+        mobile_keywords = ["mobile", "android", "iphone", "ipad", "phone", "ipod", "blackberry", "iemobile", "opera mini"]
+        return any(m in ua for m in mobile_keywords)
     except:
         return False
 
@@ -165,6 +160,7 @@ if not os.path.exists(CACHE_DIR):
 
 # --- 頁面設定 ---
 st.set_page_config(page_title="金融商品市場報明牌系統", layout="wide")
+user_id = get_session_uid()
 render_sidebar_closer() # 執行掛起的側邊欄收合請求
 
 # --- 手機版、表格優化與穩定連線 CSS ---
@@ -180,66 +176,67 @@ st.markdown("""
             overscroll-behavior: contain !important;
         }
 
-        /* 移除所有不穩定的 :has 選擇器，改用單純的 class 控制 */
+        /* 移除不穩定的 :has 選擇器，改用單純的 class 與物理空間隱藏 */
         .desktop-only { display: block; }
         .mobile-only { display: none; }
         .mobile-label { display: none; }
+        
+        /* 手機版原生按鈕優化 */
+        @media (max-width: 768px) {
+            /* 讓按鈕在小視窗下的 padding 更緊湊 */
+            .stButton > button {
+                padding-left: 0.1rem !important;
+                padding-right: 0.1rem !important;
+            }
+        }
 
         @media (max-width: 768px) {
             .desktop-only { display: none !important; }
             .mobile-only { display: block !important; }
             .mobile-label { display: inline-block !important; color: #888; font-size: 0.8rem; margin-right: 6px; width: 70px; }
 
-            /* --- [ULTIMATE FIX] 全自定義行動端元件 (Row-based for horizontal layout) --- */
-            .custom-row { 
-                display: flex !important; 
-                flex-direction: row !important; 
-                flex-wrap: nowrap !important; 
-                justify-content: space-between !important; 
-                align-items: center !important; 
-                width: 100% !important; 
-                gap: 5px !important; 
+            /* --- 全自定義行動端元件 (Table-based for guaranteed horizontal layout) --- */
+            .custom-table {
+                width: 100% !important;
+                border-collapse: collapse !important;
+                border: none !important;
                 margin: 10px 0 !important;
+                table-layout: fixed !important;
             }
-            .custom-col { 
-                flex: 1 !important; 
-                margin: 0 !important;
-                padding: 0 !important;
+            .custom-table td {
+                padding: 4px !important;
+                border: none !important;
+                vertical-align: middle !important;
+                text-align: center !important;
             }
             
             .custom-btn {
-                background: rgba(255,255,255,0.08) !important;
-                border: 1px solid rgba(255,255,255,0.1) !important;
-                border-radius: 8px !important;
-                padding: 10px 2px !important;
-                text-align: center !important;
+                background: rgba(255,255,255,0.1) !important;
+                border: 1px solid rgba(255,255,255,0.2) !important;
+                border-radius: 10px !important;
+                padding: 12px 2px !important;
                 cursor: pointer !important;
                 transition: background 0.2s !important;
                 display: block !important;
                 width: 100% !important;
+                user-select: none !important;
+                box-sizing: border-box !important;
             }
             .custom-btn:active {
-                background: rgba(255,255,255,0.15) !important;
+                background: rgba(255,255,255,0.2) !important;
+                transform: scale(0.98);
             }
-            .custom-btn-icon { font-size: 1.3rem !important; margin-bottom: 2px !important; }
-            .custom-btn-label { font-size: 0.65rem !important; color: #ccc !important; display: block !important; }
+            .custom-btn-icon { font-size: 1.4rem !important; margin-bottom: 2px !important; }
+            .custom-btn-label { font-size: 0.7rem !important; color: #eee !important; display: block !important; font-weight: bold; }
             
-            .custom-pg-num { font-size: 1rem !important; font-weight: bold !important; text-align: center !important; color: #fff !important; min-width: 60px; }
+            .custom-pg-num { font-size: 1.1rem !important; font-weight: bold !important; color: #fff !important; width: 100% !important; }
             
-            /* --- 關鍵：隱藏包含 .logic-sink 的整個 Streamlit 容器 --- */
-            [data-testid="stVerticalBlock"]:has(.logic-sink),
-            [data-testid="stVerticalBlockBorderWrapper"]:has(.logic-sink) {
-                display: none !important;
-            }
-            
-            /* 行動端專屬容器 */
-            .mobile-ui-container { display: flex !important; }
+            /* 行動端專屬容器顯示 */
+            .mobile-ui-container { display: block !important; width: 100% !important; }
             .desktop-ui-container { display: none !important; }
         }
         
-        /* 非行動端預設隱藏 */
-        .mobile-ui-container { display: none !important; }
-        .desktop-ui-container { display: block !important; }
+        /* 非行動端預設隱藏 - 取消，全由 Python is_mob 控制 */
 </style>
 """, unsafe_allow_html=True)
 
@@ -247,71 +244,66 @@ st.markdown("""
 # 預設時區工具
 st.title("📈 金融商品市場報明牌系統")
 
-# --- [NEW] JS Bridge 核心腳本 (全域) ---
-st.markdown("""
-    <script>
-        window.triggerSt = function(key) {
-            const doc = window.parent.document;
-            const buttons = Array.from(doc.querySelectorAll('button[kind="secondary"]'));
-            const target = buttons.find(b => b.innerText === key);
-            if (target) {
-                target.click();
-            } else {
-                console.log("Button not found: " + key);
+# --- 行動端專屬：DOM 佈局強制修正 (不依賴 CSS Hacking) ---
+import streamlit.components.v1 as components
+components.html("""
+<script>
+    const parentWin = window.parent || window;
+    function enforceHorizontal() {
+        if (parentWin.innerWidth > 768) return;
+        ['nav-marker', 'pg-marker'].forEach(id => {
+            const marker = parentWin.document.getElementById(id);
+            if (marker) {
+                let container = marker.closest('.element-container');
+                if (container && container.nextElementSibling) {
+                    let block = container.nextElementSibling.querySelector('[data-testid="stHorizontalBlock"]');
+                    if (block) {
+                        block.style.setProperty('flex-wrap', 'nowrap', 'important');
+                        block.style.setProperty('gap', '3px', 'important');
+                        Array.from(block.children).forEach(col => {
+                            col.style.setProperty('min-width', '0', 'important');
+                            col.style.setProperty('flex', '1 1 0%', 'important');
+                            col.style.setProperty('width', 'auto', 'important');
+                        });
+                    }
+                }
             }
-        }
-    </script>
-""", unsafe_allow_html=True)
+        });
+    }
+    const observer = new MutationObserver(enforceHorizontal);
+    observer.observe(parentWin.document.body, { childList: true, subtree: true });
+    enforceHorizontal();
+</script>
+""", height=0, width=0)
 
-# --- [NEW] 行動端專屬：頂部快捷導航列 ---
-# 1. 隱藏邏輯池 (Logic Sink)
-with st.container():
-    st.markdown('<div class="logic-sink"></div>', unsafe_allow_html=True)
-    btns = st.columns(5)
-    h_tw = btns[0].button("H_TW", key="h_nav_tw")
-    h_us = btns[1].button("H_US", key="h_nav_us")
-    h_cy = btns[2].button("H_CRYPTO", key="h_nav_crypto")
-    h_wl = btns[3].button("H_WL", key="h_nav_wl")
-    h_sim = btns[4].button("H_SIM", key="h_nav_sim")
-
-# 執行邏輯
-if h_tw:
+# --- 頂部快捷導覽列 ---
+st.title("") # 佔位，微調頂部間距
+st.markdown('<div id="nav-marker"></div>', unsafe_allow_html=True)
+nav_cols = st.columns(5)
+if nav_cols[0].button("🇹🇼 台股", use_container_width=True):
     st.session_state.scan_market = "TW"
     st.session_state.is_big_scan = True
     st.session_state.trigger_daily_scan = True
     st.rerun()
-if h_us:
+if nav_cols[1].button("🇺🇸 美股", use_container_width=True):
     st.session_state.scan_market = "US"
     st.session_state.is_big_scan = True
     st.session_state.trigger_daily_scan = True
     st.rerun()
-if h_cy:
+if nav_cols[2].button("🪙 加密", use_container_width=True):
     st.session_state.scan_market = "CRYPTO"
     st.session_state.is_big_scan = True
     st.session_state.trigger_daily_scan = True
     st.rerun()
-if h_wl:
+if nav_cols[3].button("📋 清單", use_container_width=True):
     st.session_state.active_page = "market"
     st.session_state.is_big_scan = False
     st.session_state.scan_market = None
     st.session_state.force_rescan = True
     st.rerun()
-if h_sim:
+if nav_cols[4].button("📊 紀錄", use_container_width=True):
     st.session_state.active_page = "simulation"
     st.rerun()
-
-# 2. 顯示組件 (透過 CSS 控制)
-st.markdown("""
-    <div class="mobile-ui-container">
-        <div class="custom-row">
-            <div class="custom-col"><div class="custom-btn" onclick="triggerSt('H_TW')"><div class="custom-btn-icon">🇹🇼</div><div class="custom-btn-label">台股</div></div></div>
-            <div class="custom-col"><div class="custom-btn" onclick="triggerSt('H_US')"><div class="custom-btn-icon">🇺🇸</div><div class="custom-btn-label">美股</div></div></div>
-            <div class="custom-col"><div class="custom-btn" onclick="triggerSt('H_CRYPTO')"><div class="custom-btn-icon">🪙</div><div class="custom-btn-label">加密</div></div></div>
-            <div class="custom-col"><div class="custom-btn" onclick="triggerSt('H_WL')"><div class="custom-btn-icon">📋</div><div class="custom-btn-label">清單</div></div></div>
-            <div class="custom-col"><div class="custom-btn" onclick="triggerSt('H_SIM')"><div class="custom-btn-icon">📊</div><div class="custom-btn-label">紀錄</div></div></div>
-        </div>
-    </div>
-""", unsafe_allow_html=True)
 
 # --- 手機版側邊欄提示 ---
 
@@ -1134,7 +1126,7 @@ def get_mass_scan_list(api, market='TW'):
     return sorted(filtered)
 
 # --- 🛠️ 核心隔離邏輯：Native Session ID 優先 (背景執行) ---
-user_id = get_session_uid()
+# user_id 已在上方初始化並啟動背景同步
 
 # 1. 初始化 Watchlist (直接從後端 JSON 讀取，拋棄不穩定的 LocalStorage)
 if 'watchlist' not in st.session_state:
@@ -1198,6 +1190,17 @@ with st.sidebar.container():
                                            type="primary" if st.session_state.get("scan_market") == "CRYPTO" else "secondary",
                                            help="掃描熱門加密貨幣並過濾出優質標的")
     st.markdown('</div>', unsafe_allow_html=True)
+
+# --- [NEW] 行動端除錯工具 (僅供開發使用) ---
+with st.sidebar.expander("🛠️ 行動端偵測資訊"):
+    is_mob = is_mobile_device()
+    st.write(f"📲 行動裝置: {'✅ 是' if is_mob else '❌ 否'}")
+    st.write(f"🆔 用戶 ID: `{user_id}`")
+    st.caption(f"🌐 UA: {st.context.headers.get('User-Agent', '未知')}")
+    if st.button("🔴 重設並重新整理", help="清除 Session 並重導向"):
+        st.session_state.clear()
+        st.query_params.clear()
+        st.rerun()
 
 # 確保按下海選按鈕時切換回主頁
 if big_scan_tw_btn:
@@ -1851,6 +1854,192 @@ def plot_financial_charts(df, title):
     
     st.plotly_chart(fig, width="stretch")
 
+# --- [NEW] 下單對話框 ---
+@st.dialog("📝 下單確認 (模擬預覽)")
+def show_order_dialog(row, user_id, api, max_api, ca_active):
+    st.markdown(f"### 🎯 準備委託: **{row['代碼']} {row['名稱']}**")
+    
+    # 提取建議買價
+    try:
+        # 解析建議字串: "📈強勢 | 買:1255.0 | 標:1443.2 | 損:1192.2"
+        action_parts = row['操作建議'].split('|')
+        buy_price = float(action_parts[1].split(':')[1].strip())
+    except:
+        buy_price = row['最新價格']
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("建議買價", f"{buy_price:.2f}")
+        
+    # 判斷是否為虛擬貨幣或美股
+    is_crypto = "-USD" in str(row['代碼'])
+    is_us = ".TW" not in str(row['代碼']) and not is_crypto
+    
+    with col2:
+        if is_crypto:
+            qty = st.number_input("委託數量 (顆)", min_value=0.0001, value=0.1, step=0.01, format="%.4f")
+        else:
+            qty = st.number_input("委託股數", min_value=1, value=1000, step=100)
+        
+    # --- [NEW] MAX 市場智慧識別 ---
+    max_market_id = None
+    if max_api:
+        # 取得 MAX 所有市場清單 (使用會話級快取避免頻繁請求)
+        if "max_markets" not in st.session_state:
+            try:
+                # 如果是因為快取問題導致找不到屬性，這裡做最後一次嘗試
+                if hasattr(max_api, "get_markets"):
+                    st.session_state.max_markets = max_api.get_markets()
+                else:
+                    # 嘗試手動從模組獲取並注入 (極端手段)
+                    from max_api import MaxExchangeAPI as SafeAPI
+                    temp_api = SafeAPI(os.getenv("MAX_API_KEY"), os.getenv("MAX_API_SECRET"))
+                    st.session_state.max_markets = temp_api.get_markets()
+            except Exception as e:
+                print(f"Error fetching MAX markets: {e}")
+                st.session_state.max_markets = []
+        
+        # 轉換邏輯：MATIC -> POL, BTC-USD -> btctwd
+        raw_symbol = str(row['代碼']).split('-')[0].lower()
+        # 內建更名表
+        rename_map = {"matic": "pol", "fb": "meta", "goog": "googl"}
+        base_coin = rename_map.get(raw_symbol, raw_symbol)
+        
+        # 優先找 TWD 交易對，再找 USDT
+        available_ids = [m['id'] for m in st.session_state.get('max_markets', [])]
+        if f"{base_coin}twd" in available_ids:
+            max_market_id = f"{base_coin}twd"
+        elif f"{base_coin}usdt" in available_ids:
+            max_market_id = f"{base_coin}usdt"
+        
+    total_amount = buy_price * qty
+    st.success(f"💡 預估委託金額: **{total_amount:,.2f}** 元")
+    
+    # --- [NEW] 餘額檢查 ---
+    insufficient_funds = False
+    if max_api and is_crypto:
+        max_bal = st.session_state.get('max_balance', {})
+        twd_avail = float(max_bal.get('twd', {}).get('balance', 0))
+        if total_amount > twd_avail:
+            st.error(f"⚠️ 餘額不足！可用: **{twd_avail:,.2f}** TWD (缺: {total_amount - twd_avail:,.2f})")
+            insufficient_funds = True
+    
+    st.divider()
+    c1, c2 = st.columns(2)
+    # 按鈕 1: 模擬下單 (永遠可用)
+    if c1.button("🧪 執行模擬下單", use_container_width=True):
+        # 使用詳細理由產生器
+        reason = build_buy_reason(row)
+        # 手動下單強制 is_system=False, 並記錄 股數 與 類型
+        if record_trade(user_id, "Manual", row['代碼'], row['名稱'], buy_price, reason, is_system=False, trade_type="Simulated", shares=qty):
+            st.toast(f"🚀 已錄入 {row['代碼']} 個人模擬委託 ({qty} 股)！", icon="✅")
+            st.session_state.last_order = f"{get_now().strftime('%H:%M:%S')} - 已模擬買入 {row['代碼']}"
+            st.rerun()
+        else:
+            st.warning(f"⚠️ 您已經持有 {row['代碼']} 的個人未平倉位。")
+        
+    # 按鈕 2: 實盤下單
+    is_crypto = "-USD" in str(row['代碼'])
+    
+    if is_crypto:
+        # 針對加密貨幣透過 MAX API 下單
+        if max_api:
+            btn_label = f"💰 MAX 實盤下單 ({max_market_id.upper()})" if max_market_id else "❌ MAX 不支援此幣"
+            if st.button(btn_label, use_container_width=True, type="primary", disabled=(not max_market_id or insufficient_funds)):
+                try:
+                    # 呼叫 MAX API 送出限價單
+                    trade = max_api.place_order(
+                        market=max_market_id,
+                        side="buy",
+                        volume=qty,
+                        price=buy_price,
+                        ord_type="limit"
+                    )
+                    
+                    if 'error' in trade:
+                        st.error(f"❌ MAX 下單失敗: {trade['error']}")
+                    else:
+                        # [NEW] 成功後也記錄在「個人紀錄」中作為持倉追蹤 (類型為 Real)
+                        reason = f"MAX 實盤買入 ({trade.get('id', 'N/A')})"
+                        record_trade(user_id, "Manual", row['代碼'], row['名稱'], buy_price, reason, is_system=False, trade_type="Real", shares=qty)
+                        
+                        st.session_state.last_order = f"{get_now().strftime('%H:%M:%S')} - MAX 已送出 {max_market_id.upper()} {qty}顆 (限價:{buy_price})"
+                        st.toast(f"✅ MAX 委託已送出 ({max_market_id.upper()})！已加入持倉紀錄。", icon="🚀")
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"❌ MAX 系統異常: {e}")
+        else:
+            c2.info("🔴 MAX API 未設定")
+    else:
+        # 針對一般股票透過 Shioaji 永豐金 API 下單
+        if ca_active:
+            if c2.button("💰 API 實盤下單", use_container_width=True, type="primary"):
+                try:
+                    # 1. 取得合約
+                    contract = None
+                    for mk in ["TSE", "OTC"]:
+                        try:
+                            contract = getattr(api.Contracts.Stocks, mk)[row['代碼']]
+                            if contract: break
+                        except: continue
+                    
+                    if not contract:
+                        st.error("❌ 找不到該標的合約，無法下單。")
+                    else:
+                        from shioaji import Order
+                        from shioaji.constant import Action, StockPriceType, OrderType
+                        
+                        order = Order(
+                            price=buy_price,
+                            quantity=qty,
+                            action=Action.Buy,
+                            price_type=StockPriceType.LMT, # 限價
+                            order_type=OrderType.ROD, # 當日有效
+                            account=api.list_accounts()[0] # 預設取第一個帳號
+                        )
+                        
+                        trade = api.place_order(contract, order)
+                        # Shioaji place_order returns a Trade object, not a dict with 'error'.
+                        # Error handling is typically done via exceptions or checking trade status.
+                        # Assuming a successful placement if no exception is raised.
+                        # [NEW] 成功後也記錄在「個人紀錄」中作為持倉追蹤 (類型為 Real)
+                        reason = f"永豐金實盤買入 (委託號: {trade.order.id})" # Use trade.order.id for order ID
+                        record_trade(user_id, "Manual", row['代碼'], row['名稱'], buy_price, reason, is_system=False, trade_type="Real", shares=qty)
+                        
+                        st.session_state.last_order = f"{get_now().strftime('%H:%M:%S')} - 永豐金已送出 {row['代碼']} {qty}股 (限價:{buy_price})"
+                        st.toast("✅ 永豐金委託已送出！已加入持倉紀錄。", icon="🚀")
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"❌ API 下單失敗: {e}")
+        else:
+            c2.link_button("🌐 官網開啟下單", 
+                         "https://www.sinotrade.com.tw/newweb/goOrder/?nav=0", 
+                         use_container_width=True,
+                         help="憑證未啟動，請手動至官網下單")
+
+    # --- [NEW] 在對話框內顯示 K 線與 MACD 指標 ---
+    st.divider()
+    st.markdown(f"#### 📊 {row['代碼']} {row['名稱']} 技術圖表")
+    cache_file = os.path.join(CACHE_DIR, f"{row['代碼']}_y.csv")
+    if os.path.exists(cache_file):
+        df_selected = pd.read_csv(cache_file)
+        df_selected['ts'] = pd.to_datetime(df_selected['ts'])
+        
+        # --- 補齊圖表所需的技術指標 ---
+        df_selected['ma20'] = df_selected['close'].rolling(window=20).mean()
+        df_selected['ma60'] = df_selected['close'].rolling(window=60).mean()
+        df_selected['ma240'] = df_selected['close'].rolling(window=240).mean()
+        
+        exp1 = df_selected['close'].ewm(span=12, adjust=False).mean()
+        exp2 = df_selected['close'].ewm(span=26, adjust=False).mean()
+        df_selected['macd'] = exp1 - exp2
+        df_selected['signal'] = df_selected['macd'].ewm(span=9, adjust=False).mean()
+        df_selected['hist'] = df_selected['macd'] - df_selected['signal']
+
+        plot_financial_charts(df_selected, row['代碼'])
+    else:
+        st.warning(f"⚠️ 找不到 {row['代碼']} 的快取資料。")
+
 # --- 自動化掃描與顯示 ---
 # 如果正在顯示建議清單，可以選擇先不自動掃描，避免干擾使用者操作
 current_watchlist_key = ",".join(watchlist)
@@ -2061,293 +2250,150 @@ if "results" in st.session_state:
     header_html += '<div style="flex: 0.8;">ATR停損</div><div style="flex: 3.5;">操作建議</div><div style="flex: 0.5;"></div></div></div>'
     st.markdown(header_html, unsafe_allow_html=True)
     
-    # --- [NEW] 下單對話框 ---
-    @st.dialog("📝 下單確認 (模擬預覽)")
-    def show_order_dialog(row):
-        st.markdown(f"### 🎯 準備委託: **{row['代碼']} {row['名稱']}**")
-        
-        # 提取建議買價
-        try:
-            # 解析建議字串: "📈強勢 | 買:1255.0 | 標:1443.2 | 損:1192.2"
-            action_parts = row['操作建議'].split('|')
-            buy_price = float(action_parts[1].split(':')[1].strip())
-        except:
-            buy_price = row['最新價格']
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("建議買價", f"{buy_price:.2f}")
-            
-        # 判斷是否為虛擬貨幣或美股
-        is_crypto = "-USD" in str(row['代碼'])
-        is_us = ".TW" not in str(row['代碼']) and not is_crypto
-        
-        with col2:
-            if is_crypto:
-                qty = st.number_input("委託數量 (顆)", min_value=0.0001, value=0.1, step=0.01, format="%.4f")
-            else:
-                qty = st.number_input("委託股數", min_value=1, value=1000, step=100)
-            
-        # --- [NEW] MAX 市場智慧識別 ---
-        max_market_id = None
-        if max_api:
-            # 取得 MAX 所有市場清單 (使用會話級快取避免頻繁請求)
-            if "max_markets" not in st.session_state:
-                try:
-                    # 如果是因為快取問題導致找不到屬性，這裡做最後一次嘗試
-                    if hasattr(max_api, "get_markets"):
-                        st.session_state.max_markets = max_api.get_markets()
-                    else:
-                        # 嘗試手動從模組獲取並注入 (極端手段)
-                        from max_api import MaxExchangeAPI as SafeAPI
-                        temp_api = SafeAPI(os.getenv("MAX_API_KEY"), os.getenv("MAX_API_SECRET"))
-                        st.session_state.max_markets = temp_api.get_markets()
-                except Exception as e:
-                    print(f"Error fetching MAX markets: {e}")
-                    st.session_state.max_markets = []
-            
-            # 轉換邏輯：MATIC -> POL, BTC-USD -> btctwd
-            raw_symbol = str(row['代碼']).split('-')[0].lower()
-            # 內建更名表
-            rename_map = {"matic": "pol", "fb": "meta", "goog": "googl"}
-            base_coin = rename_map.get(raw_symbol, raw_symbol)
-            
-            # 優先找 TWD 交易對，再找 USDT
-            available_ids = [m['id'] for m in st.session_state.get('max_markets', [])]
-            if f"{base_coin}twd" in available_ids:
-                max_market_id = f"{base_coin}twd"
-            elif f"{base_coin}usdt" in available_ids:
-                max_market_id = f"{base_coin}usdt"
-            
-        total_amount = buy_price * qty
-        st.success(f"💡 預估委託金額: **{total_amount:,.2f}** 元")
-        
-        # --- [NEW] 餘額檢查 ---
-        insufficient_funds = False
-        if max_api and is_crypto:
-            max_bal = st.session_state.get('max_balance', {})
-            twd_avail = float(max_bal.get('twd', {}).get('balance', 0))
-            if total_amount > twd_avail:
-                st.error(f"⚠️ 餘額不足！可用: **{twd_avail:,.2f}** TWD (缺: {total_amount - twd_avail:,.2f})")
-                insufficient_funds = True
-        
-        st.divider()
-        c1, c2 = st.columns(2)
-        # 按鈕 1: 模擬下單 (永遠可用)
-        if c1.button("🧪 執行模擬下單", use_container_width=True):
-            # 使用詳細理由產生器
-            reason = build_buy_reason(row)
-            # 手動下單強制 is_system=False, 並記錄 股數 與 類型
-            if record_trade(user_id, "Manual", row['代碼'], row['名稱'], buy_price, reason, is_system=False, trade_type="Simulated", shares=qty):
-                st.toast(f"🚀 已錄入 {row['代碼']} 個人模擬委託 ({qty} 股)！", icon="✅")
-                st.session_state.last_order = f"{get_now().strftime('%H:%M:%S')} - 已模擬買入 {row['代碼']}"
-                st.rerun()
-            else:
-                st.warning(f"⚠️ 您已經持有 {row['代碼']} 的個人未平倉位。")
-            
-        # 按鈕 2: 實盤下單
-        is_crypto = "-USD" in str(row['代碼'])
-        
-        if is_crypto:
-            # 針對加密貨幣透過 MAX API 下單
-            if max_api:
-                btn_label = f"💰 MAX 實盤下單 ({max_market_id.upper()})" if max_market_id else "❌ MAX 不支援此幣"
-                if st.button(btn_label, use_container_width=True, type="primary", disabled=(not max_market_id or insufficient_funds)):
-                    try:
-                        # 呼叫 MAX API 送出限價單
-                        trade = max_api.place_order(
-                            market=max_market_id,
-                            side="buy",
-                            volume=qty,
-                            price=buy_price,
-                            ord_type="limit"
-                        )
-                        
-                        if 'error' in trade:
-                            st.error(f"❌ MAX 下單失敗: {trade['error']}")
-                        else:
-                            # [NEW] 成功後也記錄在「個人紀錄」中作為持倉追蹤 (類型為 Real)
-                            reason = f"MAX 實盤買入 ({trade.get('id', 'N/A')})"
-                            record_trade(user_id, "Manual", row['代碼'], row['名稱'], buy_price, reason, is_system=False, trade_type="Real", shares=qty)
-                            
-                            st.session_state.last_order = f"{get_now().strftime('%H:%M:%S')} - MAX 已送出 {max_market_id.upper()} {qty}顆 (限價:{buy_price})"
-                            st.toast(f"✅ MAX 委託已送出 ({max_market_id.upper()})！已加入持倉紀錄。", icon="🚀")
-                            st.rerun()
-                    except Exception as e:
-                        st.error(f"❌ MAX 系統異常: {e}")
-            else:
-                c2.info("🔴 MAX API 未設定")
-        else:
-            # 針對一般股票透過 Shioaji 永豐金 API 下單
-            if ca_active:
-                if c2.button("💰 API 實盤下單", use_container_width=True, type="primary"):
-                    try:
-                        # 1. 取得合約
-                        contract = None
-                        for mk in ["TSE", "OTC"]:
-                            try:
-                                contract = getattr(api.Contracts.Stocks, mk)[row['代碼']]
-                                if contract: break
-                            except: continue
-                        
-                        if not contract:
-                            st.error("❌ 找不到該標的合約，無法下單。")
-                        else:
-                            from shioaji import Order
-                            from shioaji.constant import Action, StockPriceType, OrderType
-                            
-                            order = Order(
-                                price=buy_price,
-                                quantity=qty,
-                                action=Action.Buy,
-                                price_type=StockPriceType.LMT, # 限價
-                                order_type=OrderType.ROD, # 當日有效
-                                account=api.list_accounts()[0] # 預設取第一個帳號
-                            )
-                            
-                            trade = api.place_order(contract, order)
-                            # Shioaji place_order returns a Trade object, not a dict with 'error'.
-                            # Error handling is typically done via exceptions or checking trade status.
-                            # Assuming a successful placement if no exception is raised.
-                            # [NEW] 成功後也記錄在「個人紀錄」中作為持倉追蹤 (類型為 Real)
-                            reason = f"永豐金實盤買入 (委託號: {trade.order.id})" # Use trade.order.id for order ID
-                            record_trade(user_id, "Manual", row['代碼'], row['名稱'], buy_price, reason, is_system=False, trade_type="Real", shares=qty)
-                            
-                            st.session_state.last_order = f"{get_now().strftime('%H:%M:%S')} - 永豐金已送出 {row['代碼']} {qty}股 (限價:{buy_price})"
-                            st.toast("✅ 永豐金委託已送出！已加入持倉紀錄。", icon="🚀")
-                            st.rerun()
-                    except Exception as e:
-                        st.error(f"❌ API 下單失敗: {e}")
-            else:
-                c2.link_button("🌐 官網開啟下單", 
-                             "https://www.sinotrade.com.tw/newweb/goOrder/?nav=0", 
-                             use_container_width=True,
-                             help="憑證未啟動，請手動至官網下單")
-
-        # --- [NEW] 在對話框內顯示 K 線與 MACD 指標 ---
-        st.divider()
-        st.markdown(f"#### 📊 {row['代碼']} {row['名稱']} 技術圖表")
-        cache_file = os.path.join(CACHE_DIR, f"{row['代碼']}_y.csv")
-        if os.path.exists(cache_file):
-            df_selected = pd.read_csv(cache_file)
-            df_selected['ts'] = pd.to_datetime(df_selected['ts'])
-            
-            # --- 補齊圖表所需的技術指標 ---
-            df_selected['ma20'] = df_selected['close'].rolling(window=20).mean()
-            df_selected['ma60'] = df_selected['close'].rolling(window=60).mean()
-            df_selected['ma240'] = df_selected['close'].rolling(window=240).mean()
-            
-            exp1 = df_selected['close'].ewm(span=12, adjust=False).mean()
-            exp2 = df_selected['close'].ewm(span=26, adjust=False).mean()
-            df_selected['macd'] = exp1 - exp2
-            df_selected['signal'] = df_selected['macd'].ewm(span=9, adjust=False).mean()
-            df_selected['hist'] = df_selected['macd'] - df_selected['signal']
-
-            plot_financial_charts(df_selected, row['代碼'])
-        else:
-            st.warning(f"⚠️ 找不到 {row['代碼']} 的快取資料。")
-
     # 2. 顯示內容 (每一家股票一個穩定容器，手機自動轉卡片)
+    is_mob = is_mobile_device()
     for index, row in paged_results.iterrows():
         with st.container(border=True):
-            cols = st.columns([1.5, 0.6, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 3.5, 0.5])
-            
-            # 欄位一：股票名稱 (轉為按鈕連結)
-            icon = "🪙" if "-USD" in str(row['代碼']) else "🛒"
-            if cols[0].button(f"{icon} {row['代碼']} {row['名稱']}", key=f"t_{row['代碼']}_{index}", use_container_width=True):
-                show_order_dialog(row)
-            
-            # 欄位二：資料時間
-            data_ts = row.get('_data_ts', '-')
-            cols[1].markdown(f'<span class="mobile-label">資料時間:</span><span style="font-size:0.8rem; color:#888;">{data_ts}</span>', unsafe_allow_html=True)
-
-            # 欄位三：最新價 (手機版會標註標籤)
-            price_val = f"{row['最新價格']:.1f}" if row['最新價格'] != 0 else "-"
-            cols[2].markdown(f'<span class="mobile-label">最新價:</span><b>{price_val}</b>', unsafe_allow_html=True)
-            
-            # 欄位四～六：指標
-            cols[3].markdown(f'<span class="mobile-label">一年位階:</span>{row["一年位階"]}', unsafe_allow_html=True)
-            cols[4].markdown(f'<span class="mobile-label">{header_label}:</span>{row["年線乖離"]}', unsafe_allow_html=True)
-            cols[5].markdown(f'<span class="mobile-label">MA20乖離:</span>{row["MA20乖離"]}', unsafe_allow_html=True)
-            
-            # 欄位七～八：新增的 MA20 價 與 ATR 停損
-            ma20_raw = row.get('_ma20', 0)
-            ma20_val = f"{ma20_raw:.1f}" if not pd.isna(ma20_raw) else "-"
-            atr_mult = row.get('_atr_mult', 2.5)
-            atr_stop_raw = row['最新價格'] - (atr_mult * row.get('_atr', 0))
-            atr_stop = f"{atr_stop_raw:.1f}" if not pd.isna(atr_stop_raw) else "-"
-            cols[6].markdown(f'<span class="mobile-label">MA20價:</span>{ma20_val}', unsafe_allow_html=True)
-            cols[7].markdown(f'<span class="mobile-label">ATR停損:</span>{atr_stop}', unsafe_allow_html=True)
-            
-            # 欄位九：操作建議
-            cols[8].markdown(f"**`{row['操作建議']}`**")
-            
-            # 欄位十：動作按鈕 (唯一 Key)
-            is_big_scan = st.session_state.get("is_big_scan", False)
-            if is_big_scan:
-                action_icon = "➕"
-            else:
-                action_icon = "🗑️" if row['代碼'] in st.session_state.watchlist else "➕"
-
-            if cols[9].button(action_icon, key=f"btn_{row['代碼']}_{index}", use_container_width=True):
-                if is_big_scan:
-                    if row['代碼'] not in st.session_state.watchlist:
-                        st.session_state.watchlist.append(row['代碼'])
-                        st.toast(f"✅ 已加入追蹤清單 {row['代碼']} {row['名稱']}")
-                        save_watchlist(st.session_state.watchlist, user_id)
-                    else:
-                        st.toast(f"ℹ️ {row['代碼']} 已在清單中")
-                else:
-                    if row['代碼'] in st.session_state.watchlist:
-                        st.session_state.watchlist.remove(row['代碼'])
-                        st.toast(f"🗑️ 已從清單移除 {row['代碼']}")
-                        # --- [優化] 即時從目前顯示的分析結果中移除該列，避免整頁重新掃描 ---
-                        if "results" in st.session_state:
-                            st.session_state.results = st.session_state.results[st.session_state.results['代碼'] != row['代碼']]
-                            # 更新快取，確保重新整理後依然保持現狀
-                            save_results_cache(st.session_state.results, is_big_scan=False, market=None, user_id=user_id)
-                    else:
-                        st.session_state.watchlist.append(row['代碼'])
-                        st.toast(f"➕ 已加入追蹤清單 {row['代碼']}")
-                        # 如果是新加入，則還是需要重新掃描來獲取分析數據
-                        if "results" in st.session_state:
-                            del st.session_state.results
+            if is_mob:
+                # --- [MOBILE VIEW] 2欄佈局，資訊分組 ---
+                icon = "🪙" if "-USD" in str(row['代碼']) else "🛒"
+                c1, c2 = st.columns([3, 1])
+                
+                # 第一欄：名稱 + 操作建議 (大標)
+                with c1:
+                    if st.button(f"{icon} {row['代碼']} {row['名稱']}", key=f"t_{row['代碼']}_{index}", use_container_width=True):
+                        show_order_dialog(row, user_id, api, max_api, ca_active)
+                    st.markdown(f"**`{row['操作建議']}`**")
+                
+                # 第二欄：動作按鈕 (垃圾桶/加號)
+                with c2:
+                    is_big_scan = st.session_state.get("is_big_scan", False)
+                    current_watchlist = st.session_state.get("watchlist", [])
+                    action_icon = "➕" if is_big_scan else ("🗑️" if row['代碼'] in current_watchlist else "➕")
                     
-                    save_watchlist(st.session_state.watchlist, user_id)
-                    st.rerun()
+                    if st.button(action_icon, key=f"btn_{row['代碼']}_{index}", use_container_width=True):
+                        if is_big_scan:
+                            if row['代碼'] not in st.session_state.watchlist:
+                                st.session_state.watchlist.append(row['代碼'])
+                                st.toast(f"✅ 已加入追蹤清單 {row['代碼']} {row['名稱']}")
+                                save_watchlist(st.session_state.watchlist, user_id)
+                            else:
+                                st.toast(f"ℹ️ {row['代碼']} 已在清單中")
+                        else:
+                            if row['代碼'] in st.session_state.watchlist:
+                                st.session_state.watchlist.remove(row['代碼'])
+                                st.toast(f"🗑️ 已從清單移除 {row['代碼']}")
+                                if "results" in st.session_state:
+                                    st.session_state.results = st.session_state.results[st.session_state.results['代碼'] != row['代碼']]
+                                    save_results_cache(st.session_state.results, is_big_scan=False, market=None, user_id=user_id)
+                            else:
+                                st.session_state.watchlist.append(row['代碼'])
+                                st.toast(f"➕ 已加入追蹤清單 {row['代碼']}")
+                                if "results" in st.session_state:
+                                    del st.session_state.results
+                            save_watchlist(st.session_state.watchlist, user_id)
+                            st.rerun()
+                
+                # 下排資訊：數據分組 (Grid)
+                st.markdown("---")
+                gc1, gc2, gc3 = st.columns(3)
+                price_val = f"{row['最新價格']:.1f}" if row['最新價格'] != 0 else "-"
+                gc1.markdown(f'<span style="color:#888; font-size:0.7rem;">最新價</span><br><b>{price_val}</b>', unsafe_allow_html=True)
+                gc2.markdown(f'<span style="color:#888; font-size:0.7rem;">一年位階</span><br>{row["一年位階"]}', unsafe_allow_html=True)
+                gc3.markdown(f'<span style="color:#888; font-size:0.7rem;">{header_label}</span><br>{row["年線乖離"]}', unsafe_allow_html=True)
+                
+                gc4, gc5, gc6 = st.columns(3)
+                ma20_raw = row.get('_ma20', 0)
+                ma20_val = f"{ma20_raw:.1f}" if not pd.isna(ma20_raw) else "-"
+                atr_mult_val = row.get('_atr_mult', 2.5)
+                atr_stop_raw = row['最新價格'] - (atr_mult_val * row.get('_atr', 0))
+                atr_stop = f"{atr_stop_raw:.1f}" if not pd.isna(atr_stop_raw) else "-"
+                
+                gc4.markdown(f'<span style="color:#888; font-size:0.7rem;">MA20乖離</span><br>{row["MA20乖離"]}', unsafe_allow_html=True)
+                gc5.markdown(f'<span style="color:#888; font-size:0.7rem;">MA20價</span><br>{ma20_val}', unsafe_allow_html=True)
+                gc6.markdown(f'<span style="color:#888; font-size:0.7rem;">ATR停損</span><br>{atr_stop}', unsafe_allow_html=True)
+            else:
+                # --- [DESKTOP VIEW] 10欄標準佈局 ---
+                cols = st.columns([1.5, 0.6, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 3.5, 0.5])
+                
+                # 欄位一：股票名稱 (轉為按鈕連結)
+                icon = "🪙" if "-USD" in str(row['代碼']) else "🛒"
+                if cols[0].button(f"{icon} {row['代碼']} {row['名稱']}", key=f"t_{row['代碼']}_{index}", use_container_width=True):
+                    show_order_dialog(row, user_id, api, max_api, ca_active)
+                
+                # 欄位二：資料時間
+                data_ts = row.get('_data_ts', '-')
+                cols[1].markdown(f'<span class="mobile-label">資料時間:</span><span style="font-size:0.8rem; color:#888;">{data_ts}</span>', unsafe_allow_html=True)
+
+                # 欄位三：最新價
+                price_val = f"{row['最新價格']:.1f}" if row['最新價格'] != 0 else "-"
+                cols[2].markdown(f'<span class="mobile-label">最新價:</span><b>{price_val}</b>', unsafe_allow_html=True)
+                
+                # 欄位四～六：指標
+                cols[3].markdown(f'<span class="mobile-label">一年位階:</span>{row["一年位階"]}', unsafe_allow_html=True)
+                cols[4].markdown(f'<span class="mobile-label">{header_label}:</span>{row["年線乖離"]}', unsafe_allow_html=True)
+                cols[5].markdown(f'<span class="mobile-label">MA20乖離:</span>{row["MA20乖離"]}', unsafe_allow_html=True)
+                
+                # 欄位七～八：MA20 價 與 ATR 停損
+                ma20_raw = row.get('_ma20', 0)
+                ma20_val = f"{ma20_raw:.1f}" if not pd.isna(ma20_raw) else "-"
+                atr_mult_curr = row.get('_atr_mult', 2.5)
+                atr_stop_raw = row['最新價格'] - (atr_mult_curr * row.get('_atr', 0))
+                atr_stop = f"{atr_stop_raw:.1f}" if not pd.isna(atr_stop_raw) else "-"
+                cols[6].markdown(f'<span class="mobile-label">MA20價:</span>{ma20_val}', unsafe_allow_html=True)
+                cols[7].markdown(f'<span class="mobile-label">ATR停損:</span>{atr_stop}', unsafe_allow_html=True)
+                
+                # 欄位九：操作建議
+                cols[8].markdown(f"**`{row['操作建議']}`**")
+                
+                # 欄位十：動作按鈕
+                is_big_scan = st.session_state.get("is_big_scan", False)
+                action_icon = "➕" if is_big_scan else ("🗑️" if row['代碼'] in st.session_state.watchlist else "➕")
+
+                if cols[9].button(action_icon, key=f"btn_{row['代碼']}_{index}", use_container_width=True):
+                    if is_big_scan:
+                        if row['代碼'] not in st.session_state.watchlist:
+                            st.session_state.watchlist.append(row['代碼'])
+                            st.toast(f"✅ 已加入追蹤清單 {row['代碼']} {row['名稱']}")
+                            save_watchlist(st.session_state.watchlist, user_id)
+                        else:
+                            st.toast(f"ℹ️ {row['代碼']} 已在清單中")
+                    else:
+                        if row['代碼'] in st.session_state.watchlist:
+                            st.session_state.watchlist.remove(row['代碼'])
+                            st.toast(f"🗑️ 已從清單移除 {row['代碼']}")
+                            if "results" in st.session_state:
+                                st.session_state.results = st.session_state.results[st.session_state.results['代碼'] != row['代碼']]
+                                save_results_cache(st.session_state.results, is_big_scan=False, market=None, user_id=user_id)
+                        else:
+                            st.session_state.watchlist.append(row['代碼'])
+                            st.toast(f"➕ 已加入追蹤清單 {row['代碼']}")
+                            if "results" in st.session_state:
+                                del st.session_state.results
+                        save_watchlist(st.session_state.watchlist, user_id)
+                        st.rerun()
 
     # --- 分頁導航 ---
     if total_pages > 1:
         st.divider()
-        # --- 🚀 [FINAL FIX] 物理性橫向分頁欄 (Row-based) ---
-        # 1. 隱藏觸發器
-        with st.container():
-            st.markdown('<div class="logic-sink"></div>', unsafe_allow_html=True)
-            p_cols = st.columns(2)
-            h_prev = p_cols[0].button("ST_PREV", key="h_pg_prev")
-            h_next = p_cols[1].button("ST_NEXT", key="h_pg_next")
+        # 使用 DOM 標記讓 JS 強制水平排列 (僅手機版生效)
+        st.markdown('<div id="pg-marker"></div>', unsafe_allow_html=True)
         
-        if h_prev:
-            st.session_state.current_page -= 1
-            st.rerun()
-        if h_next:
-            st.session_state.current_page += 1
-            st.rerun()
-
-        # 2. 顯示組件 (透過 CSS 控制)
         is_mob = is_mobile_device()
+        p_cols = st.columns([1, 1, 1] if is_mob else [1, 8, 1])
+        
         prev_label = "◀️" if is_mob else "◀️ 上一頁"
         next_label = "▶️" if is_mob else "下一頁 ▶️"
         
-        st.markdown(f"""
-            <div class="mobile-ui-container">
-                <div class="custom-row" style="margin-top:20px;">
-                    <div class="custom-col"><div class="custom-btn" onclick="triggerSt('ST_PREV')">{prev_label}</div></div>
-                    <div class="custom-pg-num">{st.session_state.current_page + 1} / {total_pages}</div>
-                    <div class="custom-col"><div class="custom-btn" onclick="triggerSt('ST_NEXT')">{next_label}</div></div>
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
+        if p_cols[0].button(prev_label, key="pg_prev", use_container_width=True):
+            st.session_state.current_page -= 1
+            st.rerun()
+            
+        p_cols[1].markdown(f"<div style='text-align:center; padding-top:10px;'>{st.session_state.current_page + 1} / {total_pages}</div>", unsafe_allow_html=True)
+        
+        if p_cols[2].button(next_label, key="pg_next", use_container_width=True):
+            st.session_state.current_page += 1
+            st.rerun()
     
     st.divider()
     
