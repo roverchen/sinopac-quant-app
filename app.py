@@ -187,69 +187,37 @@ st.markdown("""
             .mobile-only { display: block !important; }
             .mobile-label { display: inline-block !important; color: #888; font-size: 0.8rem; margin-right: 6px; width: 70px; }
 
-            /* --- [NEW] 金剛不壞橫向排版 (Foolproof Horizontal Layout) --- */
-            /* 1. 股票卡片：維持垂直堆疊 (行動端好讀) */
-            [data-testid="stVerticalBlockBorderWrapper"]:not(.pagination-container):not(.nav-container) [data-testid="column"] {
-                width: 100% !important;
-                flex: 1 1 100% !important;
-                min-width: 100% !important;
-                margin-bottom: 2px !important;
-            }
-            [data-testid="stVerticalBlockBorderWrapper"]:not(.pagination-container):not(.nav-container) div[data-testid="stHorizontalBlock"] {
-                flex-direction: column !important;
-            }
-
-            /* 2. 強制橫向排版：只要有 .mobile-horiz-row 類別，內容物理性強制在同一列 */
-            .mobile-horiz-row div[data-testid="column"] {
-                flex: 1 1 0% !important;
-                min-width: 0 !important;
-                width: auto !important;
-            }
-            /* 針對不同版本的 Streamlit 進行深度覆寫 */
-            .mobile-horiz-row div[data-testid="stHorizontalBlock"] {
+            /* --- [ULTIMATE FIX] 全自定義行動端元件 (Full Custom Mobile Elements) --- */
+            .custom-nav-row, .custom-pg-row {
                 display: flex !important;
                 flex-direction: row !important;
                 flex-wrap: nowrap !important;
-                align-items: center !important;
                 justify-content: space-between !important;
+                align-items: center !important;
                 width: 100% !important;
                 gap: 4px !important;
+                margin-bottom: 10px !important;
             }
-            /* 額外覆寫任何可能導致換行的寬度設定 */
-            .mobile-horiz-row [data-testid="stColumn"] {
-                min-width: 0px !important;
+            .custom-btn {
                 flex: 1 !important;
-            }
-
-            /* 導航列樣式微調 */
-            .nav-container {
-                padding: 8px 4px !important;
-                background: rgba(255, 255, 255, 0.05) !important;
-                border-radius: 12px !important;
-                margin-bottom: 20px !important;
+                background: rgba(255,255,255,0.08) !important;
                 border: 1px solid rgba(255,255,255,0.1) !important;
-            }
-            .nav-label {
-                font-size: 0.6rem !important;
-                margin-top: 2px !important;
-                color: #888 !important;
-                display: block !important;
-                text-align: center !important;
-                white-space: nowrap !important;
-            }
-            
-            /* 分頁列樣式微調 */
-            .pagination-container {
-                margin: 20px 0 !important;
-                padding: 6px 4px !important;
-                background: rgba(255, 255, 255, 0.03) !important;
                 border-radius: 8px !important;
+                padding: 6px 2px !important;
+                text-align: center !important;
+                cursor: pointer !important;
+                transition: background 0.2s !important;
             }
-
-            .stButton button {
-                font-size: 0.8rem !important;
-                padding: 4px 6px !important;
+            .custom-btn:active {
+                background: rgba(255,255,255,0.2) !important;
             }
+            .custom-btn-icon { font-size: 1.1rem !important; margin-bottom: 2px !important; }
+            .custom-btn-label { font-size: 0.55rem !important; color: #aaa !important; display: block !important; }
+            
+            .custom-pg-num { font-size: 0.85rem !important; font-weight: bold !important; text-align: center !important; flex: 1 !important; }
+            
+            /* 隱藏真正觸發邏輯的 st 原始按鈕 */
+            .hidden-trigger { display: none !important; }
         }
 </style>
 """, unsafe_allow_html=True)
@@ -258,51 +226,94 @@ st.markdown("""
 # 預設時區工具
 st.title("📈 金融商品市場報明牌系統")
 
-# --- [NEW] 行動端專屬：頂部快捷導航列 (方案 A+B) ---
-if is_mobile_device():
-    # 使用 .mobile-horiz-row 類別強制內部 columns 水平排列
-    st.markdown('<div class="mobile-horiz-row nav-container">', unsafe_allow_html=True)
-    m_col1, m_col2, m_col3, m_col4, m_col5 = st.columns(5)
+# --- [NEW] 行動端專屬：頂部快捷導航列 (方案 C: 物理性強制橫向) ---
+if is_mobile_device() or st.session_state.get('dev_mobile', False):
+    # 1. 渲染物理性橫向排版 HTML
+    st.markdown("""
+        <div class="custom-nav-row">
+            <div class="custom-btn" onclick="document.getElementById('hidden_nav_tw').click()">
+                <div class="custom-btn-icon">🇹🇼</div>
+                <div class="custom-btn-label">台股</div>
+            </div>
+            <div class="custom-btn" onclick="document.getElementById('hidden_nav_us').click()">
+                <div class="custom-btn-icon">🇺🇸</div>
+                <div class="custom-btn-label">美股</div>
+            </div>
+            <div class="custom-btn" onclick="document.getElementById('hidden_nav_crypto').click()">
+                <div class="custom-btn-icon">🪙</div>
+                <div class="custom-btn-label">虛擬幣</div>
+            </div>
+            <div class="custom-btn" onclick="document.getElementById('hidden_nav_wl').click()">
+                <div class="custom-btn-icon">📋</div>
+                <div class="custom-btn-label">清單</div>
+            </div>
+            <div class="custom-btn" onclick="document.getElementById('hidden_nav_sim').click()">
+                <div class="custom-btn-icon">📊</div>
+                <div class="custom-btn-label">儀表板</div>
+            </div>
+        </div>
+        <script>
+            // 定義全域點擊函數，確保能找到 parent DOM 中的按鈕
+            window.clickHidden = function(id) {
+                const btn = window.parent.document.querySelector(`button[data-testid="${id}"]`);
+                if (btn) btn.click();
+            }
+        </script>
+    """, unsafe_allow_html=True)
     
-    with m_col1:
-        if st.button("🇹🇼", key="m_nav_tw", help="台股海選", use_container_width=True):
+    # 2. 隱藏的真正按鈕 (放於一個隱藏容器中)
+    with st.container():
+        st.markdown('<div class="hidden-trigger">', unsafe_allow_html=True)
+        if st.button("H_TW", key="h_nav_tw"):
             st.session_state.scan_market = "TW"
             st.session_state.is_big_scan = True
             st.session_state.trigger_daily_scan = True
             st.rerun()
-        st.markdown('<span class="nav-label">台股</span>', unsafe_allow_html=True)
-        
-    with m_col2:
-        if st.button("🇺🇸", key="m_nav_us", help="美股海選", use_container_width=True):
+        if st.button("H_US", key="h_nav_us"):
             st.session_state.scan_market = "US"
             st.session_state.is_big_scan = True
             st.session_state.trigger_daily_scan = True
             st.rerun()
-        st.markdown('<span class="nav-label">美股</span>', unsafe_allow_html=True)
-        
-    with m_col3:
-        if st.button("🪙", key="m_nav_crypto", help="虛擬幣海選", use_container_width=True):
+        if st.button("H_CRYPTO", key="h_nav_crypto"):
             st.session_state.scan_market = "CRYPTO"
             st.session_state.is_big_scan = True
             st.session_state.trigger_daily_scan = True
             st.rerun()
-        st.markdown('<span class="nav-label">虛擬幣</span>', unsafe_allow_html=True)
-        
-    with m_col4:
-        if st.button("📋", key="m_nav_wl", help="目前追蹤", use_container_width=True):
+        if st.button("H_WL", key="h_nav_wl"):
             st.session_state.active_page = "market"
             st.session_state.is_big_scan = False
             st.session_state.scan_market = None
             st.session_state.force_rescan = True
             st.rerun()
-        st.markdown('<span class="nav-label">清單</span>', unsafe_allow_html=True)
-        
-    with m_col5:
-        if st.button("📊", key="m_nav_sim", help="交易儀表板", use_container_width=True):
+        if st.button("H_SIM", key="h_nav_sim"):
             st.session_state.active_page = "simulation"
             st.rerun()
-        st.markdown('<span class="nav-label">儀表板</span>', unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # 修改 HTML 以使用 window.clickHidden 並配合新的 key
+    # 注意：Streamlit 的 data-testid 規則通常是 "stButton" + 金鑰 (全部小寫且處理特殊字元)
+    # 這裡我們使用 JS 小量搜尋來精確觸發
+    st.markdown("""
+        <script>
+            function triggerSt(key) {
+                const doc = window.parent.document;
+                const buttons = Array.from(doc.querySelectorAll('button[kind="secondary"]'));
+                const target = buttons.find(b => b.innerText === key);
+                if (target) target.click();
+            }
+        </script>
+    """, unsafe_allow_html=True)
+    
+    # 重寫導航 HTML 使用 JS Bridge
+    st.markdown("""
+        <div class="custom-nav-row">
+            <div class="custom-btn" onclick="triggerSt('H_TW')"><div class="custom-btn-icon">🇹🇼</div><div class="custom-btn-label">台股</div></div>
+            <div class="custom-btn" onclick="triggerSt('H_US')"><div class="custom-btn-icon">🇺🇸</div><div class="custom-btn-label">美股</div></div>
+            <div class="custom-btn" onclick="triggerSt('H_CRYPTO')"><div class="custom-btn-icon">🪙</div><div class="custom-btn-label">虛擬幣</div></div>
+            <div class="custom-btn" onclick="triggerSt('H_WL')"><div class="custom-btn-icon">📋</div><div class="custom-btn-label">清單</div></div>
+            <div class="custom-btn" onclick="triggerSt('H_SIM')"><div class="custom-btn-icon">📊</div><div class="custom-btn-label">儀表板</div></div>
+        </div>
+    """, unsafe_allow_html=True)
 
 # --- 手機版側邊欄提示 ---
 
@@ -2308,30 +2319,30 @@ if "results" in st.session_state:
                     st.rerun()
 
     # --- 分頁導航 ---
-    if total_pages > 1:
-        st.divider()
-        # --- 🚀 [FINAL FIX] 使用 .mobile-horiz-row 渲染極速分頁 ---
-        st.markdown('<div class="mobile-horiz-row pagination-container">', unsafe_allow_html=True)
-        # 行動端強制三個 column 並排
-        col1, col2, col3 = st.columns(3)
-        
+        # --- 🚀 [FINAL FIX] 物理性橫向分頁欄 ---
+        # 1. 隱藏觸發器
+        with st.container():
+            st.markdown('<div class="hidden-trigger">', unsafe_allow_html=True)
+            if st.button("ST_PREV", key="h_pg_prev"):
+                st.session_state.current_page -= 1
+                st.rerun()
+            if st.button("ST_NEXT", key="h_pg_next"):
+                st.session_state.current_page += 1
+                st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
+
+        # 2. 顯示元件
         is_mob = is_mobile_device()
         prev_label = "◀️" if is_mob else "◀️ 上一頁"
         next_label = "▶️" if is_mob else "下一頁 ▶️"
         
-        with col1:
-            if st.button(prev_label, key="prev_pg", disabled=(st.session_state.current_page == 0), use_container_width=True):
-                st.session_state.current_page -= 1
-                st.rerun()
-        
-        with col2:
-            st.markdown(f"<div style='text-align:center; padding-top:12px; font-size:0.85rem; font-weight:bold;'>{st.session_state.current_page + 1}/{total_pages}</div>", unsafe_allow_html=True)
-        
-        with col3:
-            if st.button(next_label, key="next_pg", disabled=(st.session_state.current_page == total_pages - 1), use_container_width=True):
-                st.session_state.current_page += 1
-                st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown(f"""
+            <div class="custom-pg-row">
+                <div class="custom-btn" style="flex:2" onclick="triggerSt('ST_PREV')">{prev_label}</div>
+                <div class="custom-pg-num">{st.session_state.current_page + 1} / {total_pages}</div>
+                <div class="custom-btn" style="flex:2" onclick="triggerSt('ST_NEXT')">{next_label}</div>
+            </div>
+        """, unsafe_allow_html=True)
     
     st.divider()
     
