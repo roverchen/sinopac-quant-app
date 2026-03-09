@@ -74,26 +74,53 @@ except ImportError:
     get_script_run_ctx = None
 
 def get_session_uid():
+    # 優先使用 session_state
+    if 'user_id' in st.session_state and st.session_state.user_id not in ["LOADING", None]:
+        return st.session_state.user_id
+
+    # 初始化重試計數器
+    if 'init_retry_count' not in st.session_state:
+        st.session_state.init_retry_count = 0
+    
     url_u = st.query_params.get('u')
+    
+    # 嘗試從 LocalStorage 讀取
     js_get = "localStorage.getItem('sinopac_user_id');"
     stored_uid = st_javascript(js_get)
     
-    # 如果 st_javascript 還在初始化 (傳回 0)，不要靜默停止，回報狀態
+    # 如果 JS 元件還在載入 (傳回 0)
     if stored_uid == 0:
+        st.session_state.init_retry_count += 1
+        # 如果重試多次 (例如 > 3 次 rerun) 仍無反應，啟動自動退回
+        if st.session_state.init_retry_count > 3:
+            fallback_id = "u_" + uuid.uuid4().hex[:6]
+            st.session_state.user_id = fallback_id
+            # 嘗試非同步寫回 (但不等待回應)
+            js_set = f"localStorage.setItem('sinopac_user_id', '{fallback_id}');"
+            st_javascript(js_set)
+            return fallback_id
         return "LOADING"
-        
+
+    # 成功獲取資料，重置重試計數
+    st.session_state.init_retry_count = 0
+    
     final_uid = None
     if url_u:
         final_uid = str(url_u)
         js_set = "localStorage.setItem('sinopac_user_id', '" + final_uid + "');"
         st_javascript(js_set)
-        del st.query_params['u']
-    elif stored_uid:
+        # 清除 URL 參數
+        for k in list(st.query_params.keys()):
+            if k == 'u': del st.query_params[k]
+    elif stored_uid and str(stored_uid) != "null":
         final_uid = str(stored_uid)
     else:
+        # 完全新用戶
         final_uid = "u_" + uuid.uuid4().hex[:6]
         js_set = "localStorage.setItem('sinopac_user_id', '" + final_uid + "');"
         st_javascript(js_set)
+    
+    st.session_state.user_id = final_uid
     return final_uid
 
 def is_mobile_device():
