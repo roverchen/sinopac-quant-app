@@ -1881,15 +1881,15 @@ if (big_scan_tw_btn or big_scan_us_btn or big_scan_crypto_btn or scan_btn or sho
     # 1. 決定市場與名單
     if big_scan_tw_btn or big_scan_us_btn or big_scan_crypto_btn or is_trigger_daily:
         # 決定市場類型：優先看按鈕，再看 Session State 紀錄
+        m_type = st.session_state.get("scan_market") or "TW" 
         if big_scan_tw_btn: m_type = 'TW'
         elif big_scan_us_btn: m_type = 'US'
         elif big_scan_crypto_btn: m_type = 'CRYPTO'
-        else: m_type = st.session_state.get("scan_market", "TW")
         
         # 執行到此才正式歸零每日觸發旗標
         st.session_state.trigger_daily_scan = False
         
-        m_label = {"TW": "台灣", "US": "美國", "CRYPTO": "加密貨幣"}[m_type]
+        m_label = {"TW": "台灣", "US": "美國", "CRYPTO": "加密貨幣"}.get(m_type, "未知")
         st.session_state.is_big_scan = True
         st.session_state.scan_market = m_type
         scan_list = get_mass_scan_list(api, market=m_type)
