@@ -280,29 +280,29 @@ components.html("""
 st.title("") # 佔位，微調頂部間距
 st.markdown('<div id="nav-marker"></div>', unsafe_allow_html=True)
 nav_cols = st.columns(5)
-if nav_cols[0].button("🇹🇼 台股", use_container_width=True):
-    st.session_state.scan_market = "TW"
-    st.session_state.is_big_scan = True
-    st.session_state.trigger_daily_scan = True
-    st.rerun()
-if nav_cols[1].button("🇺🇸 美股", use_container_width=True):
-    st.session_state.scan_market = "US"
-    st.session_state.is_big_scan = True
-    st.session_state.trigger_daily_scan = True
-    st.rerun()
-if nav_cols[2].button("🪙 加密", use_container_width=True):
-    st.session_state.scan_market = "CRYPTO"
-    st.session_state.is_big_scan = True
-    st.session_state.trigger_daily_scan = True
-    st.rerun()
-if nav_cols[3].button("📋 清單", use_container_width=True):
+if nav_cols[0].button("📋 清單", use_container_width=True):
     st.session_state.active_page = "market"
     st.session_state.is_big_scan = False
     st.session_state.scan_market = None
     st.session_state.force_rescan = True
     st.rerun()
-if nav_cols[4].button("📊 紀錄", use_container_width=True):
+if nav_cols[1].button("📊 紀錄", use_container_width=True):
     st.session_state.active_page = "simulation"
+    st.rerun()
+if nav_cols[2].button("🇹🇼 台股", use_container_width=True):
+    st.session_state.scan_market = "TW"
+    st.session_state.is_big_scan = True
+    st.session_state.trigger_daily_scan = True
+    st.rerun()
+if nav_cols[3].button("🇺🇸 美股", use_container_width=True):
+    st.session_state.scan_market = "US"
+    st.session_state.is_big_scan = True
+    st.session_state.trigger_daily_scan = True
+    st.rerun()
+if nav_cols[4].button("🪙 加密", use_container_width=True):
+    st.session_state.scan_market = "CRYPTO"
+    st.session_state.is_big_scan = True
+    st.session_state.trigger_daily_scan = True
     st.rerun()
 
 # --- 手機版側邊欄提示 ---
@@ -1190,17 +1190,6 @@ with st.sidebar.container():
                                            type="primary" if st.session_state.get("scan_market") == "CRYPTO" else "secondary",
                                            help="掃描熱門加密貨幣並過濾出優質標的")
     st.markdown('</div>', unsafe_allow_html=True)
-
-# --- [NEW] 行動端除錯工具 (僅供開發使用) ---
-with st.sidebar.expander("🛠️ 行動端偵測資訊"):
-    is_mob = is_mobile_device()
-    st.write(f"📲 行動裝置: {'✅ 是' if is_mob else '❌ 否'}")
-    st.write(f"🆔 用戶 ID: `{user_id}`")
-    st.caption(f"🌐 UA: {st.context.headers.get('User-Agent', '未知')}")
-    if st.button("🔴 重設並重新整理", help="清除 Session 並重導向"):
-        st.session_state.clear()
-        st.query_params.clear()
-        st.rerun()
 
 # 確保按下海選按鈕時切換回主頁
 if big_scan_tw_btn:
