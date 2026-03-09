@@ -73,7 +73,43 @@ try:
 except ImportError:
     get_script_run_ctx = None
 
-# get_session_uid 已移至下方核心代碼區以確保時序正確
+def get_session_uid():
+    # 1. 優先使用已經確定的 Session State
+    if 'user_id' in st.session_state and st.session_state.user_id not in ["LOADING", None]:
+        return st.session_state.user_id
+
+    # 2. 獲取內部 Session ID 作為基礎備援 (不依賴 JS)
+    ctx = get_script_run_ctx()
+    internal_id = "u_" + (ctx.session_id[:8] if ctx else uuid.uuid4().hex[:6])
+    
+    # 3. 檢查網址參數 (高優先級)
+    url_u = st.query_params.get('u')
+    if url_u:
+        final_uid = str(url_u)
+        st.session_state.user_id = final_uid
+        # 非同步寫入 LocalStorage (不等待回應)
+        try:
+            st_javascript(f"localStorage.setItem('sinopac_user_id', '{final_uid}');")
+        except: pass
+        return final_uid
+
+    # 4. 嘗試從 LocalStorage 讀取
+    try:
+        # 使用 st_javascript 獲取資料，但「不等待」它
+        js_get = "localStorage.getItem('sinopac_user_id');"
+        stored_uid = st_javascript(js_get)
+        
+        # 如果 JS 已經有回應
+        if stored_uid != 0 and stored_uid is not None and str(stored_uid) != "null":
+            final_uid = str(stored_uid)
+            st.session_state.user_id = final_uid
+            return final_uid
+    except:
+        pass
+
+    # 5. 如果 JS 還沒回應或失敗，直接回傳內部 ID 作為備援，不使用 st.stop()
+    # 這樣程式可以繼續往下跑，等 JS 真的有回應觸發 rerun 時再更新即可
+    return internal_id
 
 def is_mobile_device():
     """透過 User-Agent 簡易判斷是否為行動裝置"""
