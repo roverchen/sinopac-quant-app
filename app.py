@@ -309,28 +309,9 @@ def init_max_api_v5(key, secret):
         return MaxExchangeAPI(key, secret)
     return None
 
-# 側邊欄：API 狀態
-sj_key = st.secrets.get("API_KEY", "")
-sj_secret = st.secrets.get("SECRET_KEY", "")
-with st.sidebar.status("🔌 正在連線至永豐金 (Shioaji)...", expanded=False) as s:
-    api = init_api(sj_key, sj_secret)
-    if api:
-        s.update(label="✅ 永豐金已連線", state="complete")
-    else:
-        s.update(label="❌ 永豐金連線失敗", state="error")
-
-max_key = st.secrets.get("MAX_API_KEY") or os.getenv("MAX_API_KEY")
-max_secret = st.secrets.get("MAX_API_SECRET") or os.getenv("MAX_API_SECRET")
-with st.sidebar.status("🔌 正在連線至 MAX 交易所...", expanded=False) as s:
-    max_api = init_max_api_v5(max_key, max_secret)
-    if max_api:
-        s.update(label="✅ MAX 交易所已連線", state="complete")
-    else:
-        s.update(label="⚪ MAX API 待設定", state="complete")
-
 # 初始化 API 狀態文字
 v_tag = f" v{max_api.VERSION}" if max_api else ""
-m_api_status = f"已偵測{v_tag} (開頭: {max_key[:4]}...)" if max_key else "待設定"
+m_api_status = f"已偵測{v_tag}" if max_key else "待設定"
 
 # [REMOVED] 依要求移除 API 進階設定區塊
 
@@ -1067,48 +1048,32 @@ def get_mass_scan_list(api, market='TW'):
     return sorted(filtered)
 
 # --- 🛠️ 核心隔離邏輯：Native Session ID 優先 ---
-def get_session_uid():
-    # 1. 優先使用已經確定的 Session State
-    if 'user_id' in st.session_state and st.session_state.user_id not in ["LOADING", None]:
-        return st.session_state.user_id
+with st.sidebar.expander("⚙️ 系統初始化與連線", expanded=False):
+    # 1. API 連線狀態
+    st.markdown("#### 🔌 API 連線狀態")
+    sj_key = st.secrets.get("API_KEY", "")
+    sj_secret = st.secrets.get("SECRET_KEY", "")
+    with st.status("正在連線至永豐金 (Shioaji)...", expanded=False) as s:
+        api = init_api(sj_key, sj_secret)
+        if api:
+            s.update(label="✅ 永豐金已連線", state="complete")
+        else:
+            s.update(label="❌ 永豐金連線失敗", state="error")
 
-    # 2. 獲取內部 Session ID 作為基礎備援 (不依賴 JS)
-    ctx = get_script_run_ctx()
-    internal_id = "u_" + (ctx.session_id[:8] if ctx else uuid.uuid4().hex[:6])
-    
-    # 3. 檢查網址參數 (高優先級)
-    url_u = st.query_params.get('u')
-    if url_u:
-        final_uid = str(url_u)
-        st.session_state.user_id = final_uid
-        # 非同步寫入 LocalStorage (不等待回應)
-        try:
-            st_javascript(f"localStorage.setItem('sinopac_user_id', '{final_uid}');")
-        except: pass
-        return final_uid
+    max_key = st.secrets.get("MAX_API_KEY") or os.getenv("MAX_API_KEY")
+    max_secret = st.secrets.get("MAX_API_SECRET") or os.getenv("MAX_API_SECRET")
+    with st.status("正在連線至 MAX 交易所...", expanded=False) as s:
+        max_api = init_max_api_v5(max_key, max_secret)
+        if max_api:
+            s.update(label="✅ MAX 交易所已連線", state="complete")
+        else:
+            s.update(label="⚪ MAX API 待設定", state="complete")
 
-    # 4. 嘗試從 LocalStorage 讀取
-    try:
-        # 使用 st_javascript 獲取資料，但「不等待」它
-        js_get = "localStorage.getItem('sinopac_user_id');"
-        stored_uid = st_javascript(js_get)
-        
-        # 如果 JS 已經有回應
-        if stored_uid != 0 and stored_uid is not None and str(stored_uid) != "null":
-            final_uid = str(stored_uid)
-            st.session_state.user_id = final_uid
-            return final_uid
-    except:
-        pass
-
-    # 5. 如果 JS 還沒回應或失敗，直接回傳內部 ID 作為備援，不使用 st.stop()
-    # 這樣程式可以繼續往下跑，等 JS 真的有回應觸發 rerun 時再更新即可
-    return internal_id
-
-# --- 🛠️ 核心隔離邏輯：Native Session ID 優先 ---
-st.sidebar.markdown("### 🔌 系統初始化")
-user_id = get_session_uid()
-st.sidebar.caption(f"🆔 憑證：{user_id}")
+    # 2. 身份辨識
+    st.markdown("---")
+    st.markdown("#### 🆔 身份辨識")
+    user_id = get_session_uid()
+    st.caption(f"目前憑證：{user_id}")
 
 # 1. 初始化 Watchlist (直接從後端 JSON 讀取，拋棄不穩定的 LocalStorage)
 if 'watchlist' not in st.session_state:
