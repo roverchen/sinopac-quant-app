@@ -1118,25 +1118,8 @@ def get_mass_scan_list(api, market='TW'):
     # 排序：台股按數字、美股按字母
     return sorted(filtered)
 
-# --- 🛠️ 核心隔離邏輯：Native Session ID 優先 ---
-with st.sidebar.expander("⚙️ 系統初始化與連線", expanded=False):
-    # 1. API 連線狀態
-    st.markdown("#### 🔌 API 連線狀態")
-    if api:
-        st.success("✅ 永豐金已連線")
-    else:
-        st.error("❌ 永豐金連線失敗")
-
-    if max_api:
-        st.success("✅ MAX 交易所已連線")
-    else:
-        st.info("⚪ MAX API 待設定")
-
-    # 2. 身份辨識
-    st.markdown("---")
-    st.markdown("#### 🆔 身份辨識")
-    user_id = get_session_uid()
-    st.caption(f"目前憑證：{user_id}")
+# --- 🛠️ 核心隔離邏輯：Native Session ID 優先 (背景執行) ---
+user_id = get_session_uid()
 
 # 1. 初始化 Watchlist (直接從後端 JSON 讀取，拋棄不穩定的 LocalStorage)
 if 'watchlist' not in st.session_state:
@@ -1166,15 +1149,8 @@ if 'active_page' not in st.session_state:
     st.session_state.active_page = "market"
 
 
-st.sidebar.markdown('<div class="desktop-only">', unsafe_allow_html=True)
-if st.sidebar.button("📊 交易紀錄儀表板", use_container_width=True):
-    auto_close_sidebar()
-    st.session_state.active_page = "simulation"
-    st.rerun()
-st.markdown('</div>', unsafe_allow_html=True)
-
-# --- [NEW] 側邊欄：功能入口置頂 ---
-# 1. 掃描目前追蹤清單 (置頂且不隱藏)
+# --- 側邊欄：功能入口置頂 ---
+# 1. 目前追蹤清單
 st.sidebar.markdown('<div class="desktop-only">', unsafe_allow_html=True)
 if st.sidebar.button("🚀 目前追蹤清單", use_container_width=True):
     auto_close_sidebar()
@@ -1182,6 +1158,14 @@ if st.sidebar.button("🚀 目前追蹤清單", use_container_width=True):
     scan_btn = True # 模擬按鈕按下
 else:
     scan_btn = False
+st.markdown('</div>', unsafe_allow_html=True)
+
+# 2. 交易紀錄儀表板
+st.sidebar.markdown('<div class="desktop-only">', unsafe_allow_html=True)
+if st.sidebar.button("📊 交易紀錄儀表板", use_container_width=True):
+    auto_close_sidebar()
+    st.session_state.active_page = "simulation"
+    st.rerun()
 st.markdown('</div>', unsafe_allow_html=True)
 
 st.sidebar.markdown("###  大數據海選")
