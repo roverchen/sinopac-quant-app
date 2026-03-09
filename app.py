@@ -74,34 +74,26 @@ except ImportError:
     get_script_run_ctx = None
 
 def get_session_uid():
-    """取得當前 Session 的識別碼，利用 LocalStorage 作持久化，保持網址乾淨"""
-    # 1. 優先從網址讀取短 ID (用於分享或初次進入)
-    url_u = st.query_params.get("u")
+    url_u = st.query_params.get('u')
+    js_get = "localStorage.getItem('sinopac_user_id');"
+    stored_uid = st_javascript(js_get)
     
-    # 2. 獲取 LocalStorage 中的 ID
-    # 注意: st_javascript 可能需要一點時間，初次渲染可能傳回 0
-    stored_uid = st_javascript("localStorage.getItem('sinopac_user_id');")
-    
-    # 如果 st_javascript 還沒準備好 (傳回 0)，先暫停等待下一次 rerun
+    # 如果 st_javascript 還在初始化 (傳回 0)，不要靜默停止，回報狀態
     if stored_uid == 0:
-        st.stop()
+        return "LOADING"
         
     final_uid = None
-    
     if url_u:
-        # 如果網址有帶 ID，優先使用網址的並存入 LocalStorage
-        final_uid = url_u
-        st_javascript(f"localStorage.setItem('sinopac_user_id', '{url_u}');")
-        # 清除網址參數，保持網址純淨
-        del st.query_params["u"]
+        final_uid = str(url_u)
+        js_set = "localStorage.setItem('sinopac_user_id', '" + final_uid + "');"
+        st_javascript(js_set)
+        del st.query_params['u']
     elif stored_uid:
-        # 如果 LocalStorage 有，直接使用
         final_uid = str(stored_uid)
     else:
-        # 如果都沒有，產生一個新的
-        final_uid = f"u_{uuid.uuid4().hex[:6]}"
-        st_javascript(f"localStorage.setItem('sinopac_user_id', '{final_uid}');")
-        
+        final_uid = "u_" + uuid.uuid4().hex[:6]
+        js_set = "localStorage.setItem('sinopac_user_id', '" + final_uid + "');"
+        st_javascript(js_set)
     return final_uid
 
 def is_mobile_device():
@@ -119,45 +111,29 @@ def auto_close_sidebar():
         st.session_state.should_close_sidebar = True
 
 def render_sidebar_closer():
-    """如果標記為真，則注入 JS 關閉側邊欄 (使用 components.html 確保 JS 能執行)"""
     if st.session_state.get('should_close_sidebar', False):
         import streamlit.components.v1 as components
         import time
-        # 加入 timestamp 確保 Streamlit 每次都看作新的 iframe 重新渲染執行 JS
-        components.html(
-            f"""
-            <script>
-            // Execution ID: {time.time()}
-            setTimeout(function() {{
-                var doc = window.parent.document;
-                
-                // 優先方法：直接尋找手機版的側邊欄關閉按鈕 (通常在 stSidebar 的 header)
-                var sidebar = doc.querySelector('[data-testid="stSidebar"]');
-                if (sidebar) {{
-                    var btns = sidebar.querySelectorAll('button');
-                    for (var i = 0; i < btns.length; i++) {{
-                        var btn = btns[i];
-                        if (btn.getAttribute('aria-label') === 'Close' || (btn.querySelector('svg') && !btn.innerText)) {{
-                            btn.click();
-                        }}
-                    }}
-                }}
-                
-                // 備用方法 1: 點擊深色遮罩 (Backdrop)，這在手機版通常等同於關閉側邊欄
-                // Streamlit >= 1.30 加入了不同的 Overlay class 或 testid
-                var overlay = doc.querySelector('div[data-testid="stSidebarOverlay"]');
-                if (overlay) {{
-                    overlay.click();
-                }}
-                
-                // 備用方法 2: 模擬送出 ESC 按鍵事件
-                doc.dispatchEvent(new KeyboardEvent('keydown', {{key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true}}));
-                
-            }}, 500); // 延長到 500ms 確保 React 已經完全渲染完按鈕狀態
-            </script>
-            """,
-            height=0, width=0
-        )
+        js_code = "<script>"
+        js_code += "setTimeout(function() {"
+        js_code += "var doc = window.parent.document;"
+        js_code += "var sidebar = doc.querySelector('[data-testid=\"stSidebar\"]');"
+        js_code += "if (sidebar) {"
+        js_code += "    var btns = sidebar.querySelectorAll('button');"
+        js_code += "    for (var i = 0; i < btns.length; i++) {"
+        js_code += "        var btn = btns[i];"
+        js_code += "        if (btn.getAttribute('aria-label') === 'Close' || (btn.querySelector('svg') && !btn.innerText)) {"
+        js_code += "            btn.click();"
+        js_code += "        }"
+        js_code += "    }"
+        js_code += "}"
+        js_code += "var overlay = doc.querySelector('div[data-testid=\"stSidebarOverlay\"]');"
+        js_code += "if (overlay) { overlay.click(); }"
+        js_code += "doc.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true}));"
+        js_code += "}, 500);"
+        js_code += "// Execution ID: " + str(time.time())
+        js_code += "</script>"
+        components.html(js_code, height=0, width=0)
         st.session_state.should_close_sidebar = False
 
 # --- 常數設定 ---
@@ -357,11 +333,21 @@ def init_max_api_v5(key, secret):
 # 側邊欄：API 狀態
 sj_key = st.secrets.get("API_KEY", "")
 sj_secret = st.secrets.get("SECRET_KEY", "")
-api = init_api(sj_key, sj_secret)
+with st.sidebar.status("🔌 正在連線至永豐金 (Shioaji)...", expanded=False) as s:
+    api = init_api(sj_key, sj_secret)
+    if api:
+        s.update(label="✅ 永豐金已連線", state="complete")
+    else:
+        s.update(label="❌ 永豐金連線失敗", state="error")
 
 max_key = st.secrets.get("MAX_API_KEY") or os.getenv("MAX_API_KEY")
 max_secret = st.secrets.get("MAX_API_SECRET") or os.getenv("MAX_API_SECRET")
-max_api = init_max_api_v5(max_key, max_secret)
+with st.sidebar.status("🔌 正在連線至 MAX 交易所...", expanded=False) as s:
+    max_api = init_max_api_v5(max_key, max_secret)
+    if max_api:
+        s.update(label="✅ MAX 交易所已連線", state="complete")
+    else:
+        s.update(label="⚪ MAX API 待設定", state="complete")
 
 # 初始化 API 狀態文字
 v_tag = f" v{max_api.VERSION}" if max_api else ""
@@ -1066,20 +1052,17 @@ def resolve_stock_code(input_str, api):
     return None, []
 
 def get_mass_scan_list(api, market='TW'):
-    """從 4.6 萬檔合約中過濾出真正的股票
-    market='TW': 台股 4 碼數字
-    market='US': 美股純字母代碼
-    """
+    '從 4.6 萬檔合約中過濾出真正的股票. market="TW": 台股; "US": 美股'
     if market == 'CRYPTO':
         # 加密貨幣：自定義主流幣清單 (Yahoo Finance 格式)
-            return [
-                "BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "XRP-USD", 
-                "ADA-USD", "DOGE-USD", "AVAX-USD", "DOT-USD", "TRX-USD",
-                "LINK-USD", "POL28321-USD", "NEAR-USD", "LTC-USD", "BCH-USD",
-                "SHIB-USD", "DAI-USD", "UNI7083-USD", "LEO-USD", "APT21794-USD",
-                "STX4847-USD", "OKB-USD", "ATOM-USD", "IMX10603-USD", "HBAR-USD",
-                "KAS-USD", "ETC-USD", "RENDER-USD", "FIL-USD", "LDO-USD"
-            ]
+        return [
+            "BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "XRP-USD", 
+            "ADA-USD", "DOGE-USD", "AVAX-USD", "DOT-USD", "TRX-USD",
+            "LINK-USD", "POL28321-USD", "NEAR-USD", "LTC-USD", "BCH-USD",
+            "SHIB-USD", "DAI-USD", "UNI7083-USD", "LEO-USD", "APT21794-USD",
+            "STX4847-USD", "OKB-USD", "ATOM-USD", "IMX10603-USD", "HBAR-USD",
+            "KAS-USD", "ETC-USD", "RENDER-USD", "FIL-USD", "LDO-USD"
+        ]
 
     all_map = get_stock_name_map(api)
     filtered = []
@@ -1105,8 +1088,13 @@ def get_mass_scan_list(api, market='TW'):
     return sorted(filtered)
 
 # --- 🛠️ 核心隔離邏輯：Native Session ID 優先 ---
-# 使用 Streamlit 內置的 session_id 作為隔離主鍵，不再需要跳轉等待
-user_id = get_session_uid()
+st.sidebar.markdown("### 🔌 系統初始化")
+with st.sidebar.status("📂 正在同步瀏覽器安全憑證...", expanded=False) as s:
+    user_id = get_session_uid()
+    if user_id == "LOADING":
+        s.update(label="⏳ 等待瀏覽器回應...", state="running")
+        st.stop()
+    s.update(label=f"✅ 憑證已同步 (ID: {user_id})", state="complete")
 
 # 1. 初始化 Watchlist (直接從後端 JSON 讀取，拋棄不穩定的 LocalStorage)
 if 'watchlist' not in st.session_state:
@@ -1982,16 +1970,14 @@ if "results" in st.session_state:
     atr_mult = "3.0倍" if is_crypto else "2.5倍"
     pullback_target = "MA20/MA50" if is_crypto else "MA20"
     
+    msg = "本系統採用 (" + str(w_def) + "/" + str(w_gro) + " 權重動態配置) 策略，透過營收趨勢與成交量能計算精確點位：\n\n"
+    msg += "🛡️ 價值防禦: 標的: 基本面優質、具備長期支撐。 (M) 標示為 (量能激增 + 重回 5 日線) 動能觸發。\n"
+    msg += "進場: 參考 " + def_ma + " 支撐。設定 1:2 盈虧比 或預期 +20%。停損位設於近期低點 (-5%)。\n"
+    msg += "📈 強勢平回: 標的: 強勢趨勢股/加密貨幣。" + (" !! 流動性過濾: 若 24h 成交量大幅萎縮，則評分遞減。" if is_crypto else "") + "\n"
+    msg += "進場: 參考 " + pullback_target + " 支撐進場。停損位設於 " + atr_mult + " ATR。 目標: 預期 1:3 盈虧比。若帶量突破，目標上看 1:4。\n"
+    msg += "MACD 狀態: (🎯強勢) (大於 0) = 高爆發力階段；(🩹弱勢) (小於 0) = 超跌反彈階段。"
     with st.expander(f"💡 策略心法與操作建議 ({w_def}% 價值防禦 + {w_gro}% 強勢平回)"):
-        st.markdown(f"""
-        本系統採用 ({w_def}/{w_gro} 權重動態配置) 策略，透過營收趨勢與成交量能計算精確點位：
-
-        🛡️ 價值防禦: 標的: 基本面優質、具備長期支撐。 (M) 標示為 (量能激增 + 重回 5 日線) 動能觸發。 
-        進場: 參考 {def_ma} 支撐。設定 1:2 盈虧比 或預期 +20%。停損位設於近期低點 (-5%)。 
-        📈 強勢平回: 標的: 強勢趨勢股/加密貨幣。{ " !! 流動性過濾: 若 24h 成交量大幅萎縮，則評分遞減。" if is_crypto else "" } 
-        進場: 參考 {pullback_target} 支撐進場。停損位設於 {atr_mult} ATR。 目標: 預期 1:3 盈虧比。若帶量突破，目標上看 1:4。 
-        MACD 狀態: (🎯強勢) (大於 0) = 高爆發力階段；(🩹弱勢) (小於 0) = 超跌反彈階段。
-        """)
+        st.markdown(msg)
 
     # --- 自定義列表 ---
     is_big = st.session_state.get("is_big_scan", False)
@@ -2017,22 +2003,11 @@ if "results" in st.session_state:
     
     # 1. 顯示表頭 (僅在電腦版顯示)
     header_label = "100日乖離" if st.session_state.get("scan_market") == "CRYPTO" else "年線乖離"
-    st.markdown(f"""
-    <div class="desktop-only">
-        <div style="display: flex; border: 1px solid #444; border-radius: 8px; padding: 10px; background: #262730; margin-bottom: 10px; font-weight: bold; align-items: center; font-size: 0.85rem;">
-            <div style="flex: 1.5;">股票</div>
-            <div style="flex: 0.6;">時間</div>
-            <div style="flex: 0.8;">最新價</div>
-            <div style="flex: 0.8;">位階</div>
-            <div style="flex: 0.8;">{header_label}</div>
-            <div style="flex: 0.8;">MA20乖離</div>
-            <div style="flex: 0.8;">MA20價</div>
-            <div style="flex: 0.8;">ATR停損</div>
-            <div style="flex: 3.5;">操作建議</div>
-            <div style="flex: 0.5;"></div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    header_html = '<div class="desktop-only"><div style="display: flex; border: 1px solid #444; border-radius: 8px; padding: 10px; background: #262730; margin-bottom: 10px; font-weight: bold; align-items: center; font-size: 0.85rem;">'
+    header_html += '<div style="flex: 1.5;">股票</div><div style="flex: 0.6;">時間</div><div style="flex: 0.8;">最新價</div><div style="flex: 0.8;">位階</div>'
+    header_html += '<div style="flex: 0.8;">' + header_label + '</div><div style="flex: 0.8;">MA20乖離</div><div style="flex: 0.8;">MA20價</div>'
+    header_html += '<div style="flex: 0.8;">ATR停損</div><div style="flex: 3.5;">操作建議</div><div style="flex: 0.5;"></div></div></div>'
+    st.markdown(header_html, unsafe_allow_html=True)
     
     # --- [NEW] 下單對話框 ---
     @st.dialog("📝 下單確認 (模擬預覽)")
