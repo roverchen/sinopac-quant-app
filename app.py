@@ -183,10 +183,19 @@ st.markdown("""
         
         /* 手機版原生按鈕優化 */
         @media (max-width: 768px) {
-            /* 讓按鈕在小視窗下的 padding 更緊湊 */
             .stButton > button {
-                padding-left: 0.1rem !important;
-                padding-right: 0.1rem !important;
+                padding: 0.4rem 0.2rem !important;
+                font-size: 0.82rem !important;
+                min-height: 2.2rem !important;
+            }
+        }
+        /* 電腦版按鈕優化 */
+        @media (min-width: 769px) {
+            .stButton > button {
+                padding: 0.45rem 1rem !important;
+                font-size: 0.9rem !important;
+                min-height: 2.5rem !important;
+                border-radius: 8px !important;
             }
         }
 
@@ -2348,10 +2357,10 @@ if "results" in st.session_state:
         st.markdown('<div id="pg-marker"></div>', unsafe_allow_html=True)
         
         is_mob = is_mobile_device()
-        p_cols = st.columns([1, 1, 1] if is_mob else [1, 8, 1])
+        p_cols = st.columns([1, 1, 1] if is_mob else [2, 6, 2])
         
-        prev_label = "◀️" if is_mob else "◀️ 上一頁"
-        next_label = "▶️" if is_mob else "下一頁 ▶️"
+        prev_label = "◀ 上一頁"
+        next_label = "下一頁 ▶"
         
         if p_cols[0].button(prev_label, key="pg_prev", use_container_width=True):
             st.session_state.current_page -= 1
