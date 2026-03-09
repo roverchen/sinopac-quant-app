@@ -199,7 +199,13 @@ st.markdown("""
                 flex-direction: column !important;
             }
 
-            /* 2. 強制橫向排版：只要有 .mobile-horiz-row 類別，內容絕對不橫跨多列 */
+            /* 2. 強制橫向排版：只要有 .mobile-horiz-row 類別，內容物理性強制在同一列 */
+            .mobile-horiz-row div[data-testid="column"] {
+                flex: 1 1 0% !important;
+                min-width: 0 !important;
+                width: auto !important;
+            }
+            /* 針對不同版本的 Streamlit 進行深度覆寫 */
             .mobile-horiz-row div[data-testid="stHorizontalBlock"] {
                 display: flex !important;
                 flex-direction: row !important;
@@ -209,15 +215,15 @@ st.markdown("""
                 width: 100% !important;
                 gap: 4px !important;
             }
-            .mobile-horiz-row [data-testid="column"] {
-                flex: 1 1 0% !important;
-                min-width: 0 !important;
-                width: auto !important;
+            /* 額外覆寫任何可能導致換行的寬度設定 */
+            .mobile-horiz-row [data-testid="stColumn"] {
+                min-width: 0px !important;
+                flex: 1 !important;
             }
 
             /* 導航列樣式微調 */
             .nav-container {
-                padding: 10px 5px !important;
+                padding: 8px 4px !important;
                 background: rgba(255, 255, 255, 0.05) !important;
                 border-radius: 12px !important;
                 margin-bottom: 20px !important;
@@ -225,7 +231,7 @@ st.markdown("""
             }
             .nav-label {
                 font-size: 0.6rem !important;
-                margin-top: 3px !important;
+                margin-top: 2px !important;
                 color: #888 !important;
                 display: block !important;
                 text-align: center !important;
@@ -235,14 +241,14 @@ st.markdown("""
             /* 分頁列樣式微調 */
             .pagination-container {
                 margin: 20px 0 !important;
-                padding: 10px 5px !important;
+                padding: 6px 4px !important;
                 background: rgba(255, 255, 255, 0.03) !important;
                 border-radius: 8px !important;
             }
 
             .stButton button {
                 font-size: 0.8rem !important;
-                padding: 4px 8px !important;
+                padding: 4px 6px !important;
             }
         }
 </style>
@@ -2304,9 +2310,10 @@ if "results" in st.session_state:
     # --- 分頁導航 ---
     if total_pages > 1:
         st.divider()
-        # --- 🚀 [FINAL FIX] 使用 .mobile-horiz-row 強制水平不換行 ---
+        # --- 🚀 [FINAL FIX] 使用 .mobile-horiz-row 渲染極速分頁 ---
         st.markdown('<div class="mobile-horiz-row pagination-container">', unsafe_allow_html=True)
-        col1, col2, col3 = st.columns([1, 1, 1])
+        # 行動端強制三個 column 並排
+        col1, col2, col3 = st.columns(3)
         
         is_mob = is_mobile_device()
         prev_label = "◀️" if is_mob else "◀️ 上一頁"
@@ -2318,7 +2325,7 @@ if "results" in st.session_state:
                 st.rerun()
         
         with col2:
-            st.markdown(f"<div style='text-align:center; padding-top:8px; font-weight:bold;'>{st.session_state.current_page + 1}/{total_pages}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='text-align:center; padding-top:12px; font-size:0.85rem; font-weight:bold;'>{st.session_state.current_page + 1}/{total_pages}</div>", unsafe_allow_html=True)
         
         with col3:
             if st.button(next_label, key="next_pg", disabled=(st.session_state.current_page == total_pages - 1), use_container_width=True):
