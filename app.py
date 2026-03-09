@@ -1945,7 +1945,7 @@ def show_order_dialog(row, user_id, api, max_api, ca_active):
         # 針對加密貨幣透過 MAX API 下單
         if max_api:
             btn_label = f"💰 MAX 實盤下單 ({max_market_id.upper()})" if max_market_id else "❌ MAX 不支援此幣"
-            if st.button(btn_label, use_container_width=True, type="primary", disabled=(not max_market_id or insufficient_funds)):
+            if c2.button(btn_label, use_container_width=True, type="primary", disabled=(not max_market_id or insufficient_funds)):
                 try:
                     # 呼叫 MAX API 送出限價單
                     trade = max_api.place_order(
