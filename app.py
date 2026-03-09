@@ -878,7 +878,8 @@ def display_simulation_dashboard(user_id):
                     curr_prices = dict(zip(st.session_state.results['代碼'], st.session_state.results['最新價格']))
                 
                 for trade in open_trades:
-                    cols = st.columns([1, 2, 2, 2, 2])
+                    # 擴大理由欄位的顯示比例 (1:1.5:1.5:4:1)
+                    cols = st.columns([1, 1.5, 1.5, 4, 1])
                     
                     # 顯示 模擬/實盤 (模擬不顯股數，實盤顯股數)
                     is_real = (trade.get("trade_type") == "Real")
@@ -1056,6 +1057,31 @@ def resolve_stock_code(input_str, api):
             
     return None, []
 
+def build_buy_reason(row):
+    """根據分析結果列生成詳細的買入理由描述"""
+    w_def = int(row.get('_defense_weight', 0.5) * 100)
+    w_gro = 100 - w_def
+    
+    # 計算主導策略
+    v_w = row.get('_defense_weight', 0.5) * row.get('_v_score', 50)
+    p_w = (1 - row.get('_defense_weight', 0.5)) * row.get('_p_score', 50)
+    strategy = "強勢" if p_w >= v_w else "價值"
+    
+    level = row.get('_y_level_pct', 0.0) * 100
+    y_bias = row.get('_defense_bias', 0) * 100
+    ma20_bias = row.get('_ma20_bias', 0) * 100
+    ma20_val = row.get('_ma20', 0)
+    
+    atr = row.get('_atr', 0)
+    atr_mult = row.get('_atr_mult', 2.5)
+    
+    if strategy == "強勢":
+        stop_val = row['最新價格'] - (atr * atr_mult)
+    else:
+        stop_val = row.get('_y_low', row['最新價格'] * 0.95) * 0.95
+        
+    return f"[{strategy}] (配置:{w_gro}%成長/{w_def}%防禦) 位階:{level:.1f}% | 年偏:{y_bias:+.1f}% | MA20偏:{ma20_bias:+.1f}% | MA20價:{ma20_val:.1f} | ATR損:{stop_val:.1f}"
+
 def get_mass_scan_list(api, market='TW'):
     '從 4.6 萬檔合約中過濾出真正的股票. market="TW": 台股; "US": 美股'
     if market == 'CRYPTO':
@@ -1177,18 +1203,21 @@ with st.sidebar.container():
 # 確保按下海選按鈕時切換回主頁
 if big_scan_tw_btn:
     auto_close_sidebar()
+    st.session_state.active_page = "market"
     st.session_state.scan_market = "TW"
     st.session_state.is_big_scan = True
     st.session_state.trigger_daily_scan = True
     st.rerun()
 if big_scan_us_btn:
     auto_close_sidebar()
+    st.session_state.active_page = "market"
     st.session_state.scan_market = "US"
     st.session_state.is_big_scan = True
     st.session_state.trigger_daily_scan = True
     st.rerun()
 if big_scan_crypto_btn:
     auto_close_sidebar()
+    st.session_state.active_page = "market"
     st.session_state.scan_market = "CRYPTO"
     st.session_state.is_big_scan = True
     st.session_state.trigger_daily_scan = True
@@ -1706,7 +1735,11 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
                 "_vol_ratio": vol_momentum_ratio,
                 "_macd_status": macd_status,
                 "_ma20": ma20_last,
-                "_data_ts": last_ts
+                "_data_ts": last_ts,
+                "_y_level_pct": level_percentile,
+                "_defense_bias": dist_to_defense,
+                "_ma20_bias": dist_to_ma20,
+                "_defense_weight": defense_weight
             })
             
             # --- 頻率保護：如果是大選股，加入微小延遲防止被封鎖 ---
@@ -1732,7 +1765,10 @@ def rescore_results(results_df, defense_weight):
     if results_df.empty: return results_df
     
     # --- [修正] 結構檢查：防止快取版本不相容導致 KeyError ---
-    required_cols = ['_v_score', '_p_score', '_is_rev_ok', '_g_buy', '_v_buy', '_ma_base', '_y_low']
+    required_cols = [
+        '_v_score', '_p_score', '_is_rev_ok', '_g_buy', '_v_buy', '_ma_base', '_y_low',
+        '_y_level_pct', '_defense_bias', '_ma20_bias', '_defense_weight'
+    ]
     if not all(col in results_df.columns for col in required_cols):
         # 如果欄位不齊，可能是舊版快取。不報錯，直接回傳原始資料，並提示重新掃描。
         print("[Notice] Old cache detected in rescore_results, skipping vector update.")
@@ -1921,7 +1957,8 @@ if (big_scan_tw_btn or big_scan_us_btn or big_scan_crypto_btn or scan_btn or sho
             if st.session_state.is_big_scan:
                 top_stock = results.iloc[0]
                 m_type = st.session_state.scan_market or "TW"
-                reason = f"系統自動海選第一名 ({m_type}) (評分: {top_stock['綜合評分']:.1f})"
+                # 使用強化後的買入理由
+                reason = build_buy_reason(top_stock)
                 if record_trade("shared_sys", "Auto", top_stock['代碼'], top_stock['名稱'], top_stock['最新價格'], reason, is_system=True):
                     st.toast(f"🤖 系統本日官方推薦：{top_stock['代碼']}", icon="📥")
             
@@ -2099,7 +2136,8 @@ if "results" in st.session_state:
         c1, c2 = st.columns(2)
         # 按鈕 1: 模擬下單 (永遠可用)
         if c1.button("🧪 執行模擬下單", use_container_width=True):
-            reason = f"用戶手動選擇 ({row['操作建議']})"
+            # 使用詳細理由產生器
+            reason = build_buy_reason(row)
             # 手動下單強制 is_system=False, 並記錄 股數 與 類型
             if record_trade(user_id, "Manual", row['代碼'], row['名稱'], buy_price, reason, is_system=False, trade_type="Simulated", shares=qty):
                 st.toast(f"🚀 已錄入 {row['代碼']} 個人模擬委託 ({qty} 股)！", icon="✅")
