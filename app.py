@@ -4,6 +4,7 @@ import time
 import base64
 import json
 import uuid
+from streamlit_javascript import st_javascript
 from dotenv import load_dotenv
 
 # 載入環境變數 (如 MAX API Keys)
@@ -73,15 +74,35 @@ except ImportError:
     get_script_run_ctx = None
 
 def get_session_uid():
-    """取得當前 Session 的識別碼，利用簡短網址參數作持久化"""
-    # 優先從網址讀取短 ID
-    if "u" in st.query_params:
-        return st.query_params["u"]
+    """取得當前 Session 的識別碼，利用 LocalStorage 作持久化，保持網址乾淨"""
+    # 1. 優先從網址讀取短 ID (用於分享或初次進入)
+    url_u = st.query_params.get("u")
     
-    # 如果沒有，產生一個新的並立即寫入網址
-    new_uid = f"u_{uuid.uuid4().hex[:6]}"
-    st.query_params["u"] = new_uid
-    return new_uid
+    # 2. 獲取 LocalStorage 中的 ID
+    # 注意: st_javascript 可能需要一點時間，初次渲染可能傳回 0
+    stored_uid = st_javascript("localStorage.getItem('sinopac_user_id');")
+    
+    # 如果 st_javascript 還沒準備好 (傳回 0)，先暫停等待下一次 rerun
+    if stored_uid == 0:
+        st.stop()
+        
+    final_uid = None
+    
+    if url_u:
+        # 如果網址有帶 ID，優先使用網址的並存入 LocalStorage
+        final_uid = url_u
+        st_javascript(f"localStorage.setItem('sinopac_user_id', '{url_u}');")
+        # 清除網址參數，保持網址純淨
+        del st.query_params["u"]
+    elif stored_uid:
+        # 如果 LocalStorage 有，直接使用
+        final_uid = str(stored_uid)
+    else:
+        # 如果都沒有，產生一個新的
+        final_uid = f"u_{uuid.uuid4().hex[:6]}"
+        st_javascript(f"localStorage.setItem('sinopac_user_id', '{final_uid}');")
+        
+    return final_uid
 
 def is_mobile_device():
     """透過 User-Agent 簡易判斷是否為行動裝置"""
