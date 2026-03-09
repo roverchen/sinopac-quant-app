@@ -112,9 +112,12 @@ def get_session_uid():
     return internal_id
 
 def is_mobile_device():
-    """透過 User-Agent 簡易判斷是否為行動裝置"""
+    """透過 User-Agent 與 Query Parameter 判斷是否為行動裝置"""
     try:
-        # 使用最新的 st.context.headers (取代已棄用的 _get_websocket_headers)
+        # 1. 優先檢查 Query Parameter (?mobile=1)
+        if st.query_params.get("mobile") == "1":
+            return True
+        # 2. 檢查 User-Agent
         ua = st.context.headers.get("User-Agent", "").lower()
         return any(m in ua for m in ["mobile", "android", "iphone", "ipad"])
     except:
@@ -187,38 +190,40 @@ st.markdown("""
             .mobile-only { display: block !important; }
             .mobile-label { display: inline-block !important; color: #888; font-size: 0.8rem; margin-right: 6px; width: 70px; }
 
-            /* --- [ULTIMATE FIX] 全自定義行動端元件 (Full Custom Mobile Elements) --- */
-            .custom-nav-row, .custom-pg-row {
-                display: flex !important;
-                flex-direction: row !important;
-                flex-wrap: nowrap !important;
-                justify-content: space-between !important;
-                align-items: center !important;
-                width: 100% !important;
-                gap: 4px !important;
-                margin-bottom: 10px !important;
-            }
+            /* --- [ULTIMATE FIX] 全自定義行動端元件 (Table-based for horizontal row) --- */
+            .custom-table { width: 100% !important; border-collapse: collapse !important; border: none !important; margin-bottom: 10px !important; }
+            .custom-table td { padding: 4px !important; border: none !important; vertical-align: middle !important; }
+            
             .custom-btn {
-                flex: 1 !important;
                 background: rgba(255,255,255,0.08) !important;
                 border: 1px solid rgba(255,255,255,0.1) !important;
                 border-radius: 8px !important;
-                padding: 6px 2px !important;
+                padding: 8px 2px !important;
                 text-align: center !important;
                 cursor: pointer !important;
                 transition: background 0.2s !important;
+                display: block !important;
+                width: 100% !important;
             }
             .custom-btn:active {
-                background: rgba(255,255,255,0.2) !important;
+                background: rgba(255,255,255,0.15) !important;
             }
-            .custom-btn-icon { font-size: 1.1rem !important; margin-bottom: 2px !important; }
-            .custom-btn-label { font-size: 0.55rem !important; color: #aaa !important; display: block !important; }
+            .custom-btn-icon { font-size: 1.2rem !important; margin-bottom: 2px !important; }
+            .custom-btn-label { font-size: 0.6rem !important; color: #ccc !important; display: block !important; }
             
-            .custom-pg-num { font-size: 0.85rem !important; font-weight: bold !important; text-align: center !important; flex: 1 !important; }
+            .custom-pg-num { font-size: 0.9rem !important; font-weight: bold !important; text-align: center !important; color: #fff !important; }
             
             /* 隱藏真正觸發邏輯的 st 原始按鈕 */
             .hidden-trigger { display: none !important; }
+            
+            /* 行動端專屬容器 */
+            .mobile-ui-container { display: block !important; }
+            .desktop-ui-container { display: none !important; }
         }
+        
+        /* 非行動端預設隱藏 */
+        .mobile-ui-container { display: none; }
+        .desktop-ui-container { display: block; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -242,53 +247,56 @@ st.markdown("""
     </script>
 """, unsafe_allow_html=True)
 
-# --- [NEW] 行動端專屬：頂部快捷導航列 ---
-if is_mobile_device() or st.session_state.get('dev_mobile', False):
-    # 1. 隱藏觸發器 (Logic Sink)
-    st.markdown('<div class="hidden-trigger">', unsafe_allow_html=True)
-    h_tw = st.button("H_TW", key="h_nav_tw")
-    h_us = st.button("H_US", key="h_nav_us")
-    h_cy = st.button("H_CRYPTO", key="h_nav_crypto")
-    h_wl = st.button("H_WL", key="h_nav_wl")
-    h_sim = st.button("H_SIM", key="h_nav_sim")
-    st.markdown('</div>', unsafe_allow_html=True)
+# --- [NEW] 行動端專屬：頂部快捷導航列 (方案 D: CSS Media Query + Table) ---
+# 1. 隱藏觸發器 (Logic Sink) - 始終渲染但隱藏
+st.markdown('<div class="hidden-trigger">', unsafe_allow_html=True)
+h_tw = st.button("H_TW", key="h_nav_tw")
+h_us = st.button("H_US", key="h_nav_us")
+h_cy = st.button("H_CRYPTO", key="h_nav_crypto")
+h_wl = st.button("H_WL", key="h_nav_wl")
+h_sim = st.button("H_SIM", key="h_nav_sim")
+st.markdown('</div>', unsafe_allow_html=True)
 
-    # 執行邏輯
-    if h_tw:
-        st.session_state.scan_market = "TW"
-        st.session_state.is_big_scan = True
-        st.session_state.trigger_daily_scan = True
-        st.rerun()
-    if h_us:
-        st.session_state.scan_market = "US"
-        st.session_state.is_big_scan = True
-        st.session_state.trigger_daily_scan = True
-        st.rerun()
-    if h_cy:
-        st.session_state.scan_market = "CRYPTO"
-        st.session_state.is_big_scan = True
-        st.session_state.trigger_daily_scan = True
-        st.rerun()
-    if h_wl:
-        st.session_state.active_page = "market"
-        st.session_state.is_big_scan = False
-        st.session_state.scan_market = None
-        st.session_state.force_rescan = True
-        st.rerun()
-    if h_sim:
-        st.session_state.active_page = "simulation"
-        st.rerun()
+# 執行邏輯 (按鈕觸發後執行)
+if h_tw:
+    st.session_state.scan_market = "TW"
+    st.session_state.is_big_scan = True
+    st.session_state.trigger_daily_scan = True
+    st.rerun()
+if h_us:
+    st.session_state.scan_market = "US"
+    st.session_state.is_big_scan = True
+    st.session_state.trigger_daily_scan = True
+    st.rerun()
+if h_cy:
+    st.session_state.scan_market = "CRYPTO"
+    st.session_state.is_big_scan = True
+    st.session_state.trigger_daily_scan = True
+    st.rerun()
+if h_wl:
+    st.session_state.active_page = "market"
+    st.session_state.is_big_scan = False
+    st.session_state.scan_market = None
+    st.session_state.force_rescan = True
+    st.rerun()
+if h_sim:
+    st.session_state.active_page = "simulation"
+    st.rerun()
 
-    # 2. 顯示橫向 HTML 組件
-    st.markdown("""
-        <div class="custom-nav-row">
-            <div class="custom-btn" onclick="triggerSt('H_TW')"><div class="custom-btn-icon">🇹🇼</div><div class="custom-btn-label">台股</div></div>
-            <div class="custom-btn" onclick="triggerSt('H_US')"><div class="custom-btn-icon">🇺🇸</div><div class="custom-btn-label">美股</div></div>
-            <div class="custom-btn" onclick="triggerSt('H_CRYPTO')"><div class="custom-btn-icon">🪙</div><div class="custom-btn-label">虛擬幣</div></div>
-            <div class="custom-btn" onclick="triggerSt('H_WL')"><div class="custom-btn-icon">📋</div><div class="custom-btn-label">清單</div></div>
-            <div class="custom-btn" onclick="triggerSt('H_SIM')"><div class="custom-btn-icon">📊</div><div class="custom-btn-label">儀表板</div></div>
-        </div>
-    """, unsafe_allow_html=True)
+# 2. 透過 CSS 控制顯示的自定義組件
+st.markdown("""
+    <div class="mobile-ui-container">
+        <table class="custom-table">
+            <tr>
+                <td style="width:20%;"><div class="custom-btn" onclick="triggerSt('H_TW')"><div class="custom-btn-icon">🇹🇼</div><div class="custom-btn-label">台股</div></div></td>
+                <td style="width:20%;"><div class="custom-btn" onclick="triggerSt('H_US')"><div class="custom-btn-icon">🇺🇸</div><div class="custom-btn-label">美股</div></div></td>
+                <td style="width:20%;"><div class="custom-btn" onclick="triggerSt('H_CRYPTO')"><div class="custom-btn-icon">🪙</div><div class="custom-btn-label">加密</div></div></td>
+                <td style="width:20%;"><div class="custom-btn" onclick="triggerSt('H_WL')"><div class="custom-btn-icon">📋</div><div class="custom-btn-label">清單</div></div></td>
+                <td style="width:20%;"><div class="custom-btn" onclick="triggerSt('H_SIM')"><div class="custom-btn-icon">📊</div><div class="custom-btn-label">紀錄</div></div></td>
+            </tr>
+        </table>
+    </div>
+""", unsafe_allow_html=True)
 
 # --- 手機版側邊欄提示 ---
 
@@ -2296,7 +2304,7 @@ if "results" in st.session_state:
     # --- 分頁導航 ---
     if total_pages > 1:
         st.divider()
-        # --- 🚀 [FINAL FIX] 物理性橫向分頁欄 ---
+        # --- 🚀 [FINAL FIX] 物理性橫向分頁欄 (Table-based) ---
         # 1. 隱藏觸發器
         st.markdown('<div class="hidden-trigger">', unsafe_allow_html=True)
         h_prev = st.button("ST_PREV", key="h_pg_prev")
@@ -2316,10 +2324,14 @@ if "results" in st.session_state:
         next_label = "▶️" if is_mob else "下一頁 ▶️"
         
         st.markdown(f"""
-            <div class="custom-pg-row">
-                <div class="custom-btn" style="flex:2" onclick="triggerSt('ST_PREV')">{prev_label}</div>
-                <div class="custom-pg-num">{st.session_state.current_page + 1} / {total_pages}</div>
-                <div class="custom-btn" style="flex:2" onclick="triggerSt('ST_NEXT')">{next_label}</div>
+            <div class="mobile-ui-container">
+                <table class="custom-table" style="margin-top:20px;">
+                    <tr>
+                        <td style="width:35%;"><div class="custom-btn" onclick="triggerSt('ST_PREV')">{prev_label}</div></td>
+                        <td style="width:30%; text-align:center;"><div class="custom-pg-num">{st.session_state.current_page + 1} / {total_pages}</div></td>
+                        <td style="width:35%;"><div class="custom-btn" onclick="triggerSt('ST_NEXT')">{next_label}</div></td>
+                    </tr>
+                </table>
             </div>
         """, unsafe_allow_html=True)
     
