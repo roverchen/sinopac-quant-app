@@ -226,85 +226,60 @@ st.markdown("""
 # 預設時區工具
 st.title("📈 金融商品市場報明牌系統")
 
-# --- [NEW] 行動端專屬：頂部快捷導航列 (方案 C: 物理性強制橫向) ---
-if is_mobile_device() or st.session_state.get('dev_mobile', False):
-    # 1. 渲染物理性橫向排版 HTML
-    st.markdown("""
-        <div class="custom-nav-row">
-            <div class="custom-btn" onclick="document.getElementById('hidden_nav_tw').click()">
-                <div class="custom-btn-icon">🇹🇼</div>
-                <div class="custom-btn-label">台股</div>
-            </div>
-            <div class="custom-btn" onclick="document.getElementById('hidden_nav_us').click()">
-                <div class="custom-btn-icon">🇺🇸</div>
-                <div class="custom-btn-label">美股</div>
-            </div>
-            <div class="custom-btn" onclick="document.getElementById('hidden_nav_crypto').click()">
-                <div class="custom-btn-icon">🪙</div>
-                <div class="custom-btn-label">虛擬幣</div>
-            </div>
-            <div class="custom-btn" onclick="document.getElementById('hidden_nav_wl').click()">
-                <div class="custom-btn-icon">📋</div>
-                <div class="custom-btn-label">清單</div>
-            </div>
-            <div class="custom-btn" onclick="document.getElementById('hidden_nav_sim').click()">
-                <div class="custom-btn-icon">📊</div>
-                <div class="custom-btn-label">儀表板</div>
-            </div>
-        </div>
-        <script>
-            // 定義全域點擊函數，確保能找到 parent DOM 中的按鈕
-            window.clickHidden = function(id) {
-                const btn = window.parent.document.querySelector(`button[data-testid="${id}"]`);
-                if (btn) btn.click();
+# --- [NEW] JS Bridge 核心腳本 (全域) ---
+st.markdown("""
+    <script>
+        window.triggerSt = function(key) {
+            const doc = window.parent.document;
+            const buttons = Array.from(doc.querySelectorAll('button[kind="secondary"]'));
+            const target = buttons.find(b => b.innerText === key);
+            if (target) {
+                target.click();
+            } else {
+                console.log("Button not found: " + key);
             }
-        </script>
-    """, unsafe_allow_html=True)
-    
-    # 2. 隱藏的真正按鈕 (放於一個隱藏容器中)
-    with st.container():
-        st.markdown('<div class="hidden-trigger">', unsafe_allow_html=True)
-        if st.button("H_TW", key="h_nav_tw"):
-            st.session_state.scan_market = "TW"
-            st.session_state.is_big_scan = True
-            st.session_state.trigger_daily_scan = True
-            st.rerun()
-        if st.button("H_US", key="h_nav_us"):
-            st.session_state.scan_market = "US"
-            st.session_state.is_big_scan = True
-            st.session_state.trigger_daily_scan = True
-            st.rerun()
-        if st.button("H_CRYPTO", key="h_nav_crypto"):
-            st.session_state.scan_market = "CRYPTO"
-            st.session_state.is_big_scan = True
-            st.session_state.trigger_daily_scan = True
-            st.rerun()
-        if st.button("H_WL", key="h_nav_wl"):
-            st.session_state.active_page = "market"
-            st.session_state.is_big_scan = False
-            st.session_state.scan_market = None
-            st.session_state.force_rescan = True
-            st.rerun()
-        if st.button("H_SIM", key="h_nav_sim"):
-            st.session_state.active_page = "simulation"
-            st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
+        }
+    </script>
+""", unsafe_allow_html=True)
 
-    # 修改 HTML 以使用 window.clickHidden 並配合新的 key
-    # 注意：Streamlit 的 data-testid 規則通常是 "stButton" + 金鑰 (全部小寫且處理特殊字元)
-    # 這裡我們使用 JS 小量搜尋來精確觸發
-    st.markdown("""
-        <script>
-            function triggerSt(key) {
-                const doc = window.parent.document;
-                const buttons = Array.from(doc.querySelectorAll('button[kind="secondary"]'));
-                const target = buttons.find(b => b.innerText === key);
-                if (target) target.click();
-            }
-        </script>
-    """, unsafe_allow_html=True)
-    
-    # 重寫導航 HTML 使用 JS Bridge
+# --- [NEW] 行動端專屬：頂部快捷導航列 ---
+if is_mobile_device() or st.session_state.get('dev_mobile', False):
+    # 1. 隱藏觸發器 (Logic Sink)
+    st.markdown('<div class="hidden-trigger">', unsafe_allow_html=True)
+    h_tw = st.button("H_TW", key="h_nav_tw")
+    h_us = st.button("H_US", key="h_nav_us")
+    h_cy = st.button("H_CRYPTO", key="h_nav_crypto")
+    h_wl = st.button("H_WL", key="h_nav_wl")
+    h_sim = st.button("H_SIM", key="h_nav_sim")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # 執行邏輯
+    if h_tw:
+        st.session_state.scan_market = "TW"
+        st.session_state.is_big_scan = True
+        st.session_state.trigger_daily_scan = True
+        st.rerun()
+    if h_us:
+        st.session_state.scan_market = "US"
+        st.session_state.is_big_scan = True
+        st.session_state.trigger_daily_scan = True
+        st.rerun()
+    if h_cy:
+        st.session_state.scan_market = "CRYPTO"
+        st.session_state.is_big_scan = True
+        st.session_state.trigger_daily_scan = True
+        st.rerun()
+    if h_wl:
+        st.session_state.active_page = "market"
+        st.session_state.is_big_scan = False
+        st.session_state.scan_market = None
+        st.session_state.force_rescan = True
+        st.rerun()
+    if h_sim:
+        st.session_state.active_page = "simulation"
+        st.rerun()
+
+    # 2. 顯示橫向 HTML 組件
     st.markdown("""
         <div class="custom-nav-row">
             <div class="custom-btn" onclick="triggerSt('H_TW')"><div class="custom-btn-icon">🇹🇼</div><div class="custom-btn-label">台股</div></div>
@@ -2319,17 +2294,21 @@ if "results" in st.session_state:
                     st.rerun()
 
     # --- 分頁導航 ---
+    if total_pages > 1:
+        st.divider()
         # --- 🚀 [FINAL FIX] 物理性橫向分頁欄 ---
         # 1. 隱藏觸發器
-        with st.container():
-            st.markdown('<div class="hidden-trigger">', unsafe_allow_html=True)
-            if st.button("ST_PREV", key="h_pg_prev"):
-                st.session_state.current_page -= 1
-                st.rerun()
-            if st.button("ST_NEXT", key="h_pg_next"):
-                st.session_state.current_page += 1
-                st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown('<div class="hidden-trigger">', unsafe_allow_html=True)
+        h_prev = st.button("ST_PREV", key="h_pg_prev")
+        h_next = st.button("ST_NEXT", key="h_pg_next")
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        if h_prev:
+            st.session_state.current_page -= 1
+            st.rerun()
+        if h_next:
+            st.session_state.current_page += 1
+            st.rerun()
 
         # 2. 顯示元件
         is_mob = is_mobile_device()
