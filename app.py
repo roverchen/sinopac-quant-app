@@ -309,6 +309,15 @@ def init_max_api_v5(key, secret):
         return MaxExchangeAPI(key, secret)
     return None
 
+# --- 🔌 API 初始化 (背景執行) ---
+sj_key = st.secrets.get("API_KEY", "")
+sj_secret = st.secrets.get("SECRET_KEY", "")
+api = init_api(sj_key, sj_secret)
+
+max_key = st.secrets.get("MAX_API_KEY") or os.getenv("MAX_API_KEY")
+max_secret = st.secrets.get("MAX_API_SECRET") or os.getenv("MAX_API_SECRET")
+max_api = init_max_api_v5(max_key, max_secret)
+
 # 初始化 API 狀態文字
 v_tag = f" v{max_api.VERSION}" if max_api else ""
 m_api_status = f"已偵測{v_tag}" if max_key else "待設定"
@@ -1051,23 +1060,15 @@ def get_mass_scan_list(api, market='TW'):
 with st.sidebar.expander("⚙️ 系統初始化與連線", expanded=False):
     # 1. API 連線狀態
     st.markdown("#### 🔌 API 連線狀態")
-    sj_key = st.secrets.get("API_KEY", "")
-    sj_secret = st.secrets.get("SECRET_KEY", "")
-    with st.status("正在連線至永豐金 (Shioaji)...", expanded=False) as s:
-        api = init_api(sj_key, sj_secret)
-        if api:
-            s.update(label="✅ 永豐金已連線", state="complete")
-        else:
-            s.update(label="❌ 永豐金連線失敗", state="error")
+    if api:
+        st.success("✅ 永豐金已連線")
+    else:
+        st.error("❌ 永豐金連線失敗")
 
-    max_key = st.secrets.get("MAX_API_KEY") or os.getenv("MAX_API_KEY")
-    max_secret = st.secrets.get("MAX_API_SECRET") or os.getenv("MAX_API_SECRET")
-    with st.status("正在連線至 MAX 交易所...", expanded=False) as s:
-        max_api = init_max_api_v5(max_key, max_secret)
-        if max_api:
-            s.update(label="✅ MAX 交易所已連線", state="complete")
-        else:
-            s.update(label="⚪ MAX API 待設定", state="complete")
+    if max_api:
+        st.success("✅ MAX 交易所已連線")
+    else:
+        st.info("⚪ MAX API 待設定")
 
     # 2. 身份辨識
     st.markdown("---")
