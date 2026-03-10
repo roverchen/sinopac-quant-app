@@ -95,17 +95,17 @@ def load_user_creds(uid):
     return {}
 
 def get_browser_state():
-    """從 LocalStorage 取得 UID，從伺服器檔案讀取憑證。URL 保持乾淨。"""
-    # 1. 已經載入成功則直接回傳快取
+    """取得使用者 ID 與憑證。UID 固定為 default_user，憑證從伺服器端檔案讀取。"""
+    # 已經載入成功則直接回傳快取
     if st.session_state.get('browser_state_loaded'):
         return st.session_state.user_id, st.session_state.user_creds
 
-    # 備援 ID (Session 層級，同一個瀏覽器分頁不會變)
-    session_id = "u_" + (get_script_run_ctx().session_id[:8] if get_script_run_ctx() else uuid.uuid4().hex[:6])
+    # 固定 UID (在 Streamlit Cloud 上 LocalStorage 不穩定，使用固定 ID 確保每次都能讀到設定)
+    uid = "default_user"
 
     # 初始化 Session State
     if 'user_id' not in st.session_state:
-        st.session_state.user_id = session_id
+        st.session_state.user_id = uid
     if 'user_creds' not in st.session_state:
         st.session_state.user_creds = {
             "sj_api_key": "", "sj_secret_key": "",
@@ -113,17 +113,8 @@ def get_browser_state():
             "person_id": "", "ca_passwd": ""
         }
 
-    # 嘗試從 LocalStorage 讀取持久化的 UID
-    try:
-        stored_uid = st_javascript("localStorage.getItem('sinopac_user_id')")
-        # st_javascript 首次呼叫回傳 0，第二次 rerun 才會有真實值
-        if stored_uid and stored_uid != 0 and str(stored_uid) != "null":
-            st.session_state.user_id = str(stored_uid)
-    except Exception:
-        pass
-
-    # 從伺服器端讀取憑證 (瞬間完成、無延遲、無阻塞)
-    loaded = load_user_creds(st.session_state.user_id)
+    # 從伺服器端讀取憑證
+    loaded = load_user_creds(uid)
     if loaded:
         st.session_state.user_creds.update(loaded)
         st.session_state.user_creds["_loaded"] = True
@@ -2262,15 +2253,8 @@ if st.session_state.active_page == "settings":
         elif user_creds.get("ca_pfx_b64"):
             new_creds["ca_pfx_b64"] = user_creds["ca_pfx_b64"]
 
-        # 存到伺服器端 JSON 檔案 (穩定、不受瀏覽器限制)
+        # 存到伺服器端 JSON 檔案
         save_user_creds(user_id, new_creds)
-        
-        # 同時嘗試將 UID 寫入 LocalStorage (供下次開啟時辨識)
-        st.components.v1.html(f"""
-            <script>
-                try {{ localStorage.setItem('sinopac_user_id', '{user_id}'); }} catch(e) {{}}
-            </script>
-        """, height=0)
         
         # 更新 session_state
         st.session_state.user_creds = new_creds
