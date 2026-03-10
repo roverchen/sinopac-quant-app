@@ -449,9 +449,7 @@ m_api_status = f"已偵測{v_tag}" if max_key else "待設定"
 # [REMOVED] 依要求移除 API 進階設定區塊
 
 # 核心連線狀態檢查 (背景邏輯)
-is_mock = True
-if api is not None:
-    is_mock = hasattr(api, 'list_accounts') and len(api.list_accounts()) == 0 and not hasattr(api, 'Contracts')
+is_mock = isinstance(api, MockApi) if api is not None else True
 
 if max_api:
     bal = max_api.get_account_balance()
@@ -717,10 +715,10 @@ def get_stock_name_map(_api):
     code_to_name.update(CRYPTO_FALLBACK)
 
     # 檢查是否為 MockApi (連線衝突模式) 或 API 尚未初始化
-    is_mock = _api is None or (hasattr(_api, 'list_accounts') and len(_api.list_accounts()) == 0 and not hasattr(_api, 'Contracts'))
+    is_mock_internal = isinstance(_api, MockApi) if _api is not None else True
 
     # --- 強化合約同步 (關鍵修復：解決 82 檔問題) ---
-    if not is_mock and hasattr(_api, "Contracts") and hasattr(_api.Contracts, "Stocks"):
+    if not is_mock_internal and hasattr(_api, "Contracts") and hasattr(_api.Contracts, "Stocks"):
         # 如果當前合約庫太小，強制啟動深度下載
         if len(code_to_name) < 1000:
             with st.spinner("📦 正在深度同步市場數據 (預計 15 秒)..."):
@@ -777,10 +775,8 @@ def get_stock_name_map(_api):
                     code_to_name.update(cached_map)
             except: pass
 
-    # 驗證機制
-    if is_mock:
-        st.sidebar.info("💡 目前處於「離線恢復模式」，名稱解析來自上次快取資料。")
-    elif len(code_to_name) < 1000:
+    # 驗證機制 (已移除側邊欄 info，改由主側邊欄邏輯統一處理)
+    if not is_mock_internal and len(code_to_name) < 1000:
         # 只在側邊欄顯示一次輕量警告，不打斷主畫面
         st.sidebar.caption(f"ℹ️ 載入 {len(code_to_name)} 檔清單...")
 
@@ -1410,10 +1406,15 @@ if person_id and ca_passwd and ca_exists and not is_mock:
             ca_active = True
     except Exception as e:
         error_msg = str(e)
-        if "invalid password" in error_msg.lower():
+        if "token" in error_msg.lower():
+            st.sidebar.caption("❌ 憑證密碼錯誤")
+        elif "invalid password" in error_msg.lower():
             st.sidebar.caption("❌ 憑證密碼錯誤")
         elif "identity" in error_msg.lower():
             st.sidebar.caption("❌ 身分證字號不符")
+
+if is_mock:
+    st.sidebar.info("💡 目前處於「離線恢復模式」，名稱解析來自上次快取資料。")
 
 # 顯示最後一筆模擬訂單 (如果有)
 if "last_order" in st.session_state:
