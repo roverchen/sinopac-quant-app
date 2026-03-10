@@ -2239,23 +2239,23 @@ if "results" in st.session_state:
                 if st.button(f"{icon} {row['代碼']} {row['名稱']}", key=f"t_{row['代碼']}_{index}", use_container_width=True):
                     show_order_dialog(row, user_id, api, max_api, ca_active)
                 
-                # 中間：數據分組 (Grid)
-                gc1, gc2, gc3 = st.columns(3)
+                # 中間：數據指標 (inline label：value)
                 price_val = f"{row['最新價格']:.1f}" if row['最新價格'] != 0 else "-"
-                gc1.markdown(f'<span style="color:#888; font-size:0.7rem;">最新價</span><br><b>{price_val}</b>', unsafe_allow_html=True)
-                gc2.markdown(f'<span style="color:#888; font-size:0.7rem;">一年位階</span><br>{row["一年位階"]}', unsafe_allow_html=True)
-                gc3.markdown(f'<span style="color:#888; font-size:0.7rem;">{header_label}</span><br>{row["年線乖離"]}', unsafe_allow_html=True)
-                
-                gc4, gc5, gc6 = st.columns(3)
                 ma20_raw = row.get('_ma20', 0)
                 ma20_val = f"{ma20_raw:.1f}" if not pd.isna(ma20_raw) else "-"
                 atr_mult_val = row.get('_atr_mult', 2.5)
                 atr_stop_raw = row['最新價格'] - (atr_mult_val * row.get('_atr', 0))
                 atr_stop = f"{atr_stop_raw:.1f}" if not pd.isna(atr_stop_raw) else "-"
                 
-                gc4.markdown(f'<span style="color:#888; font-size:0.7rem;">MA20乖離</span><br>{row["MA20乖離"]}', unsafe_allow_html=True)
-                gc5.markdown(f'<span style="color:#888; font-size:0.7rem;">MA20價</span><br>{ma20_val}', unsafe_allow_html=True)
-                gc6.markdown(f'<span style="color:#888; font-size:0.7rem;">ATR停損</span><br>{atr_stop}', unsafe_allow_html=True)
+                gc1, gc2, gc3 = st.columns(3)
+                gc1.markdown(f'<span style="color:#888;font-size:0.75rem;">最新價：</span><b>{price_val}</b>', unsafe_allow_html=True)
+                gc2.markdown(f'<span style="color:#888;font-size:0.75rem;">一年位階：</span>{row["一年位階"]}', unsafe_allow_html=True)
+                gc3.markdown(f'<span style="color:#888;font-size:0.75rem;">{header_label}：</span>{row["年線乖離"]}', unsafe_allow_html=True)
+                
+                gc4, gc5, gc6 = st.columns(3)
+                gc4.markdown(f'<span style="color:#888;font-size:0.75rem;">MA20乖離：</span>{row["MA20乖離"]}', unsafe_allow_html=True)
+                gc5.markdown(f'<span style="color:#888;font-size:0.75rem;">MA20價：</span>{ma20_val}', unsafe_allow_html=True)
+                gc6.markdown(f'<span style="color:#888;font-size:0.75rem;">ATR停損：</span>{atr_stop}', unsafe_allow_html=True)
                 
                 # 底部：操作建議 + 動作按鈕
                 bc1, bc2 = st.columns([4, 1])
