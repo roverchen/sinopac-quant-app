@@ -189,6 +189,14 @@ NAME_MAP_CACHE_FILE = os.path.join(CACHE_DIR, "name_map.pkl")
 if not os.path.exists(CACHE_DIR):
     os.makedirs(CACHE_DIR)
 
+# --- yfinance 穩定性設定 (解決 Segfault 與時區問題) ---
+if not os.path.exists(os.path.join(CACHE_DIR, "yf_cache")):
+    os.makedirs(os.path.join(CACHE_DIR, "yf_cache"))
+try:
+    yf.set_tz_cache_location(os.path.join(CACHE_DIR, "yf_cache"))
+except:
+    pass
+
 # --- 頁面設定 ---
 st.set_page_config(page_title="金融商品市場報明牌系統", layout="wide")
 user_id, user_creds = get_browser_state()
@@ -1440,7 +1448,7 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
                 chunk = tickers[k:k+chunk_size]
                 status_placeholder.info(f"📥 正在批次下載市場數據 ({min(k + chunk_size, len(tickers))}/{len(tickers)})...")
                 # 強制使用 auto_adjust=True 以獲取穩定的技術指標得分
-                batch_data = yf.download(chunk, start=start_date, group_by='ticker', threads=True, progress=False, timeout=10, auto_adjust=True)
+                batch_data = yf.download(chunk, start=start_date, group_by='ticker', threads=False, progress=False, timeout=15, auto_adjust=True)
                 
                 # 處理下載回來的數據
                 for t in chunk:
@@ -1502,8 +1510,8 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
                     for suffix in ['.TW', '.TWO']:
                         try:
                             t = yf.Ticker(code + suffix)
-                            # 使用 auto_adjust=True 確保指標一致性
-                            df_yf = t.history(start=start_date, interval="1d", auto_adjust=True)
+                            # 使用 auto_adjust=True 確保指標一致性，禁用 threads 避免 Segfault
+                            df_yf = t.history(start=start_date, interval="1d", auto_adjust=True, threads=False)
                             if not df_yf.empty:
                                 df = df_yf.reset_index()
                                 df.columns = [c.lower() for c in df.columns]
@@ -1531,11 +1539,11 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
                         query_code = code.replace('.', '-')
                         ticker = yf.Ticker(query_code)
                         try:
-                            # 優先嘗試 start_date
-                            df_yf = ticker.history(start=start_date, interval="1d", auto_adjust=True)
+                            # 優先嘗試 start_date，禁用 threads 避免 Segfault
+                            df_yf = ticker.history(start=start_date, interval="1d", auto_adjust=True, threads=False)
                             if df_yf.empty and market_type == 'CRYPTO':
                                 # 幣圈備援：若 start_date 抓不到，嘗試 period='1y' (解決時區與開始日期偏移問題)
-                                df_yf = ticker.history(period="1y", interval="1d", auto_adjust=True)
+                                df_yf = ticker.history(period="1y", interval="1d", auto_adjust=True, threads=False)
                             
                             if not df_yf.empty:
                                 df = df_yf.reset_index()
