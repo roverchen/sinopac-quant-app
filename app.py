@@ -1318,8 +1318,21 @@ if st.sidebar.button(f"🔒 交易憑證設定 ({sj_status}/{max_status})", use_
     st.rerun()
 
 # --- 憑證啟動邏輯 ---
+pfx_b64 = user_creds.get("ca_pfx_b64")
 ca_path = os.path.join(os.path.dirname(__file__), "Sinopac.pfx")
 ca_exists = os.path.exists(ca_path)
+
+# 如果使用者有上傳過個人憑證且存在 LocalStorage，優先使用
+if pfx_b64:
+    try:
+        import tempfile
+        pfx_data = base64.b64decode(pfx_b64)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pfx") as tmp_cert:
+            tmp_cert.write(pfx_data)
+            ca_path = tmp_cert.name
+            ca_exists = True
+    except Exception as e:
+        print(f"User PFX decode failed: {e}")
 
 person_id = user_creds.get("person_id") or st.secrets.get("PERSON_ID", "")
 ca_passwd = user_creds.get("ca_passwd") or st.secrets.get("CA_PASSWD", "")
@@ -2222,17 +2235,32 @@ if st.session_state.active_page == "settings":
             "person_id": inp_person_id,
             "ca_passwd": inp_ca_passwd
         }
+        
+        # 處理憑證檔案 (轉為 Base64 存入 LocalStorage)
+        if uploaded_pfx is not None:
+            try:
+                pfx_bytes = uploaded_pfx.getvalue()
+                pfx_base64 = base64.b64encode(pfx_bytes).decode('utf-8')
+                new_creds["ca_pfx_b64"] = pfx_base64
+            except Exception as e:
+                st.error(f"憑證處理失敗: {e}")
+        elif user_creds.get("ca_pfx_b64"):
+            # 保留舊的憑證 (如果這次沒上傳新的)
+            new_creds["ca_pfx_b64"] = user_creds["ca_pfx_b64"]
+
         # 寫入 LocalStorage
         creds_json = json.dumps(new_creds, ensure_ascii=False)
-        # 使用正確的 JSON 跳脫方式避免引號問題
+        # 使用 st_javascript 寫入 (確保與讀取同源)
         escaped = creds_json.replace("\\", "\\\\").replace("'", "\\'")
-        components.html(f"<script>localStorage.setItem('sinopac_credentials', '{escaped}');</script>", height=0, width=0)
+        st_javascript(f"localStorage.setItem('sinopac_credentials', '{escaped}');")
+        
         # 更新 session_state
         new_creds["_loaded"] = True
         st.session_state.user_creds = new_creds
         # 清除 API 快取
         init_api.clear()
-        st.success("✅ 設定已儲存至瀏覽器！重新整理頁面以套用新金鑰。")
+        st.success("✅ 設定已儲存至瀏覽器！即將重新整理以套用新金鑰...")
+        st.rerun()
     
     if bc2.button("🏠 返回", use_container_width=True):
         st.session_state.active_page = "market"
