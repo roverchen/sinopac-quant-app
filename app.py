@@ -2232,46 +2232,14 @@ if "results" in st.session_state:
     for index, row in paged_results.iterrows():
         with st.container(border=True):
             if is_mob:
-                # --- [MOBILE VIEW] 2欄佈局，資訊分組 ---
+                # --- [MOBILE VIEW] 卡片式佈局 ---
                 icon = "🪙" if "-USD" in str(row['代碼']) else "🛒"
-                c1, c2 = st.columns([3, 1])
                 
-                # 第一欄：名稱 + 操作建議 (大標)
-                with c1:
-                    if st.button(f"{icon} {row['代碼']} {row['名稱']}", key=f"t_{row['代碼']}_{index}", use_container_width=True):
-                        show_order_dialog(row, user_id, api, max_api, ca_active)
-                    st.markdown(f"**`{row['操作建議']}`**")
+                # 頂部：股票名稱按鈕 (全寬)
+                if st.button(f"{icon} {row['代碼']} {row['名稱']}", key=f"t_{row['代碼']}_{index}", use_container_width=True):
+                    show_order_dialog(row, user_id, api, max_api, ca_active)
                 
-                # 第二欄：動作按鈕 (垃圾桶/加號)
-                with c2:
-                    is_big_scan = st.session_state.get("is_big_scan", False)
-                    current_watchlist = st.session_state.get("watchlist", [])
-                    action_icon = "➕" if is_big_scan else ("🗑️" if row['代碼'] in current_watchlist else "➕")
-                    
-                    if st.button(action_icon, key=f"btn_{row['代碼']}_{index}", use_container_width=True):
-                        if is_big_scan:
-                            if row['代碼'] not in st.session_state.watchlist:
-                                st.session_state.watchlist.append(row['代碼'])
-                                st.toast(f"✅ 已加入追蹤清單 {row['代碼']} {row['名稱']}")
-                                save_watchlist(st.session_state.watchlist, user_id)
-                            else:
-                                st.toast(f"ℹ️ {row['代碼']} 已在清單中")
-                        else:
-                            if row['代碼'] in st.session_state.watchlist:
-                                st.session_state.watchlist.remove(row['代碼'])
-                                st.toast(f"🗑️ 已從清單移除 {row['代碼']}")
-                                if "results" in st.session_state:
-                                    st.session_state.results = st.session_state.results[st.session_state.results['代碼'] != row['代碼']]
-                                    save_results_cache(st.session_state.results, is_big_scan=False, market=None, user_id=user_id)
-                            else:
-                                st.session_state.watchlist.append(row['代碼'])
-                                st.toast(f"➕ 已加入追蹤清單 {row['代碼']}")
-                                if "results" in st.session_state:
-                                    del st.session_state.results
-                            save_watchlist(st.session_state.watchlist, user_id)
-                            st.rerun()
-                
-                # 下排資訊：數據分組 (Grid)
+                # 中間：數據分組 (Grid)
                 st.markdown("---")
                 gc1, gc2, gc3 = st.columns(3)
                 price_val = f"{row['最新價格']:.1f}" if row['最新價格'] != 0 else "-"
@@ -2289,6 +2257,38 @@ if "results" in st.session_state:
                 gc4.markdown(f'<span style="color:#888; font-size:0.7rem;">MA20乖離</span><br>{row["MA20乖離"]}', unsafe_allow_html=True)
                 gc5.markdown(f'<span style="color:#888; font-size:0.7rem;">MA20價</span><br>{ma20_val}', unsafe_allow_html=True)
                 gc6.markdown(f'<span style="color:#888; font-size:0.7rem;">ATR停損</span><br>{atr_stop}', unsafe_allow_html=True)
+                
+                # 底部：操作建議 + 動作按鈕
+                st.markdown("---")
+                bc1, bc2 = st.columns([4, 1])
+                bc1.markdown(f"**`{row['操作建議']}`**")
+                
+                is_big_scan = st.session_state.get("is_big_scan", False)
+                current_watchlist = st.session_state.get("watchlist", [])
+                action_icon = "➕" if is_big_scan else ("🗑️" if row['代碼'] in current_watchlist else "➕")
+                
+                if bc2.button(action_icon, key=f"btn_{row['代碼']}_{index}", use_container_width=True):
+                    if is_big_scan:
+                        if row['代碼'] not in st.session_state.watchlist:
+                            st.session_state.watchlist.append(row['代碼'])
+                            st.toast(f"✅ 已加入追蹤清單 {row['代碼']} {row['名稱']}")
+                            save_watchlist(st.session_state.watchlist, user_id)
+                        else:
+                            st.toast(f"ℹ️ {row['代碼']} 已在清單中")
+                    else:
+                        if row['代碼'] in st.session_state.watchlist:
+                            st.session_state.watchlist.remove(row['代碼'])
+                            st.toast(f"🗑️ 已從清單移除 {row['代碼']}")
+                            if "results" in st.session_state:
+                                st.session_state.results = st.session_state.results[st.session_state.results['代碼'] != row['代碼']]
+                                save_results_cache(st.session_state.results, is_big_scan=False, market=None, user_id=user_id)
+                        else:
+                            st.session_state.watchlist.append(row['代碼'])
+                            st.toast(f"➕ 已加入追蹤清單 {row['代碼']}")
+                            if "results" in st.session_state:
+                                del st.session_state.results
+                        save_watchlist(st.session_state.watchlist, user_id)
+                        st.rerun()
             else:
                 # --- [DESKTOP VIEW] 10欄標準佈局 ---
                 cols = st.columns([1.5, 0.6, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 3.5, 0.5])
