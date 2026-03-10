@@ -2264,8 +2264,6 @@ if st.session_state.active_page == "settings":
         # 更新 session_state
         new_creds["_loaded"] = True
         st.session_state.user_creds = new_creds
-        # 清除 API 快取
-        init_api.clear()
         st.success("✅ 設定已儲存至瀏覽器！即將重新整理以套用新金鑰...")
         st.rerun()
     
