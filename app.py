@@ -121,6 +121,12 @@ def get_browser_state():
                     loaded = json.loads(str(creds_raw))
                     st.session_state.user_creds.update(loaded)
                     st.session_state.user_creds["_loaded"] = True
+                    
+                    # 關鍵修復：同步到 Widget Keys，這樣 UI 才會更新
+                    for field in ["sj_api_key", "sj_secret_key", "max_api_key", "max_api_secret", "person_id", "ca_passwd"]:
+                        key_name = f"inp_{field}"
+                        if loaded.get(field):
+                            st.session_state[key_name] = loaded.get(field)
                 except: pass
             
             st.session_state.browser_state_loaded = True
