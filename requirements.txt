@@ -74,4 +74,3 @@ xxhash==3.6.0
 yfinance==1.2.0
 zipp==3.23.0
 streamlit-javascript
-cryptography

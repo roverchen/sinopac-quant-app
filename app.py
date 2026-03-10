@@ -361,69 +361,41 @@ def init_max_api_v5(key, secret):
         return MaxExchangeAPI(key, secret)
     return None
 
-# --- 🔐 Per-User Encrypted Credential Management ---
-from cryptography.fernet import Fernet
-
-def _get_fernet_key():
-    """Get or generate a persistent Fernet encryption key for this server instance."""
-    key_file = os.path.join(CACHE_DIR, ".fernet_key")
-    if os.path.exists(key_file):
-        with open(key_file, "rb") as f:
-            return f.read()
-    key = Fernet.generate_key()
-    with open(key_file, "wb") as f:
-        f.write(key)
-    return key
-
-_FERNET = Fernet(_get_fernet_key())
-
-def _get_creds_path(user_id):
-    return os.path.join(CACHE_DIR, f"creds_{user_id}.enc")
-
-def load_user_credentials(user_id):
-    """Load per-user encrypted credentials. Returns dict with default empty strings."""
+# --- 🔐 Per-User Credentials (Browser LocalStorage) ---
+def _load_creds_from_localstorage():
+    """Read user credentials from browser LocalStorage via st_javascript."""
     defaults = {
         "sj_api_key": "", "sj_secret_key": "",
         "max_api_key": "", "max_api_secret": "",
         "person_id": "", "ca_passwd": ""
     }
-    path = _get_creds_path(user_id)
-    if os.path.exists(path):
-        try:
-            with open(path, "rb") as f:
-                decrypted = _FERNET.decrypt(f.read())
-            saved = json.loads(decrypted.decode("utf-8"))
+    # 如果 session_state 已有已解析的憑證，直接回傳
+    if "user_creds" in st.session_state and st.session_state.user_creds.get("_loaded"):
+        return st.session_state.user_creds
+    try:
+        raw = st_javascript("localStorage.getItem('sinopac_credentials');")
+        if raw and raw != 0 and str(raw) != "null":
+            saved = json.loads(str(raw))
             defaults.update(saved)
-        except Exception as e:
-            print(f"[Creds] Failed to load credentials for {user_id}: {e}")
+            defaults["_loaded"] = True
+            st.session_state.user_creds = defaults
+    except Exception as e:
+        print(f"[Creds] LocalStorage read error: {e}")
     return defaults
 
-def save_user_credentials(user_id, creds):
-    """Save per-user credentials with Fernet encryption."""
-    path = _get_creds_path(user_id)
-    try:
-        raw = json.dumps(creds, ensure_ascii=False).encode("utf-8")
-        encrypted = _FERNET.encrypt(raw)
-        with open(path, "wb") as f:
-            f.write(encrypted)
-        return True
-    except Exception as e:
-        print(f"[Creds] Failed to save credentials for {user_id}: {e}")
-        return False
+user_creds = _load_creds_from_localstorage()
 
 # --- 🔌 API 初始化 (Per-User Credentials + Fallback) ---
-# 載入使用者個人憑證 (加密儲存)
-user_creds = load_user_credentials(user_id)
-
-# 永豐金 API：個人 → Secrets → 空
+# 永豐金 API：LocalStorage → Secrets → 空
 sj_key = user_creds.get("sj_api_key") or st.secrets.get("API_KEY", "")
 sj_secret = user_creds.get("sj_secret_key") or st.secrets.get("SECRET_KEY", "")
 api = init_api(sj_key, sj_secret)
 
-# MAX API：個人 → Secrets → .env → 空
+# MAX API：LocalStorage → Secrets → .env → 空
 max_key = user_creds.get("max_api_key") or st.secrets.get("MAX_API_KEY") or os.getenv("MAX_API_KEY")
 max_secret = user_creds.get("max_api_secret") or st.secrets.get("MAX_API_SECRET") or os.getenv("MAX_API_SECRET")
 max_api = init_max_api_v5(max_key, max_secret)
+
 
 # 初始化 API 狀態文字
 v_tag = f" v{max_api.VERSION}" if max_api else ""
@@ -2250,11 +2222,17 @@ if st.session_state.active_page == "settings":
             "person_id": inp_person_id,
             "ca_passwd": inp_ca_passwd
         }
-        if save_user_credentials(user_id, new_creds):
-            st.success("✅ 設定已加密儲存！重新整理頁面以套用新金鑰。")
-            init_api.clear()
-        else:
-            st.error("❌ 儲存失敗，請稍後再試。")
+        # 寫入 LocalStorage
+        creds_json = json.dumps(new_creds, ensure_ascii=False)
+        # 使用正確的 JSON 跳脫方式避免引號問題
+        escaped = creds_json.replace("\\", "\\\\").replace("'", "\\'")
+        components.html(f"<script>localStorage.setItem('sinopac_credentials', '{escaped}');</script>", height=0, width=0)
+        # 更新 session_state
+        new_creds["_loaded"] = True
+        st.session_state.user_creds = new_creds
+        # 清除 API 快取
+        init_api.clear()
+        st.success("✅ 設定已儲存至瀏覽器！重新整理頁面以套用新金鑰。")
     
     if bc2.button("🏠 返回", use_container_width=True):
         st.session_state.active_page = "market"
