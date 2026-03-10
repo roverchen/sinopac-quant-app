@@ -2283,12 +2283,12 @@ if st.session_state.active_page == "settings":
     bc1, bc2 = st.columns(2)
     if bc1.button("💾 儲存設定", use_container_width=True, type="primary"):
         new_creds = {
-            "sj_api_key": inp_sj_key,
-            "sj_secret_key": inp_sj_secret,
-            "max_api_key": inp_max_key,
-            "max_api_secret": inp_max_secret,
-            "person_id": inp_person_id,
-            "ca_passwd": inp_ca_passwd
+            "sj_api_key": inp_sj_key.strip(),
+            "sj_secret_key": inp_sj_secret.strip(),
+            "max_api_key": inp_max_key.strip(),
+            "max_api_secret": inp_max_secret.strip(),
+            "person_id": inp_person_id.strip(),
+            "ca_passwd": inp_ca_passwd.strip()
         }
         
         # 處理憑證檔案 (轉為 Base64 存入)
