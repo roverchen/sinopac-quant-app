@@ -70,40 +70,71 @@ try:
 except ImportError:
     get_script_run_ctx = None
 
-def get_session_uid():
-    # 1. 優先使用已經確定的 Session State
-    if 'user_id' in st.session_state and st.session_state.user_id not in ["LOADING", None]:
-        return st.session_state.user_id
+def get_browser_state():
+    """集中管理從 LocalStorage 讀取所有狀態，減少 st_javascript 的呼叫次數與不穩定性。"""
+    # 1. 優先使用 Session State 中的快取
+    if st.session_state.get('browser_state_loaded'):
+        return st.session_state.user_id, st.session_state.user_creds
 
-    # 2. 獲取內部 Session ID 作為基礎備援 (不依賴 JS)
-    ctx = get_script_run_ctx()
-    internal_id = "u_" + (ctx.session_id[:8] if ctx else uuid.uuid4().hex[:6])
-    
-    # 3. 檢查網址參數 (最高優先級)
+    # 預設值
+    internal_id = "u_" + (get_script_run_ctx().session_id[:8] if get_script_run_ctx() else uuid.uuid4().hex[:6])
+    defaults = {
+        "user_id": internal_id,
+        "creds": {
+            "sj_api_key": "", "sj_secret_key": "",
+            "max_api_key": "", "max_api_secret": "",
+            "person_id": "", "ca_passwd": ""
+        }
+    }
+
+    # 檢查網址參數 (高優先)
     url_u = st.query_params.get('u')
     if url_u:
         st.session_state.user_id = str(url_u)
-        return str(url_u)
 
-    # 4. 嘗試從 LocalStorage 讀取 (使用 st_javascript)
     try:
-        # 使用 st_javascript 獲取資料
-        js_get = "localStorage.getItem('sinopac_user_id');"
-        stored_uid = st_javascript(js_get)
+        # 使用一個 JS 同步取得多個值
+        js_code = """
+        JSON.stringify({
+            user_id: localStorage.getItem('sinopac_user_id'),
+            creds: localStorage.getItem('sinopac_credentials')
+        })
+        """
+        raw_json = st_javascript(js_code)
         
-        # 如果 JS 已經有回應且有效
-        if stored_uid != 0 and stored_uid is not None and str(stored_uid) != "null":
-            final_uid = str(stored_uid)
-            st.session_state.user_id = final_uid
-            return final_uid
+        if raw_json and raw_json != 0 and str(raw_json) != "null":
+            data = json.loads(str(raw_json))
             
-        # 5. 如果 JS 還在跑 (0) 或沒資料，先寫入當前 internal_id 並回傳 (非同步)
-        st_javascript(f"localStorage.setItem('sinopac_user_id', '{internal_id}');")
-    except:
-        pass
+            # 處理 User ID
+            uid = data.get('user_id')
+            if uid and str(uid) != "null":
+                st.session_state.user_id = str(uid)
+            else:
+                # 若 LocalStorage 沒 user_id，寫入現有的
+                uid = st.session_state.get('user_id', internal_id)
+                st_javascript(f"localStorage.setItem('sinopac_user_id', '{uid}');")
+                st.session_state.user_id = uid
+            
+            # 處理 Credentials
+            creds_raw = data.get('creds')
+            if creds_raw and str(creds_raw) != "null":
+                try:
+                    loaded_creds = json.loads(str(creds_raw))
+                    defaults["creds"].update(loaded_creds)
+                    defaults["creds"]["_loaded"] = True
+                except:
+                    pass
+            
+            st.session_state.user_creds = defaults["creds"]
+            st.session_state.browser_state_loaded = True
+            return st.session_state.user_id, st.session_state.user_creds
+    except Exception as e:
+        print(f"[BrowserState] Load error: {e}")
 
-    # 6. 回傳備援 ID
-    return internal_id
+    # 載入失敗或還在載入中的 fallback
+    if 'user_id' not in st.session_state: st.session_state.user_id = internal_id
+    if 'user_creds' not in st.session_state: st.session_state.user_creds = defaults["creds"]
+    return st.session_state.user_id, st.session_state.user_creds
 
 def is_mobile_device():
     """透過 User-Agent 與 Query Parameter 判斷是否為行動裝置 (優化版)"""
@@ -160,7 +191,7 @@ if not os.path.exists(CACHE_DIR):
 
 # --- 頁面設定 ---
 st.set_page_config(page_title="金融商品市場報明牌系統", layout="wide")
-user_id = get_session_uid()
+user_id, user_creds = get_browser_state()
 render_sidebar_closer() # 執行掛起的側邊欄收合請求
 
 # --- 手機版、表格優化與穩定連線 CSS ---
@@ -325,27 +356,27 @@ def init_max_api_v4():
             return MaxExchangeAPI(key, secret)
     return None
 
-@st.cache_resource
 def init_api(api_key, secret_key):
-    """
-    初始化永豐金 API。將金鑰作為參數傳入，當 Secrets 更新時，
-    Streamlit 會因參數改變而自動重新執行此函式 (快取失效)。
-    """
+    """手動管理 API 實例於 session_state 中，避免 cache_resource 在 Cloud 上的不穩定性。"""
     if not api_key or not secret_key:
         return None
         
+    # 檢查是否有已存在的且金鑰相同的實例
+    if "api_instance" in st.session_state:
+        if st.session_state.get("last_sj_key") == api_key and st.session_state.get("last_sj_secret") == secret_key:
+            return st.session_state.api_instance
+
     api = sj.Shioaji()
     try:
         api.login(api_key=api_key, secret_key=secret_key)
-        # 登入後立即抓取合約
-        try:
-            api.fetch_contracts(contracts_timeout=60000)
-        except Exception as ce:
-            print(f"Initial contract fetch warning: {ce}")
+        api.fetch_contracts(contracts_timeout=60000)
+        # 儲存到 session_state
+        st.session_state.api_instance = api
+        st.session_state.last_sj_key = api_key
+        st.session_state.last_sj_secret = secret_key
     except Exception as e:
         error_msg = str(e)
         if "451" in error_msg or "Too Many Connections" in error_msg:
-            # 在連線衝突時，建立一個空的 mock api 對象
             class MockApi:
                 def list_accounts(self): return []
                 def fetch_contracts(self, **kwargs): pass
@@ -361,33 +392,7 @@ def init_max_api_v5(key, secret):
         return MaxExchangeAPI(key, secret)
     return None
 
-# --- 🔐 Per-User Credentials (Browser LocalStorage) ---
-def _load_creds_from_localstorage():
-    """Read user credentials from browser LocalStorage via st_javascript."""
-    defaults = {
-        "sj_api_key": "", "sj_secret_key": "",
-        "max_api_key": "", "max_api_secret": "",
-        "person_id": "", "ca_passwd": ""
-    }
-    # 防止 st_javascript 觸發過多不必要的 rerun，如果已經載入成功就不再讀取 JS
-    if "credentials_loaded" in st.session_state and st.session_state.credentials_loaded:
-        return st.session_state.user_creds
-
-    try:
-        raw = st_javascript("localStorage.getItem('sinopac_credentials');")
-        if raw and raw != 0 and str(raw) != "null":
-            saved = json.loads(str(raw))
-            defaults.update(saved)
-            defaults["_loaded"] = True
-            st.session_state.user_creds = defaults
-            st.session_state.credentials_loaded = True # 標記已載入
-    except Exception as e:
-        print(f"[Creds] LocalStorage read error: {e}")
-    return defaults
-
-user_creds = _load_creds_from_localstorage()
-
-# --- 🔌 API 初始化 (Per-User Credentials + Fallback) ---
+# --- 🔌 API 初始化 (Per-User Credentials from browser state) ---
 # 永豐金 API：僅 LocalStorage
 sj_key = user_creds.get("sj_api_key", "")
 sj_secret = user_creds.get("sj_secret_key", "")
@@ -1480,7 +1485,7 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
                 file_time = get_file_time(cache_file)
                 if file_time.date() == get_now().date():
                     df = pd.read_csv(cache_file)
-                    df['ts'] = pd.to_datetime(df['ts'], utc=True) # 讀取 CSV 後轉換時間格式
+                    df['ts'] = pd.to_datetime(df['ts'], utc=True, errors='coerce') # 讀取 CSV 後轉換時間格式
                     source = "💾 本地"
                     # --- [NEW] 安全檢查：若快取缺少必要的指標欄位，強制重算 ---
                     if 'signal' not in df.columns or 'macd' not in df.columns:
@@ -1504,7 +1509,7 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
                                 df.columns = [c.lower() for c in df.columns]
                                 if 'date' in df.columns:
                                     df = df.rename(columns={'date': 'ts'})
-                                df['ts'] = pd.to_datetime(df['ts'], utc=True)
+                                df['ts'] = pd.to_datetime(df['ts'], utc=True, errors='coerce')
                                 # 統一欄位
                                 df = df[['ts', 'open', 'high', 'low', 'close', 'volume']]
                                 source = f"🌐 Yahoo({suffix})"
@@ -1536,7 +1541,7 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
                                 df = df_yf.reset_index()
                                 df.columns = [c.lower() for c in df.columns]
                                 if 'date' in df.columns: df = df.rename(columns={'date': 'ts'})
-                                df['ts'] = pd.to_datetime(df['ts'], utc=True)
+                                df['ts'] = pd.to_datetime(df['ts'], utc=True, errors='coerce')
                                 df = df[['ts', 'open', 'high', 'low', 'close', 'volume']]
                                 source = "🌐 Yahoo"
                             else:
@@ -2033,7 +2038,7 @@ def show_order_dialog(row, user_id, api, max_api, ca_active):
     cache_file = os.path.join(CACHE_DIR, f"{row['代碼']}_y.csv")
     if os.path.exists(cache_file):
         df_selected = pd.read_csv(cache_file)
-        df_selected['ts'] = pd.to_datetime(df_selected['ts'], utc=True)
+        df_selected['ts'] = pd.to_datetime(df_selected['ts'], utc=True, errors='coerce')
         
         # --- 補齊圖表所需的技術指標 ---
         df_selected['ma20'] = df_selected['close'].rolling(window=20).mean()
