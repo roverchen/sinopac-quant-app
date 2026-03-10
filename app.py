@@ -1421,6 +1421,8 @@ watchlist = st.session_state.watchlist
 # --- 核心邏輯 ---
 def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
     data_list = []
+    is_rate_limited = False # [修正] 初始化變數，避免小樣本名單時報錯
+
     
     # 每次新掃描前，重置自動重連標記，以便未來再次觸發時能重連
     if 'auto_reconnected' in st.session_state:
@@ -1487,7 +1489,6 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
                 ticker_to_code[t] = c
         
         # 2. 執行批次下載 (分段執行以提高成功率)
-        is_rate_limited = False
         try:
             all_dfs = {}
             chunk_size = 40 # 縮小 chunk 以防被 Yahoo 偵測為大量爬蟲
