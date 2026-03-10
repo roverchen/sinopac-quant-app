@@ -1336,76 +1336,18 @@ with st.sidebar.form("add_stock_form", clear_on_submit=True):
                     del st.session_state.last_suggestions
                     st.rerun()
 
-# 4. 🔒 交易憑證設定 (Per-User, Encrypted)
+# 4. 🔒 交易憑證設定 (sidebar button → main area page)
 st.sidebar.divider()
-with st.sidebar.expander("🔒 交易憑證設定", expanded=False):
-    st.caption("每位使用者可獨立設定自己的 API 金鑰，資料以加密方式儲存於伺服器。未設定者僅能使用 Yahoo Finance 數據。")
-    
-    # --- 永豐金 Sinopac API ---
-    st.markdown("**🏦 永豐金 Shioaji API**")
-    inp_sj_key = st.text_input("API Key", value=user_creds.get("sj_api_key", ""), type="password", key="inp_sj_key",
-                                help="前往 [Shioaji](https://www.sinotrade.com.tw/openapi) 申請")
-    inp_sj_secret = st.text_input("Secret Key", value=user_creds.get("sj_secret_key", ""), type="password", key="inp_sj_secret")
-    inp_person_id = st.text_input("身分證字號", value=user_creds.get("person_id", ""), key="inp_person_id",
-                                   help="啟動憑證所需 (實盤下單)")
-    inp_ca_passwd = st.text_input("憑證密碼", value=user_creds.get("ca_passwd", ""), type="password", key="inp_ca_passwd",
-                                   help="Sinopac.pfx 的保護密碼")
-    uploaded_pfx = st.file_uploader("上傳憑證 (.pfx)", type=["pfx"], key="inp_pfx", help="實盤下單所需的電子憑證")
-    
-    st.markdown("---")
-    
-    # --- MAX Exchange API ---
-    st.markdown("**🪙 MAX 交易所 API**")
-    inp_max_key = st.text_input("API Key", value=user_creds.get("max_api_key", ""), type="password", key="inp_max_key",
-                                 help="前往 [MAX](https://max.maicoin.com/) 申請 API 金鑰")
-    inp_max_secret = st.text_input("API Secret", value=user_creds.get("max_api_secret", ""), type="password", key="inp_max_secret")
-    
-    st.markdown("---")
-    
-    # --- 儲存按鈕 ---
-    if st.button("💾 儲存設定", use_container_width=True, type="primary"):
-        new_creds = {
-            "sj_api_key": inp_sj_key,
-            "sj_secret_key": inp_sj_secret,
-            "max_api_key": inp_max_key,
-            "max_api_secret": inp_max_secret,
-            "person_id": inp_person_id,
-            "ca_passwd": inp_ca_passwd
-        }
-        if save_user_credentials(user_id, new_creds):
-            st.success("✅ 設定已加密儲存！重新整理頁面以套用新金鑰。")
-            # 清除快取強制重新初始化 API
-            init_api.clear()
-        else:
-            st.error("❌ 儲存失敗，請稍後再試。")
-    
-    # --- 連線狀態 ---
-    st.markdown("**📡 連線狀態**")
-    if api and not is_mock:
-        st.success("🏦 永豐金：✅ 已連線")
-    elif sj_key:
-        st.warning("🏦 永豐金：⚠️ 金鑰已設定但連線失敗")
-    else:
-        st.info("🏦 永豐金：⚪ 待設定 (目前使用 Yahoo Finance)")
-    
-    if max_api:
-        st.success(f"🪙 MAX：✅ 已連線{v_tag}")
-    elif max_key:
-        st.warning("🪙 MAX：⚠️ 金鑰已設定但連線失敗")
-    else:
-        st.info("🪙 MAX：⚪ 待設定")
+# 連線狀態摘要
+sj_status = "✅" if (api and not is_mock) else ("⚠️" if sj_key else "⚪")
+max_status = "✅" if max_api else ("⚠️" if max_key else "⚪")
+if st.sidebar.button(f"🔒 交易憑證設定 ({sj_status}/{max_status})", use_container_width=True):
+    st.session_state.active_page = "settings"
+    st.rerun()
 
 # --- 憑證啟動邏輯 ---
 ca_path = os.path.join(os.path.dirname(__file__), "Sinopac.pfx")
 ca_exists = os.path.exists(ca_path)
-
-# 上傳憑證處理
-if uploaded_pfx is not None:
-    import tempfile
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".pfx") as tmp_file:
-        tmp_file.write(uploaded_pfx.getbuffer())
-        ca_path = tmp_file.name
-        ca_exists = True
 
 person_id = user_creds.get("person_id") or st.secrets.get("PERSON_ID", "")
 ca_passwd = user_creds.get("ca_passwd") or st.secrets.get("CA_PASSWD", "")
@@ -2243,6 +2185,81 @@ if (big_scan_tw_btn or big_scan_us_btn or big_scan_crypto_btn or scan_btn or sho
 # --- 頁面路由切換 ---
 if st.session_state.active_page == "simulation":
     display_simulation_dashboard(user_id)
+    st.stop()
+
+if st.session_state.active_page == "settings":
+    st.markdown("## 🔒 交易憑證設定")
+    st.caption("每位使用者可獨立設定自己的 API 金鑰，資料以加密方式儲存於伺服器。未設定者僅能使用 Yahoo Finance 數據。")
+    
+    # --- 連線狀態 ---
+    sc1, sc2 = st.columns(2)
+    if api and not is_mock:
+        sc1.success("🏦 永豐金：✅ 已連線")
+    elif sj_key:
+        sc1.warning("🏦 永豐金：⚠️ 金鑰已設定但連線失敗")
+    else:
+        sc1.info("🏦 永豐金：⚪ 待設定")
+    
+    if max_api:
+        sc2.success(f"🪙 MAX：✅ 已連線{v_tag}")
+    elif max_key:
+        sc2.warning("🪙 MAX：⚠️ 金鑰已設定但連線失敗")
+    else:
+        sc2.info("🪙 MAX：⚪ 待設定")
+    
+    st.divider()
+    
+    # --- 永豐金 Sinopac API ---
+    st.markdown("### 🏦 永豐金 Shioaji API")
+    st.caption("前往 [Shioaji 官網](https://www.sinotrade.com.tw/openapi) 申請 API 金鑰")
+    s_c1, s_c2 = st.columns(2)
+    inp_sj_key = s_c1.text_input("API Key", value=user_creds.get("sj_api_key", ""), type="password", key="inp_sj_key")
+    inp_sj_secret = s_c2.text_input("Secret Key", value=user_creds.get("sj_secret_key", ""), type="password", key="inp_sj_secret")
+    
+    s_c3, s_c4 = st.columns(2)
+    inp_person_id = s_c3.text_input("身分證字號", value=user_creds.get("person_id", ""), key="inp_person_id",
+                                     help="啟動憑證所需 (實盤下單)")
+    inp_ca_passwd = s_c4.text_input("憑證密碼", value=user_creds.get("ca_passwd", ""), type="password", key="inp_ca_passwd",
+                                     help="Sinopac.pfx 的保護密碼")
+    uploaded_pfx = st.file_uploader("上傳憑證 (.pfx)", type=["pfx"], key="inp_pfx", help="實盤下單所需的電子憑證")
+    if uploaded_pfx is not None:
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pfx") as tmp_file:
+            tmp_file.write(uploaded_pfx.getbuffer())
+        st.success("✅ 已上傳憑證檔案")
+    
+    st.divider()
+    
+    # --- MAX Exchange API ---
+    st.markdown("### 🪙 MAX 交易所 API")
+    st.caption("前往 [MAX 交易所](https://max.maicoin.com/) 申請 API 金鑰")
+    m_c1, m_c2 = st.columns(2)
+    inp_max_key = m_c1.text_input("API Key", value=user_creds.get("max_api_key", ""), type="password", key="inp_max_key")
+    inp_max_secret = m_c2.text_input("API Secret", value=user_creds.get("max_api_secret", ""), type="password", key="inp_max_secret")
+    
+    st.divider()
+    
+    # --- 儲存按鈕 ---
+    bc1, bc2 = st.columns(2)
+    if bc1.button("💾 儲存設定", use_container_width=True, type="primary"):
+        new_creds = {
+            "sj_api_key": inp_sj_key,
+            "sj_secret_key": inp_sj_secret,
+            "max_api_key": inp_max_key,
+            "max_api_secret": inp_max_secret,
+            "person_id": inp_person_id,
+            "ca_passwd": inp_ca_passwd
+        }
+        if save_user_credentials(user_id, new_creds):
+            st.success("✅ 設定已加密儲存！重新整理頁面以套用新金鑰。")
+            init_api.clear()
+        else:
+            st.error("❌ 儲存失敗，請稍後再試。")
+    
+    if bc2.button("🏠 返回", use_container_width=True):
+        st.session_state.active_page = "market"
+        st.rerun()
+    
     st.stop()
 
 # 顯示最後更新時間與結果
