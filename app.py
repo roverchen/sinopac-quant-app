@@ -114,31 +114,35 @@ def get_browser_state():
         """
         raw_json = st_javascript(js_code)
         
-        # 若 JS 有回傳有效值
-        if raw_json and raw_json != 0 and str(raw_json) != "null":
-            data = json.loads(str(raw_json))
-            
-            # 如果 URL 沒抓到但 LocalStorage 有抓到 UID，以 LocalStorage 為準並更新 URL
-            stored_uid = data.get('user_id')
-            if not url_uid and stored_uid and str(stored_uid) != "null":
-                st.session_state.user_id = str(stored_uid)
-                st.query_params["uid"] = str(stored_uid)
-            
-            creds_raw = data.get('creds')
-            if creds_raw and str(creds_raw) != "null":
-                try:
-                    loaded = json.loads(str(creds_raw))
-                    st.session_state.user_creds.update(loaded)
-                    st.session_state.user_creds["_loaded"] = True
-                    
-                    # 同步到 Widget Keys
-                    for field in ["sj_api_key", "sj_secret_key", "max_api_key", "max_api_secret", "person_id", "ca_passwd"]:
-                        key_name = f"inp_{field}"
-                        if loaded.get(field):
-                            # 只有當 session_state 裡還沒值或為空時才覆蓋，避免干擾使用者輸入
-                            if not st.session_state.get(key_name):
-                                st.session_state[key_name] = loaded.get(field)
-                except: pass
+        # 關鍵修正：只要 JS 回傳了非零、非 None 的值 (包含 "null")，就表示執行完成
+        if raw_json and raw_json != 0:
+            if str(raw_json) == "null":
+                # JS 拋出異常 (通常是禁止第三方 Cookie)
+                st.session_state.browser_storage_blocked = True
+            else:
+                data = json.loads(str(raw_json))
+                st.session_state.browser_storage_blocked = False
+                
+                # 如果 URL 沒抓到但 LocalStorage 有抓到 UID，以 LocalStorage 為準並更新 URL
+                stored_uid = data.get('user_id')
+                if not url_uid and stored_uid and str(stored_uid) != "null":
+                    st.session_state.user_id = str(stored_uid)
+                    st.query_params["uid"] = str(stored_uid)
+                
+                creds_raw = data.get('creds')
+                if creds_raw and str(creds_raw) != "null":
+                    try:
+                        loaded = json.loads(str(creds_raw))
+                        st.session_state.user_creds.update(loaded)
+                        st.session_state.user_creds["_loaded"] = True
+                        
+                        # 同步到 Widget Keys
+                        for field in ["sj_api_key", "sj_secret_key", "max_api_key", "max_api_secret", "person_id", "ca_passwd"]:
+                            key_name = f"inp_{field}"
+                            if loaded.get(field):
+                                if not st.session_state.get(key_name):
+                                    st.session_state[key_name] = loaded.get(field)
+                    except: pass
             
             st.session_state.browser_state_loaded = True
 
@@ -2318,10 +2322,19 @@ if st.session_state.active_page == "settings":
     with st.expander("🛠️ 除錯與診斷資訊 (讀不到設定時請展開)"):
         st.write(f"**目前識別碼 (UID):** `{user_id}`")
         st.write(f"**URL UID:** `{st.query_params.get('uid', '無')}`")
-        st.write(f"**同步狀態:** {'✅ 已完成' if st.session_state.get('browser_state_loaded') else '⌛ 同步中'}")
+        
+        sync_status = "✅ 已完成" if st.session_state.get('browser_state_loaded') else "⌛ 同步中"
+        if st.session_state.get('browser_storage_blocked'):
+            sync_status = "🛑 已停止 (瀏覽器封鎖儲存)"
+            
+        st.write(f"**同步狀態:** {sync_status}")
+        
+        if st.session_state.get('browser_storage_blocked'):
+            st.error("🚫 偵測到瀏覽器封鎖了本地儲存空間 (LocalStorage)。這通常發生在『禁止第三方 Cookie』或『無痕模式』開啟時。")
         
         if st.button("🔄 強制從瀏覽器重新讀取"):
             st.session_state.browser_state_loaded = False
+            st.session_state.browser_storage_blocked = False
             st.rerun()
             
         st.info("💡 提示：若設定無法存檔，請確認瀏覽器是否開啟了『無痕模式』或『禁止第三方 Cookie』，這可能會阻礙 LocalStorage 運作。")
