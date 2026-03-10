@@ -385,8 +385,15 @@ def init_max_api_v4():
             return MaxExchangeAPI(key, secret)
     return None
 
+class MockApi:
+    """模擬用的 API 類別，當連線數過多或連線失敗時使用。"""
+    def list_accounts(self): return []
+    def fetch_contracts(self, **kwargs): pass
+    def login(self, **kwargs): pass
+    def activate_ca(self, **kwargs): pass
+
 def init_api(api_key, secret_key):
-    """手動管理 API 實例於 session_state 中，避免 cache_resource 在 Cloud 上的不穩定性。"""
+    """手動管理 API 實例於 session_state 中，避免及早載入合約導致 Segfault。"""
     if not api_key or not secret_key:
         return None
         
@@ -394,26 +401,26 @@ def init_api(api_key, secret_key):
     if "api_instance" in st.session_state:
         if st.session_state.get("last_sj_key") == api_key and st.session_state.get("last_sj_secret") == secret_key:
             return st.session_state.api_instance
+        else:
+            # 金鑰更換，嘗試登出舊實例 (防止 native 層多重實例衝突)
+            try:
+                st.session_state.api_instance.logout()
+            except: pass
 
     api = sj.Shioaji()
     try:
         api.login(api_key=api_key, secret_key=secret_key)
-        api.fetch_contracts(contracts_timeout=60000)
-        # 儲存到 session_state
+        # [REMOVED] 不在此處 fetch_contracts，延後到需要時再抓取，減少啟動不穩定性
         st.session_state.api_instance = api
         st.session_state.last_sj_key = api_key
         st.session_state.last_sj_secret = secret_key
-        st.session_state.sj_error = None  # 清除舊錯誤
+        st.session_state.sj_error = None
     except Exception as e:
         error_msg = str(e)
         st.session_state.sj_error = error_msg
         if "451" in error_msg or "Too Many Connections" in error_msg:
-            class MockApi:
-                def list_accounts(self): return []
-                def fetch_contracts(self, **kwargs): pass
             return MockApi()
         else:
-            print(f"API Login Failed: {e}")
             return None
     return api
 
