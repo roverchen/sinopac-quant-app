@@ -2240,7 +2240,6 @@ if "results" in st.session_state:
                     show_order_dialog(row, user_id, api, max_api, ca_active)
                 
                 # 中間：數據分組 (Grid)
-                st.markdown("---")
                 gc1, gc2, gc3 = st.columns(3)
                 price_val = f"{row['最新價格']:.1f}" if row['最新價格'] != 0 else "-"
                 gc1.markdown(f'<span style="color:#888; font-size:0.7rem;">最新價</span><br><b>{price_val}</b>', unsafe_allow_html=True)
@@ -2259,7 +2258,6 @@ if "results" in st.session_state:
                 gc6.markdown(f'<span style="color:#888; font-size:0.7rem;">ATR停損</span><br>{atr_stop}', unsafe_allow_html=True)
                 
                 # 底部：操作建議 + 動作按鈕
-                st.markdown("---")
                 bc1, bc2 = st.columns([4, 1])
                 bc1.markdown(f"**`{row['操作建議']}`**")
                 
