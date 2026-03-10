@@ -94,8 +94,12 @@ def load_user_creds(uid):
             return {}
     return {}
 
+def hash_password(password):
+    """將密碼轉換為 SHA-256 hash 值。"""
+    return hashlib.sha256(password.encode()).hexdigest()
+
 def get_browser_state():
-    """多人模式：從暱稱取得 UID，從伺服器端檔案讀取憑證。"""
+    """多人模式：透過暱稱與密碼登入，從伺服器端檔案讀取憑證。"""
     # 已經載入成功則直接回傳快取
     if st.session_state.get('browser_state_loaded'):
         return st.session_state.user_id, st.session_state.user_creds
@@ -103,21 +107,39 @@ def get_browser_state():
     # 如果還沒登入，顯示登入畫面
     if 'user_id' not in st.session_state or not st.session_state.user_id:
         st.markdown("## 👋 歡迎使用報明牌系統")
-        st.caption("請輸入您的暱稱以載入您的個人設定。每位使用者的 API 金鑰各自獨立保存。")
-        nickname = st.text_input("您的暱稱（例如：rover、alex）", key="_login_nickname", 
-                                  help="此暱稱做為您的個人識別碼，下次登入請用同一個名稱。")
+        st.caption("請輸入您的暱稱與密碼。首次登入的使用者將自動以此密碼註冊環境。")
+        nickname = st.text_input("您的暱稱（識別碼）", key="_login_nickname").strip().lower()
+        password = st.text_input("登入密碼", type="password", key="_login_pwd")
+        
         if st.button("🚀 進入系統", type="primary", use_container_width=True):
-            if nickname and nickname.strip():
-                st.session_state.user_id = nickname.strip().lower()
-            else:
-                st.warning("請輸入暱稱才能進入！")
+            if not nickname or not password:
+                st.warning("請填寫暱稱與密碼！")
                 st.stop()
+            
+            # 檢查密碼
+            saved_creds = load_user_creds(nickname)
+            provided_hash = hash_password(password)
+            
+            if saved_creds and "pwd_hash" in saved_creds:
+                if saved_creds["pwd_hash"] != provided_hash:
+                    st.error("❌ 密碼錯誤，請重新輸入！")
+                    st.stop()
+                # 密碼正確，登入成功
+            else:
+                # 新使用者註冊
+                if not saved_creds: saved_creds = {}
+                saved_creds["pwd_hash"] = provided_hash
+                save_user_creds(nickname, saved_creds)
+                st.success("✨ 偵測到新使用者，已為您建立個人環境！")
+            
+            st.session_state.user_id = nickname
+            st.rerun()
         else:
             st.stop()
 
     uid = st.session_state.user_id
 
-    # 初始化憑證
+    # 初始化憑證 (若檔案不存在或為空)
     if 'user_creds' not in st.session_state:
         st.session_state.user_creds = {
             "sj_api_key": "", "sj_secret_key": "",
@@ -1207,6 +1229,17 @@ if 'scan_market' not in st.session_state:
 if 'active_page' not in st.session_state:
     st.session_state.active_page = "market"
 
+
+# --- 側邊欄：使用者資訊與登出 ---
+with st.sidebar.container():
+    c1, c2 = st.columns([2, 1])
+    c1.markdown(f"👤 **{st.session_state.user_id.upper()}**")
+    if c2.button("登出", key="logout_btn", use_container_width=True):
+        st.session_state.user_id = None
+        st.session_state.browser_state_loaded = False
+        st.rerun()
+
+st.sidebar.divider()
 
 # --- 側邊欄：功能入口置頂 ---
 # 1. 目前追蹤清單
