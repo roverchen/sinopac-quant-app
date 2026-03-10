@@ -55,6 +55,17 @@ import requests
 import yfinance as yf
 import math
 import pickle
+import requests
+
+# --- 🚀 Yahoo Finance 強化功能 (針對雲端環境優化) ---
+# 建立帶有現代瀏覽器特徵的持久 Session，降低被 Yahoo 判定為爬蟲的機率
+YF_SESSION = requests.Session()
+YF_SESSION.headers.update({
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+    "Accept-Language": "en-US,en;q=0.9,zh-TW;q=0.8,zh;q=0.7",
+    "Cache-Control": "no-cache"
+})
 
 # 導入外掛 API
 try:
@@ -1501,9 +1512,18 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
                 if is_rate_limited: break
                 chunk = tickers[k:k+chunk_size]
                 status_placeholder.info(f"📥 正在批次下載市場數據 ({min(k + chunk_size, len(tickers))}/{len(tickers)})...")
-                # 強制使用 auto_adjust=True 以獲取穩定的技術指標得分
+                # 強制使用 auto_adjust=True 以獲獲取穩定的技術指標得分，並帶入專屬 Session 與增強逾時設定
                 try:
-                    batch_data = yf.download(chunk, start=start_date, group_by='ticker', threads=False, progress=False, timeout=12, auto_adjust=True)
+                    batch_data = yf.download(
+                        chunk, 
+                        start=start_date, 
+                        group_by='ticker', 
+                        threads=False, 
+                        progress=False, 
+                        timeout=15, 
+                        auto_adjust=True,
+                        session=YF_SESSION
+                    )
                     
                     # 檢查是否觸發頻率限制
                     if isinstance(batch_data, str) and "Too Many Requests" in batch_data:
@@ -1575,7 +1595,7 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
                 if code and code[0].isdigit():
                     for suffix in ['.TW', '.TWO']:
                         try:
-                            t = yf.Ticker(code + suffix)
+                            t = yf.Ticker(code + suffix, session=YF_SESSION)
                             # [相容性修正] 此環境 yfinance 1.2.0 不支援 history(threads=...) 參數
                             df_yf = t.history(start=start_date, interval="1d", auto_adjust=True)
                             if not df_yf.empty:
@@ -1605,7 +1625,7 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
                     # 2. 美股/加密貨幣處理
                     try:
                         query_code = code.replace('.', '-')
-                        ticker = yf.Ticker(query_code)
+                        ticker = yf.Ticker(query_code, session=YF_SESSION)
                         # [相容性修正] 此環境 yfinance 1.2.0 不支援 history(threads=...) 參數
                         df_yf = ticker.history(start=start_date, interval="1d", auto_adjust=True)
                         
