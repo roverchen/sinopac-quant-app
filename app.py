@@ -2134,9 +2134,9 @@ def show_order_dialog(row, user_id, api, max_api, ca_active):
 current_watchlist_key = ",".join(watchlist)
 should_sync = False
 
-# --- 每日定時自動任務 (Taipei 09:05) ---
+# --- 每日定時自動任務 (Taipei 06:05) ---
 now_tp = get_now()
-if now_tp.hour >= 9 and now_tp.minute >= 5:
+if now_tp.hour >= 6 and now_tp.minute >= 5:
     today_str = now_tp.strftime("%Y-%m-%d")
     # 檢查今日系統紀錄是否已存在
     sys_logs = load_trading_log("system")
@@ -2231,7 +2231,8 @@ if (big_scan_tw_btn or big_scan_us_btn or big_scan_crypto_btn or scan_btn or sho
             st.toast("✅ 數據同步完成！", icon="📉")
             
             # --- 🧪 模擬交易：自動跟單 (第一類：系統每日海選) ---
-            if st.session_state.is_big_scan:
+            # [優化] 只在系統定時觸發 (06:05) 時執行自動買入，手動大選股不跟進
+            if is_trigger_daily:
                 top_stock = results.iloc[0]
                 m_type = st.session_state.scan_market or "TW"
                 # 使用強化後的買入理由
