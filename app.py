@@ -361,6 +361,56 @@ def init_max_api_v5(key, secret):
         return MaxExchangeAPI(key, secret)
     return None
 
+# --- 🔐 Per-User Encrypted Credential Management ---
+from cryptography.fernet import Fernet
+
+def _get_fernet_key():
+    """Get or generate a persistent Fernet encryption key for this server instance."""
+    key_file = os.path.join(CACHE_DIR, ".fernet_key")
+    if os.path.exists(key_file):
+        with open(key_file, "rb") as f:
+            return f.read()
+    key = Fernet.generate_key()
+    with open(key_file, "wb") as f:
+        f.write(key)
+    return key
+
+_FERNET = Fernet(_get_fernet_key())
+
+def _get_creds_path(user_id):
+    return os.path.join(CACHE_DIR, f"creds_{user_id}.enc")
+
+def load_user_credentials(user_id):
+    """Load per-user encrypted credentials. Returns dict with default empty strings."""
+    defaults = {
+        "sj_api_key": "", "sj_secret_key": "",
+        "max_api_key": "", "max_api_secret": "",
+        "person_id": "", "ca_passwd": ""
+    }
+    path = _get_creds_path(user_id)
+    if os.path.exists(path):
+        try:
+            with open(path, "rb") as f:
+                decrypted = _FERNET.decrypt(f.read())
+            saved = json.loads(decrypted.decode("utf-8"))
+            defaults.update(saved)
+        except Exception as e:
+            print(f"[Creds] Failed to load credentials for {user_id}: {e}")
+    return defaults
+
+def save_user_credentials(user_id, creds):
+    """Save per-user credentials with Fernet encryption."""
+    path = _get_creds_path(user_id)
+    try:
+        raw = json.dumps(creds, ensure_ascii=False).encode("utf-8")
+        encrypted = _FERNET.encrypt(raw)
+        with open(path, "wb") as f:
+            f.write(encrypted)
+        return True
+    except Exception as e:
+        print(f"[Creds] Failed to save credentials for {user_id}: {e}")
+        return False
+
 # --- 🔌 API 初始化 (Per-User Credentials + Fallback) ---
 # 載入使用者個人憑證 (加密儲存)
 user_creds = load_user_credentials(user_id)
@@ -720,55 +770,6 @@ def get_stock_name_map(_api):
     return code_to_name
 
 
-# --- 🔐 Per-User Encrypted Credential Management ---
-from cryptography.fernet import Fernet
-
-def _get_fernet_key():
-    """Get or generate a persistent Fernet encryption key for this server instance."""
-    key_file = os.path.join(CACHE_DIR, ".fernet_key")
-    if os.path.exists(key_file):
-        with open(key_file, "rb") as f:
-            return f.read()
-    key = Fernet.generate_key()
-    with open(key_file, "wb") as f:
-        f.write(key)
-    return key
-
-_FERNET = Fernet(_get_fernet_key())
-
-def _get_creds_path(user_id):
-    return os.path.join(CACHE_DIR, f"creds_{user_id}.enc")
-
-def load_user_credentials(user_id):
-    """Load per-user encrypted credentials. Returns dict with default empty strings."""
-    defaults = {
-        "sj_api_key": "", "sj_secret_key": "",
-        "max_api_key": "", "max_api_secret": "",
-        "person_id": "", "ca_passwd": ""
-    }
-    path = _get_creds_path(user_id)
-    if os.path.exists(path):
-        try:
-            with open(path, "rb") as f:
-                decrypted = _FERNET.decrypt(f.read())
-            saved = json.loads(decrypted.decode("utf-8"))
-            defaults.update(saved)
-        except Exception as e:
-            print(f"[Creds] Failed to load credentials for {user_id}: {e}")
-    return defaults
-
-def save_user_credentials(user_id, creds):
-    """Save per-user credentials with Fernet encryption."""
-    path = _get_creds_path(user_id)
-    try:
-        raw = json.dumps(creds, ensure_ascii=False).encode("utf-8")
-        encrypted = _FERNET.encrypt(raw)
-        with open(path, "wb") as f:
-            f.write(encrypted)
-        return True
-    except Exception as e:
-        print(f"[Creds] Failed to save credentials for {user_id}: {e}")
-        return False
 
 # --- 輔助函式 ---
 WATCHLIST_FILE = "watchlist.json"
