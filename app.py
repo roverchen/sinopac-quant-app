@@ -403,8 +403,10 @@ def init_api(api_key, secret_key):
         st.session_state.api_instance = api
         st.session_state.last_sj_key = api_key
         st.session_state.last_sj_secret = secret_key
+        st.session_state.sj_error = None  # 清除舊錯誤
     except Exception as e:
         error_msg = str(e)
+        st.session_state.sj_error = error_msg
         if "451" in error_msg or "Too Many Connections" in error_msg:
             class MockApi:
                 def list_accounts(self): return []
@@ -2233,7 +2235,8 @@ if st.session_state.active_page == "settings":
     if api and not is_mock:
         sc1.success("🏦 永豐金：✅ 已連線")
     elif sj_key:
-        sc1.warning("🏦 永豐金：⚠️ 金鑰已設定但連線失敗")
+        err = st.session_state.get("sj_error", "原因未知")
+        sc1.warning(f"🏦 永豐金：⚠️ 連線失敗 ({err})")
     else:
         sc1.info("🏦 永豐金：⚪ 待設定")
     
