@@ -386,9 +386,9 @@ def _load_creds_from_localstorage():
 user_creds = _load_creds_from_localstorage()
 
 # --- 🔌 API 初始化 (Per-User Credentials + Fallback) ---
-# 永豐金 API：LocalStorage → Secrets → 空
-sj_key = user_creds.get("sj_api_key") or st.secrets.get("API_KEY", "")
-sj_secret = user_creds.get("sj_secret_key") or st.secrets.get("SECRET_KEY", "")
+# 永豐金 API：僅 LocalStorage
+sj_key = user_creds.get("sj_api_key", "")
+sj_secret = user_creds.get("sj_secret_key", "")
 api = init_api(sj_key, sj_secret)
 
 # MAX API：LocalStorage → Secrets → .env → 空
