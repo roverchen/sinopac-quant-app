@@ -1487,28 +1487,40 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
                 ticker_to_code[t] = c
         
         # 2. 執行批次下載 (分段執行以提高成功率)
+        is_rate_limited = False
         try:
             all_dfs = {}
-            chunk_size = 100 # 加大 chunk 以提升速度，但也增加單次失敗風險
+            chunk_size = 40 # 縮小 chunk 以防被 Yahoo 偵測為大量爬蟲
             for k in range(0, len(tickers), chunk_size):
+                if is_rate_limited: break
                 chunk = tickers[k:k+chunk_size]
                 status_placeholder.info(f"📥 正在批次下載市場數據 ({min(k + chunk_size, len(tickers))}/{len(tickers)})...")
                 # 強制使用 auto_adjust=True 以獲取穩定的技術指標得分
-                batch_data = yf.download(chunk, start=start_date, group_by='ticker', threads=False, progress=False, timeout=15, auto_adjust=True)
-                
-                # 處理下載回來的數據
-                for t in chunk:
-                    try:
-                        if t in batch_data:
-                            d = batch_data[t].dropna()
-                            if not d.empty:
-                                code_key = ticker_to_code[t]
-                                # 如果已經有資料 (可能是 .TW 抓到了)，則不覆蓋
-                                if code_key not in all_dfs:
-                                    all_dfs[code_key] = d
-                    except: continue
-                # 稍微休息避免被封鎖
-                if len(tickers) > 500: time.sleep(0.5)
+                try:
+                    batch_data = yf.download(chunk, start=start_date, group_by='ticker', threads=False, progress=False, timeout=12, auto_adjust=True)
+                    
+                    # 檢查是否觸發頻率限制
+                    if isinstance(batch_data, str) and "Too Many Requests" in batch_data:
+                        is_rate_limited = True
+                        break
+
+                    # 處理下載回來的數據
+                    for t in chunk:
+                        try:
+                            if t in batch_data:
+                                d = batch_data[t].dropna()
+                                if not d.empty:
+                                    code_key = ticker_to_code[t]
+                                    # 如果已經有資料 (可能是 .TW 抓到了)，則不覆蓋
+                                    if code_key not in all_dfs:
+                                        all_dfs[code_key] = d
+                        except: continue
+                    # 強制休息以尊重 Yahoo API
+                    time.sleep(1.0)
+                except Exception as b_err:
+                    if "Too Many Requests" in str(b_err) or "Rate limited" in str(b_err):
+                        is_rate_limited = True
+                        break
         except Exception as e:
             st.error(f"批次下載發生異常: {e}")
 
@@ -1546,6 +1558,13 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
                         df = None # 強制進入下方的抓取與計算邏輯
 
             if df is None:
+                if is_rate_limited:
+                    data_list.append({
+                        "代碼": code, "名稱": stock_name, "最新價格": 0, "操作建議": "⚠️ 頻率限制 (稍後再試)",
+                        "一年位階": "-", "年線乖離": "-", "MA20乖離": "-", "MACD狀態": "-", "綜合評分": -1
+                    })
+                    continue
+
                 # 取得合約物件 (支援台股與美股備用機制)
                 contract = None
                 
@@ -1605,12 +1624,18 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
                                     "代碼": code, "名稱": stock_name, "最新價格": 0, "操作建議": "❌ 無有效數據",
                                     "一年位階": "-", "年線乖離": "-", "MA20乖離": "-", "MACD狀態": "-", "綜合評分": -1
                                 })
-                                continue
-                        except Exception as inner_err:
-                            st.error(f"單一數據抓取異常 ({code}): {inner_err}")
-                            continue
-                    except Exception as yf_err:
-                        st.error(f"資料抓取過程中發生未預期錯誤 ({code}): {yf_err}")
+                        except Exception as yf_err:
+                            if "Too Many Requests" in str(yf_err) or "Rate limited" in str(yf_err):
+                                is_rate_limited = True
+                                st.error("⚠️ Yahoo Finance 頻率限制 (Too Many Requests)，分析將自動停止以維護連線穩定。")
+                            else:
+                                if not quiet_mode:
+                                    st.error(f"單一數據抓取異常 ({code}): {yf_err}")
+                        
+                        # 個別抓取後的微小延遲
+                        time.sleep(0.3)
+                    except Exception as yf_outer_err:
+                        st.error(f"資料抓取過程中發生未預期錯誤 ({code}): {yf_outer_err}")
                         continue
                 
                 # 確認資料有效性
