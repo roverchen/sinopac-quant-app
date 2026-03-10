@@ -984,7 +984,11 @@ def display_simulation_dashboard(user_id):
                     # 計算即時損益
                     if trade['symbol'] in curr_prices:
                         cp = curr_prices[trade['symbol']]
-                        p_pct = (cp - trade['buy_price']) / trade['buy_price'] * 100
+                        # 關鍵修正：防止除以零 (ZeroDivisionError)
+                        if trade['buy_price'] > 0:
+                            p_pct = (cp - trade['buy_price']) / trade['buy_price'] * 100
+                        else:
+                            p_pct = 0.0
                         color = "red" if p_pct >= 0 else "green"
                         cols[2].markdown(f"現價: {cp}\n<span style='color:{color}'>{p_pct:+.2f}%</span>", unsafe_allow_html=True)
                         
