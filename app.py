@@ -5,6 +5,7 @@ import base64
 import json
 import uuid
 import hashlib
+import random
 from streamlit_javascript import st_javascript
 from dotenv import load_dotenv
 
@@ -66,6 +67,17 @@ YF_SESSION.headers.update({
     "Accept-Language": "en-US,en;q=0.9,zh-TW;q=0.8,zh;q=0.7",
     "Cache-Control": "no-cache"
 })
+
+def get_random_ua():
+    """隨機切換 User-Agent 以降低被 Yahoo Finance 封鎖的機率"""
+    ua_list = [
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2.1 Safari/605.1.15"
+    ]
+    return random.choice(ua_list)
 
 # 導入外掛 API
 try:
@@ -1529,11 +1541,16 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
         # 2. 執行批次下載 (分段執行以提高成功率)
         try:
             all_dfs = {}
-            chunk_size = 40 # 縮小 chunk 以防被 Yahoo 偵測為大量爬蟲
+            chunk_size = 15 # 大幅縮小 chunk 粒度，降低被偵測風險
+            
             for k in range(0, len(tickers), chunk_size):
                 if is_rate_limited: break
                 chunk = tickers[k:k+chunk_size]
-                status_placeholder.info(f"📥 正在批次下載市場數據 ({min(k + chunk_size, len(tickers))}/{len(tickers)})...")
+                
+                # 每個批次隨機更換 User-Agent
+                YF_SESSION.headers.update({"User-Agent": get_random_ua()})
+                
+                status_placeholder.info(f"📥 正在批次下載 ({min(k + chunk_size, len(tickers))}/{len(tickers)})...")
                 # 強制使用 auto_adjust=True 以獲獲取穩定的技術指標得分，並帶入專屬 Session 與增強逾時設定
                 try:
                     batch_data = yf.download(
@@ -1547,11 +1564,12 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
                         session=YF_SESSION
                     )
                     
-                    # 檢查是否觸發頻率限制
-                    if isinstance(batch_data, str) and "Too Many Requests" in batch_data:
-                        is_rate_limited = True
-                        break
-
+                    # 檢查下載結果是否異常 (Yahoo 有時會回傳字串或報錯)
+                    if batch_data is None or (hasattr(batch_data, "empty") and batch_data.empty):
+                        # 如果完全沒抓到且有報錯跡象，判定為頻率限制
+                        print(f"[Warning] Batch returned empty. Possible rate limit at chunk starting {k}")
+                        # 不直接跳出，嘗試等待更久
+                    
                     # 處理下載回來的數據
                     for t in chunk:
                         try:
@@ -1563,12 +1581,19 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
                                     if code_key not in all_dfs:
                                         all_dfs[code_key] = d
                         except: continue
-                    # 強制休息以尊重 Yahoo API
-                    time.sleep(1.0)
+                    
+                    # [關鍵] 增加隨機延遲 (3 到 7 秒)，模仿人類瀏覽行為
+                    wait_time = random.uniform(3.0, 7.0)
+                    status_placeholder.warning(f"⏳ 正在冷卻以避免被封鎖... (等待 {wait_time:.1f}s)")
+                    time.sleep(wait_time)
                 except Exception as b_err:
-                    if "Too Many Requests" in str(b_err) or "Rate limited" in str(b_err):
+                    err_str = str(b_err)
+                    if "Too Many Requests" in err_str or "Rate limited" in err_str or "429" in err_str:
                         is_rate_limited = True
+                        st.error("⚠️ 偵測到 Yahoo Finance 頻率限制 (Too Many Requests)，海選將自動暫停。")
                         break
+                    print(f"[Error] Batch k={k} error: {b_err}")
+                    time.sleep(10) # 發生錯誤時重裝更久
         except Exception as e:
             st.error(f"批次下載發生異常: {e}")
 
@@ -2309,8 +2334,27 @@ if (big_scan_tw_btn or big_scan_us_btn or big_scan_crypto_btn or scan_btn or sho
             st.session_state.last_update = get_now().strftime("%H:%M:%S")
             st.session_state.current_page = 0 # 重設頁碼
             
+            # --- [智慧快取保護] ---
+            # 只有當掃描成功數量達到一定門檻 (例如 30%)，才更新共享快取
+            # 這是為了避免「快取了失敗的掃描結果」導致整天所有人看到的都是空資料
+            success_count = len(results)
+            target_count = len(scan_list)
+            success_rate = (success_count / target_count) if target_count > 0 else 0
+            
+            # 對於名單較少的掃描 (watchlist)，隨時存檔；對於「大數據海選」，則需要 30% 門檻
+            do_shared_save = True
+            if st.session_state.is_big_scan and success_rate < 0.3:
+                do_shared_save = False
+                st.sidebar.warning(f"⚠️ 今日海選成功率過低 ({success_rate:.1%})，不更新共享快取以保護數據品質。")
+
             # 存入磁碟快取
-            save_results_cache(results, is_big_scan=st.session_state.is_big_scan, market=st.session_state.scan_market, user_id=user_id)
+            # 如果不符合共享門檻，我們傳入 is_big_scan=False 以防 save_results_cache 刷新共享檔
+            save_results_cache(
+                results, 
+                is_big_scan=(st.session_state.is_big_scan and do_shared_save), 
+                market=st.session_state.scan_market, 
+                user_id=user_id
+            )
             st.toast("✅ 數據同步完成！", icon="📉")
             
             # --- 🧪 模擬交易：自動跟單 (第一類：系統每日海選) ---
