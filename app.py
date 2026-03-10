@@ -2334,6 +2334,10 @@ if st.session_state.active_page == "settings":
         elif user_creds.get("ca_pfx_b64"):
             new_creds["ca_pfx_b64"] = user_creds["ca_pfx_b64"]
 
+        # [重要] 保持密碼 Hash 存在，避免下次登入被視為新使用者
+        if "pwd_hash" in user_creds:
+            new_creds["pwd_hash"] = user_creds["pwd_hash"]
+
         # 存到伺服器端 JSON 檔案
         save_user_creds(user_id, new_creds)
         
