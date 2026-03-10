@@ -28,10 +28,10 @@ MarkupSafe==3.0.3
 mdurl==0.1.2
 msgpack==1.1.2
 narwhals==2.17.0
-numpy==2.4.2
+numpy==1.26.4
 orjson==3.11.7
 packaging==26.0
-pandas==2.3.3
+pandas==2.2.3
 peewee==4.0.1
 pillow==12.1.1
 platformdirs==4.9.2
