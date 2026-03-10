@@ -71,12 +71,11 @@ except ImportError:
     get_script_run_ctx = None
 
 def get_browser_state():
-    """集中管理從 LocalStorage 讀取所有狀態，減少 st_javascript 的呼叫次數與不穩定性。"""
-    # 1. 優先使用 Session State 中的快取
+    """從 LocalStorage 讀取 User ID 與 憑證。使用 loading guard 確保 JS 回傳前不繼續執行。"""
+    # 1. 如果已經載入成功，直接回傳
     if st.session_state.get('browser_state_loaded'):
         return st.session_state.user_id, st.session_state.user_creds
 
-    # 預設值
     internal_id = "u_" + (get_script_run_ctx().session_id[:8] if get_script_run_ctx() else uuid.uuid4().hex[:6])
     defaults = {
         "user_id": internal_id,
@@ -87,54 +86,59 @@ def get_browser_state():
         }
     }
 
-    # 檢查網址參數 (高優先)
-    url_u = st.query_params.get('u')
-    if url_u:
-        st.session_state.user_id = str(url_u)
+    # 2. 顯示讀取中元件 (會在 JS 回傳後自動消失)
+    placeholder = st.empty()
+    with placeholder.container():
+        st.info("⌛ 正在同步您的個人設定...")
+        st.spinner("載入中...")
 
     try:
-        # 使用一個 JS 同步取得多個值
+        # 使用 JS 取得多個值
         js_code = """
-        JSON.stringify({
-            user_id: localStorage.getItem('sinopac_user_id'),
-            creds: localStorage.getItem('sinopac_credentials')
-        })
+        (function() {
+            return JSON.stringify({
+                user_id: localStorage.getItem('sinopac_user_id'),
+                creds: localStorage.getItem('sinopac_credentials')
+            });
+        })()
         """
         raw_json = st_javascript(js_code)
         
-        if raw_json and raw_json != 0 and str(raw_json) != "null":
-            data = json.loads(str(raw_json))
+        # 關鍵：如果 JS 回傳 0 或 None，表示還在讀取，暫停 Python 執行直到下一次 rerun
+        if not raw_json or raw_json == 0 or str(raw_json) == "null":
+            st.stop()
             
-            # 處理 User ID
-            uid = data.get('user_id')
-            if uid and str(uid) != "null":
-                st.session_state.user_id = str(uid)
-            else:
-                # 若 LocalStorage 沒 user_id，寫入現有的
-                uid = st.session_state.get('user_id', internal_id)
-                st_javascript(f"localStorage.setItem('sinopac_user_id', '{uid}');")
-                st.session_state.user_id = uid
-            
-            # 處理 Credentials
-            creds_raw = data.get('creds')
-            if creds_raw and str(creds_raw) != "null":
-                try:
-                    loaded_creds = json.loads(str(creds_raw))
-                    defaults["creds"].update(loaded_creds)
-                    defaults["creds"]["_loaded"] = True
-                except:
-                    pass
-            
-            st.session_state.user_creds = defaults["creds"]
-            st.session_state.browser_state_loaded = True
-            return st.session_state.user_id, st.session_state.user_creds
-    except Exception as e:
-        print(f"[BrowserState] Load error: {e}")
+        data = json.loads(str(raw_json))
+        
+        # 處理 User ID
+        uid = data.get('user_id')
+        if uid and str(uid) != "null":
+            st.session_state.user_id = str(uid)
+        else:
+            # 初始化 User ID
+            st_javascript(f"localStorage.setItem('sinopac_user_id', '{internal_id}');")
+            st.session_state.user_id = internal_id
+        
+        # 處理 Credentials
+        creds_raw = data.get('creds')
+        if creds_raw and str(creds_raw) != "null":
+            try:
+                loaded = json.loads(str(creds_raw))
+                defaults["creds"].update(loaded)
+                defaults["creds"]["_loaded"] = True
+            except:
+                pass
+        
+        st.session_state.user_creds = defaults["creds"]
+        st.session_state.browser_state_loaded = True
+        placeholder.empty() # 移除讀取中訊息
+        return st.session_state.user_id, st.session_state.user_creds
 
-    # 載入失敗或還在載入中的 fallback
-    if 'user_id' not in st.session_state: st.session_state.user_id = internal_id
-    if 'user_creds' not in st.session_state: st.session_state.user_creds = defaults["creds"]
-    return st.session_state.user_id, st.session_state.user_creds
+    except Exception as e:
+        st.session_state.user_id = internal_id
+        st.session_state.user_creds = defaults["creds"]
+        placeholder.empty()
+        return st.session_state.user_id, st.session_state.user_creds
 
 def is_mobile_device():
     """透過 User-Agent 與 Query Parameter 判斷是否為行動裝置 (優化版)"""
@@ -2265,39 +2269,29 @@ if st.session_state.active_page == "settings":
 
         # 寫入 LocalStorage
         creds_json = json.dumps(new_creds, ensure_ascii=False)
-        # 使用 st_javascript 寫入 (確保與讀取同源)
-        escaped = creds_json.replace("\\", "\\\\").replace("'", "\\'")
-        st_javascript(f"localStorage.setItem('sinopac_credentials', '{escaped}');")
-        
-        # 寫入 LocalStorage (改回 components.html 但優化語法與延遲)
+        # 寫入 LocalStorage (雙重寫入保險)
         creds_json = json.dumps(new_creds, ensure_ascii=False)
         escaped_json = creds_json.replace("\\", "\\\\").replace("'", "\\'")
         
-        # 使用一個具備延遲與錯誤處理的 JS 區塊
-        js_code = f"""
+        # 1. 透過 HTML 注入寫入 (通常最快)
+        st.components.v1.html(f"""
             <script>
-                try {{
-                    localStorage.setItem('sinopac_credentials', '{escaped_json}');
-                    console.log('Credentials saved safely');
-                    // 標記儲存成功，讓 Python 端知道可以 rerun 了
-                    window.parent.postMessage({{type: 'streamlit:setComponentValue', value: true}}, '*');
-                }} catch (e) {{
-                    console.error('Save failed:', e);
-                }}
+                localStorage.setItem('sinopac_credentials', '{escaped_json}');
+                console.log('Credentials saved');
             </script>
-        """
-        # 執行 JS 寫入
-        components.html(js_code, height=0)
+        """, height=0)
         
-        # 強制等待一小段時間確保瀏覽器寫入完成 (尤其是在 Cloud 環境)
-        time.sleep(1.5)
+        # 2. 透過已知的 JS 介面寫入
+        st_javascript(f"localStorage.setItem('sinopac_credentials', '{escaped_json}');")
         
-        # 更新 session_state
-        new_creds["_loaded"] = True
+        # 強制等待一小段時間確保瀏覽器寫入完成
+        time.sleep(1.0)
+        
+        # 更新 session_state 並強制下一輪重新載入
         st.session_state.user_creds = new_creds
-        st.session_state.browser_state_loaded = False # 強制下次執行時重新檢查
+        st.session_state.browser_state_loaded = True # 直接標記完成避免重讀
         
-        st.success("✅ 設定已儲存至瀏覽器！即將自動重新整理...")
+        st.success("✅ 設定已儲存至瀏覽器！系統自動更新中...")
         st.rerun()
     
     if bc2.button("🏠 返回", use_container_width=True):
