@@ -361,13 +361,18 @@ def init_max_api_v5(key, secret):
         return MaxExchangeAPI(key, secret)
     return None
 
-# --- 🔌 API 初始化 (背景執行) ---
-sj_key = st.secrets.get("API_KEY", "")
-sj_secret = st.secrets.get("SECRET_KEY", "")
+# --- 🔌 API 初始化 (Per-User Credentials + Fallback) ---
+# 載入使用者個人憑證 (加密儲存)
+user_creds = load_user_credentials(user_id)
+
+# 永豐金 API：個人 → Secrets → 空
+sj_key = user_creds.get("sj_api_key") or st.secrets.get("API_KEY", "")
+sj_secret = user_creds.get("sj_secret_key") or st.secrets.get("SECRET_KEY", "")
 api = init_api(sj_key, sj_secret)
 
-max_key = st.secrets.get("MAX_API_KEY") or os.getenv("MAX_API_KEY")
-max_secret = st.secrets.get("MAX_API_SECRET") or os.getenv("MAX_API_SECRET")
+# MAX API：個人 → Secrets → .env → 空
+max_key = user_creds.get("max_api_key") or st.secrets.get("MAX_API_KEY") or os.getenv("MAX_API_KEY")
+max_secret = user_creds.get("max_api_secret") or st.secrets.get("MAX_API_SECRET") or os.getenv("MAX_API_SECRET")
 max_api = init_max_api_v5(max_key, max_secret)
 
 # 初始化 API 狀態文字
@@ -377,22 +382,19 @@ m_api_status = f"已偵測{v_tag}" if max_key else "待設定"
 # [REMOVED] 依要求移除 API 進階設定區塊
 
 # 核心連線狀態檢查 (背景邏輯)
-# 如果 api 為 None，則視為未連線 (is_mock=True 以避免後續調用噴錯)
 is_mock = True
 if api is not None:
     is_mock = hasattr(api, 'list_accounts') and len(api.list_accounts()) == 0 and not hasattr(api, 'Contracts')
 
 if max_api:
     bal = max_api.get_account_balance()
-    st.session_state.max_balance = bal # 存入 session_state 供下單視窗檢查
+    st.session_state.max_balance = bal
     if 'error' in bal:
-        # 僅在出錯時顯示提示，正常則隱藏餘額
         if "404" in str(bal['error']):
             st.sidebar.caption(f"⚠️ MAX 連線無效 (404)。請檢查金鑰。")
         else:
             st.sidebar.caption(f"⚠️ MAX 連線錯誤: {bal.get('error', 'Unknown')}")
-else:
-    st.sidebar.caption(f"⚪ MAX API: {m_api_status} (請設定 .env 或 Secrets)")
+
 
 # --- 憑證交易與背景邏輯 ---
 
@@ -717,6 +719,56 @@ def get_stock_name_map(_api):
 
     return code_to_name
 
+
+# --- 🔐 Per-User Encrypted Credential Management ---
+from cryptography.fernet import Fernet
+
+def _get_fernet_key():
+    """Get or generate a persistent Fernet encryption key for this server instance."""
+    key_file = os.path.join(CACHE_DIR, ".fernet_key")
+    if os.path.exists(key_file):
+        with open(key_file, "rb") as f:
+            return f.read()
+    key = Fernet.generate_key()
+    with open(key_file, "wb") as f:
+        f.write(key)
+    return key
+
+_FERNET = Fernet(_get_fernet_key())
+
+def _get_creds_path(user_id):
+    return os.path.join(CACHE_DIR, f"creds_{user_id}.enc")
+
+def load_user_credentials(user_id):
+    """Load per-user encrypted credentials. Returns dict with default empty strings."""
+    defaults = {
+        "sj_api_key": "", "sj_secret_key": "",
+        "max_api_key": "", "max_api_secret": "",
+        "person_id": "", "ca_passwd": ""
+    }
+    path = _get_creds_path(user_id)
+    if os.path.exists(path):
+        try:
+            with open(path, "rb") as f:
+                decrypted = _FERNET.decrypt(f.read())
+            saved = json.loads(decrypted.decode("utf-8"))
+            defaults.update(saved)
+        except Exception as e:
+            print(f"[Creds] Failed to load credentials for {user_id}: {e}")
+    return defaults
+
+def save_user_credentials(user_id, creds):
+    """Save per-user credentials with Fernet encryption."""
+    path = _get_creds_path(user_id)
+    try:
+        raw = json.dumps(creds, ensure_ascii=False).encode("utf-8")
+        encrypted = _FERNET.encrypt(raw)
+        with open(path, "wb") as f:
+            f.write(encrypted)
+        return True
+    except Exception as e:
+        print(f"[Creds] Failed to save credentials for {user_id}: {e}")
+        return False
 
 # --- 輔助函式 ---
 WATCHLIST_FILE = "watchlist.json"
@@ -1283,67 +1335,97 @@ with st.sidebar.form("add_stock_form", clear_on_submit=True):
                     del st.session_state.last_suggestions
                     st.rerun()
 
-# 4. 交易憑證設定 (移至側邊欄最下方)
-# 4. 交易憑證設定
+# 4. 🔒 交易憑證設定 (Per-User, Encrypted)
+st.sidebar.divider()
+with st.sidebar.expander("🔒 交易憑證設定", expanded=False):
+    st.caption("每位使用者可獨立設定自己的 API 金鑰，資料以加密方式儲存於伺服器。未設定者僅能使用 Yahoo Finance 數據。")
+    
+    # --- 永豐金 Sinopac API ---
+    st.markdown("**🏦 永豐金 Shioaji API**")
+    inp_sj_key = st.text_input("API Key", value=user_creds.get("sj_api_key", ""), type="password", key="inp_sj_key",
+                                help="前往 [Shioaji](https://www.sinotrade.com.tw/openapi) 申請")
+    inp_sj_secret = st.text_input("Secret Key", value=user_creds.get("sj_secret_key", ""), type="password", key="inp_sj_secret")
+    inp_person_id = st.text_input("身分證字號", value=user_creds.get("person_id", ""), key="inp_person_id",
+                                   help="啟動憑證所需 (實盤下單)")
+    inp_ca_passwd = st.text_input("憑證密碼", value=user_creds.get("ca_passwd", ""), type="password", key="inp_ca_passwd",
+                                   help="Sinopac.pfx 的保護密碼")
+    uploaded_pfx = st.file_uploader("上傳憑證 (.pfx)", type=["pfx"], key="inp_pfx", help="實盤下單所需的電子憑證")
+    
+    st.markdown("---")
+    
+    # --- MAX Exchange API ---
+    st.markdown("**🪙 MAX 交易所 API**")
+    inp_max_key = st.text_input("API Key", value=user_creds.get("max_api_key", ""), type="password", key="inp_max_key",
+                                 help="前往 [MAX](https://max.maicoin.com/) 申請 API 金鑰")
+    inp_max_secret = st.text_input("API Secret", value=user_creds.get("max_api_secret", ""), type="password", key="inp_max_secret")
+    
+    st.markdown("---")
+    
+    # --- 儲存按鈕 ---
+    if st.button("💾 儲存設定", use_container_width=True, type="primary"):
+        new_creds = {
+            "sj_api_key": inp_sj_key,
+            "sj_secret_key": inp_sj_secret,
+            "max_api_key": inp_max_key,
+            "max_api_secret": inp_max_secret,
+            "person_id": inp_person_id,
+            "ca_passwd": inp_ca_passwd
+        }
+        if save_user_credentials(user_id, new_creds):
+            st.success("✅ 設定已加密儲存！重新整理頁面以套用新金鑰。")
+            # 清除快取強制重新初始化 API
+            init_api.clear()
+        else:
+            st.error("❌ 儲存失敗，請稍後再試。")
+    
+    # --- 連線狀態 ---
+    st.markdown("**📡 連線狀態**")
+    if api and not is_mock:
+        st.success("🏦 永豐金：✅ 已連線")
+    elif sj_key:
+        st.warning("🏦 永豐金：⚠️ 金鑰已設定但連線失敗")
+    else:
+        st.info("🏦 永豐金：⚪ 待設定 (目前使用 Yahoo Finance)")
+    
+    if max_api:
+        st.success(f"🪙 MAX：✅ 已連線{v_tag}")
+    elif max_key:
+        st.warning("🪙 MAX：⚠️ 金鑰已設定但連線失敗")
+    else:
+        st.info("🪙 MAX：⚪ 待設定")
+
+# --- 憑證啟動邏輯 ---
 ca_path = os.path.join(os.path.dirname(__file__), "Sinopac.pfx")
 ca_exists = os.path.exists(ca_path)
 
-# 優先讀取 Secrets
-person_id = st.secrets.get("PERSON_ID", "")
-ca_passwd = st.secrets.get("CA_PASSWD", "")
+# 上傳憑證處理
+if uploaded_pfx is not None:
+    import tempfile
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pfx") as tmp_file:
+        tmp_file.write(uploaded_pfx.getbuffer())
+        ca_path = tmp_file.name
+        ca_exists = True
 
-# 啟動邏輯 (背景先試跑一次)
+person_id = user_creds.get("person_id") or st.secrets.get("PERSON_ID", "")
+ca_passwd = user_creds.get("ca_passwd") or st.secrets.get("CA_PASSWD", "")
+
 ca_active = False
 if person_id and ca_passwd and ca_exists and not is_mock:
     try:
         if api:
             api.activate_ca(ca_path=ca_path, ca_passwd=ca_passwd, person_id=person_id)
             ca_active = True
-    except:
-        pass
-
-# UI 顯示邏輯：只要偵測到預設檔案且不是手動上傳模式，就隱藏輸入框
-if not ca_exists:
-    st.sidebar.divider()
-    st.sidebar.subheader("🔒 交易憑證設定")
-    person_id = st.sidebar.text_input("身分證字號", value=person_id, type="default", help="啟動憑證所需")
-    ca_passwd = st.sidebar.text_input("憑證密碼", value=ca_passwd, type="password", help="Sinopac.pfx 的保護密碼")
-    
-    uploaded_pfx = st.sidebar.file_uploader("上傳憑證 (.pfx)", type=["pfx"], help="若沒上傳，系統會嘗試讀取伺服器預設憑證")
-    if uploaded_pfx is not None:
-        import tempfile
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pfx") as tmp_file:
-            tmp_file.write(uploaded_pfx.getbuffer())
-            ca_path = tmp_file.name
-            ca_exists = True
-        st.sidebar.caption("✅ 已使用上傳憑證")
-    else:
-        st.sidebar.error("❌ 找不到憑證檔案 (請上傳或放置 Sinopac.pfx)")
-
-# 最終顯示成功狀態 (不管 UI 是否隱藏，成功都顯示綠勾)
-if ca_active:
-    st.sidebar.success("🔑 憑證已啟動 (可預約/執行實盤)")
-elif person_id and ca_passwd and ca_exists:
-    # 如果前面試跑失敗，這裡顯示報錯
-    try:
-        if api:
-            api.activate_ca(ca_path=ca_path, ca_passwd=ca_passwd, person_id=person_id)
-            st.sidebar.success("🔑 憑證已啟動 (可預約/執行實盤)")
-            ca_active = True
-        else:
-            st.sidebar.warning("⚠️ 永豐 API 未連線，無法啟動憑證")
     except Exception as e:
         error_msg = str(e)
         if "invalid password" in error_msg.lower():
-            st.sidebar.error("❌ 憑證密碼錯誤")
+            st.sidebar.caption("❌ 憑證密碼錯誤")
         elif "identity" in error_msg.lower():
-            st.sidebar.error("❌ 身分證字號不符")
-        else:
-            st.sidebar.error(f"❌ 啟動失敗: {error_msg[:40]}...")
+            st.sidebar.caption("❌ 身分證字號不符")
 
 # 顯示最後一筆模擬訂單 (如果有)
 if "last_order" in st.session_state:
     st.sidebar.success(f"📌 **交易回報**\n\n{st.session_state.last_order}")
+
 
 watchlist = st.session_state.watchlist
 
