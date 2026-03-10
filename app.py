@@ -870,6 +870,11 @@ def check_and_exit_trades(user_id, current_prices):
             if log['status'] == 'Open' and log['symbol'] in current_prices:
                 curr_price = current_prices[log['symbol']]
                 buy_price = log['buy_price']
+                
+                # 關鍵修正：防止除以零 (ZeroDivisionError)
+                if buy_price <= 0:
+                    continue
+                    
                 pnl_pct = (curr_price - buy_price) / buy_price
                 
                 # 策略：停損 -5%, 停利 +20%
