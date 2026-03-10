@@ -95,17 +95,29 @@ def load_user_creds(uid):
     return {}
 
 def get_browser_state():
-    """取得使用者 ID 與憑證。UID 固定為 default_user，憑證從伺服器端檔案讀取。"""
+    """多人模式：從暱稱取得 UID，從伺服器端檔案讀取憑證。"""
     # 已經載入成功則直接回傳快取
     if st.session_state.get('browser_state_loaded'):
         return st.session_state.user_id, st.session_state.user_creds
 
-    # 固定 UID (在 Streamlit Cloud 上 LocalStorage 不穩定，使用固定 ID 確保每次都能讀到設定)
-    uid = "default_user"
+    # 如果還沒登入，顯示登入畫面
+    if 'user_id' not in st.session_state or not st.session_state.user_id:
+        st.markdown("## 👋 歡迎使用報明牌系統")
+        st.caption("請輸入您的暱稱以載入您的個人設定。每位使用者的 API 金鑰各自獨立保存。")
+        nickname = st.text_input("您的暱稱（例如：rover、alex）", key="_login_nickname", 
+                                  help="此暱稱做為您的個人識別碼，下次登入請用同一個名稱。")
+        if st.button("🚀 進入系統", type="primary", use_container_width=True):
+            if nickname and nickname.strip():
+                st.session_state.user_id = nickname.strip().lower()
+            else:
+                st.warning("請輸入暱稱才能進入！")
+                st.stop()
+        else:
+            st.stop()
 
-    # 初始化 Session State
-    if 'user_id' not in st.session_state:
-        st.session_state.user_id = uid
+    uid = st.session_state.user_id
+
+    # 初始化憑證
     if 'user_creds' not in st.session_state:
         st.session_state.user_creds = {
             "sj_api_key": "", "sj_secret_key": "",
