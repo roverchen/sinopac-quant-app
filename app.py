@@ -495,14 +495,36 @@ def save_results_cache(df, is_big_scan=False, market=None, user_id="shared"):
             "is_big_scan": is_big_scan,
             "scan_market": market
         }
+        # 1. 儲存個人快取 (Session 恢復用)
         cache_file = os.path.join(CACHE_DIR, f"results_cache_{user_id}.pkl")
         with open(cache_file, "wb") as f:
             pickle.dump(data, f)
+            
+        # 2. 如果是大數據海選，同步存入「每日全域共享快取」
+        if is_big_scan and market:
+            shared_file = os.path.join(CACHE_DIR, f"shared_results_{market}.pkl")
+            with open(shared_file, "wb") as f:
+                pickle.dump(data, f)
     except Exception as e:
         print(f"快取存檔失敗: {e}")
 
-def load_results_cache(user_id="shared"):
-    """從磁碟載入上一次的掃描結果"""
+def load_results_cache(user_id="shared", market=None):
+    """從磁碟載入上一次的掃描結果，支援市場級別的每日共享快取"""
+    # 1. 優先檢查是否為「當日已掃過」的共享快取
+    if market:
+        shared_file = os.path.join(CACHE_DIR, f"shared_results_{market}.pkl")
+        if os.path.exists(shared_file):
+            try:
+                with open(shared_file, "rb") as f:
+                    data = pickle.load(f)
+                    # 檢查快取日期是否為「今天」
+                    cache_day = data.get('timestamp', '').split(' ')[0]
+                    today_str = get_now().strftime("%Y-%m-%d")
+                    if cache_day == today_str:
+                        return data
+            except: pass
+
+    # 2. 回退到個人專屬快取 (Session 恢復)
     cache_file = os.path.join(CACHE_DIR, f"results_cache_{user_id}.pkl")
     if os.path.exists(cache_file):
         try:
@@ -2263,9 +2285,24 @@ if (big_scan_tw_btn or big_scan_us_btn or big_scan_crypto_btn or scan_btn or sho
     st.toast(toast_msg, icon="🚀")
     with st.spinner('🔄 市場數據分析同步中...'):
         st.session_state.last_watchlist = current_watchlist_key
-        st.session_state.force_rescan = False
         
-        results = fetch_and_analyze(scan_list, defense_weight=st.session_state.defense_weight, market_type=st.session_state.scan_market)
+        # --- [NEW] 共享快取優先機制 ---
+        results = pd.DataFrame()
+        cached_data = None
+        
+        # 如果是大數據海選，且不是強制刷新，先試著讀取今日共享快取
+        if st.session_state.is_big_scan and not st.session_state.get("force_rescan"):
+            cached_data = load_results_cache(user_id=user_id, market=st.session_state.scan_market)
+            if cached_data:
+                cache_day = cached_data['timestamp'].split(' ')[0]
+                if cache_day == get_now().strftime("%Y-%m-%d"):
+                    results = cached_data['df']
+                    st.toast("💾 已偵測到今日海選紀錄，直接載入共享數據", icon="📥")
+
+        # 若無快取或強制刷新，才執行 Yahoo Finance 分析
+        if results.empty:
+            st.session_state.force_rescan = False
+            results = fetch_and_analyze(scan_list, defense_weight=st.session_state.defense_weight, market_type=st.session_state.scan_market)
         
         if not results.empty:
             st.session_state.results = results
