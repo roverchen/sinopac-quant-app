@@ -70,85 +70,66 @@ try:
 except ImportError:
     get_script_run_ctx = None
 
+def _creds_file_path(uid):
+    """回傳特定使用者的憑證檔案路徑。"""
+    return os.path.join(CACHE_DIR if os.path.isdir("cache") else "cache", f"creds_{uid}.json")
+
+def save_user_creds(uid, creds_dict):
+    """將使用者憑證存到伺服器端 JSON 檔案。"""
+    creds_dir = "cache"
+    if not os.path.exists(creds_dir):
+        os.makedirs(creds_dir)
+    path = os.path.join(creds_dir, f"creds_{uid}.json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(creds_dict, f, ensure_ascii=False)
+
+def load_user_creds(uid):
+    """從伺服器端讀取使用者憑證。無檔案時回傳空 dict。"""
+    path = os.path.join("cache", f"creds_{uid}.json")
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
 def get_browser_state():
-    """從 URL Query Params、LocalStorage 讀取 User ID 與 憑證。優先使用 URL 確保 reload 穩定。"""
+    """從 URL 取得 UID，從伺服器檔案讀取憑證。完全不依賴瀏覽器 LocalStorage。"""
     # 1. 已經載入成功則直接回傳快取
     if st.session_state.get('browser_state_loaded'):
         return st.session_state.user_id, st.session_state.user_creds
 
-    # 取得當前 URL 中的 UID (最穩定的來源)
+    # 取得當前 URL 中的 UID (唯一穩定的識別來源)
     url_uid = st.query_params.get("uid")
-    
+
     # 備援內部 ID
     internal_id = "u_" + (get_script_run_ctx().session_id[:8] if get_script_run_ctx() else uuid.uuid4().hex[:6])
-    
-    defaults = {
-        "user_id": url_uid if url_uid else internal_id,
-        "creds": {
+
+    # 確定使用者 ID
+    uid = url_uid if url_uid else internal_id
+
+    # 初始化 Session State
+    if 'user_id' not in st.session_state:
+        st.session_state.user_id = uid
+    if 'user_creds' not in st.session_state:
+        st.session_state.user_creds = {
             "sj_api_key": "", "sj_secret_key": "",
             "max_api_key": "", "max_api_secret": "",
             "person_id": "", "ca_passwd": ""
         }
-    }
 
-    # 初始化 Session State
-    if 'user_id' not in st.session_state:
-        st.session_state.user_id = defaults["user_id"]
-    if 'user_creds' not in st.session_state:
-        st.session_state.user_creds = defaults["creds"]
-
-    # 如果 URL 沒 UID，主動填入並觸發重整 (確保 URL 始終帶有唯一識別碼)
+    # 如果 URL 沒 UID，主動填入 (確保 URL 始終帶有唯一識別碼)
     if not url_uid:
         st.query_params["uid"] = st.session_state.user_id
 
-    try:
-        # 非同步觸發 JS 讀取
-        js_code = """
-        (function() {
-            try {
-                const uid = localStorage.getItem('sinopac_user_id');
-                const creds = localStorage.getItem('sinopac_credentials');
-                return JSON.stringify({ user_id: uid, creds: creds });
-            } catch(e) { return "null"; }
-        })()
-        """
-        raw_json = st_javascript(js_code)
-        
-        # 關鍵修正：只要 JS 回傳了非零、非 None 的值 (包含 "null")，就表示執行完成
-        if raw_json and raw_json != 0:
-            if str(raw_json) == "null":
-                # JS 拋出異常 (通常是禁止第三方 Cookie)
-                st.session_state.browser_storage_blocked = True
-            else:
-                data = json.loads(str(raw_json))
-                st.session_state.browser_storage_blocked = False
-                
-                # 如果 URL 沒抓到但 LocalStorage 有抓到 UID，以 LocalStorage 為準並更新 URL
-                stored_uid = data.get('user_id')
-                if not url_uid and stored_uid and str(stored_uid) != "null":
-                    st.session_state.user_id = str(stored_uid)
-                    st.query_params["uid"] = str(stored_uid)
-                
-                creds_raw = data.get('creds')
-                if creds_raw and str(creds_raw) != "null":
-                    try:
-                        loaded = json.loads(str(creds_raw))
-                        st.session_state.user_creds.update(loaded)
-                        st.session_state.user_creds["_loaded"] = True
-                        
-                        # 同步到 Widget Keys
-                        for field in ["sj_api_key", "sj_secret_key", "max_api_key", "max_api_secret", "person_id", "ca_passwd"]:
-                            key_name = f"inp_{field}"
-                            if loaded.get(field):
-                                if not st.session_state.get(key_name):
-                                    st.session_state[key_name] = loaded.get(field)
-                    except: pass
-            
-            st.session_state.browser_state_loaded = True
+    # 從伺服器端讀取憑證 (瞬間完成、無延遲、無阻塞)
+    loaded = load_user_creds(st.session_state.user_id)
+    if loaded:
+        st.session_state.user_creds.update(loaded)
+        st.session_state.user_creds["_loaded"] = True
 
-    except Exception:
-        pass
-
+    st.session_state.browser_state_loaded = True
     return st.session_state.user_id, st.session_state.user_creds
 
 def is_mobile_device():
@@ -2271,7 +2252,7 @@ if st.session_state.active_page == "settings":
             "ca_passwd": inp_ca_passwd
         }
         
-        # 處理憑證檔案 (轉為 Base64 存入 LocalStorage)
+        # 處理憑證檔案 (轉為 Base64 存入)
         if uploaded_pfx is not None:
             try:
                 pfx_bytes = uploaded_pfx.getvalue()
@@ -2280,64 +2261,35 @@ if st.session_state.active_page == "settings":
             except Exception as e:
                 st.error(f"憑證處理失敗: {e}")
         elif user_creds.get("ca_pfx_b64"):
-            # 保留舊的憑證 (如果這次沒上傳新的)
             new_creds["ca_pfx_b64"] = user_creds["ca_pfx_b64"]
 
-        # 寫入 LocalStorage
-        creds_json = json.dumps(new_creds, ensure_ascii=False)
-        # 寫入 LocalStorage (雙重寫入保險)
-        creds_json = json.dumps(new_creds, ensure_ascii=False)
-        escaped_json = creds_json.replace("\\", "\\\\").replace("'", "\\'")
+        # 存到伺服器端 JSON 檔案 (穩定、不受瀏覽器限制)
+        save_user_creds(user_id, new_creds)
         
-        # 1. 透過 HTML 注入寫入 (通常最快)
-        st.components.v1.html(f"""
-            <script>
-                localStorage.setItem('sinopac_user_id', '{user_id}');
-                localStorage.setItem('sinopac_credentials', '{escaped_json}');
-                console.log('Credentials saved for {user_id}');
-            </script>
-        """, height=0)
-        
-        # 2. 透過已知的 JS 介面寫入 (增加備援)
-        st_javascript(f"localStorage.setItem('sinopac_user_id', '{user_id}');")
-        st_javascript(f"localStorage.setItem('sinopac_credentials', '{escaped_json}');")
-        
-        # 強制等待一小段時間確保瀏覽器寫入完成
-        time.sleep(1.0)
-        
-        # 更新 session_state 並強制下一輪重新載入
+        # 更新 session_state
         st.session_state.user_creds = new_creds
-        st.session_state.user_id = user_id
-        st.query_params["uid"] = user_id
-        st.session_state.browser_state_loaded = True 
+        st.session_state.browser_state_loaded = True
         
-        st.success("✅ 設定已儲存至瀏覽器！系統自動更新中...")
+        st.success("✅ 設定已儲存！系統自動更新中...")
         st.rerun()
     
     if bc2.button("🏠 返回", use_container_width=True):
         st.session_state.active_page = "market"
         st.rerun()
 
-    # --- 🛠️ 診斷與隱私資訊 ---
-    with st.expander("🛠️ 除錯與診斷資訊 (讀不到設定時請展開)"):
+    # --- 🛠️ 診斷資訊 ---
+    with st.expander("🛠️ 除錯與診斷資訊"):
         st.write(f"**目前識別碼 (UID):** `{user_id}`")
         st.write(f"**URL UID:** `{st.query_params.get('uid', '無')}`")
+        creds_path = os.path.join("cache", f"creds_{user_id}.json")
+        st.write(f"**伺服器端憑證檔案:** `{creds_path}` {'✅ 存在' if os.path.exists(creds_path) else '⚪ 尚未建立'}")
+        st.write(f"**已載入金鑰數:** {sum(1 for k in ['sj_api_key','sj_secret_key','max_api_key','max_api_secret'] if user_creds.get(k))}")
         
-        sync_status = "✅ 已完成" if st.session_state.get('browser_state_loaded') else "⌛ 同步中"
-        if st.session_state.get('browser_storage_blocked'):
-            sync_status = "🛑 已停止 (瀏覽器封鎖儲存)"
-            
-        st.write(f"**同步狀態:** {sync_status}")
-        
-        if st.session_state.get('browser_storage_blocked'):
-            st.error("🚫 偵測到瀏覽器封鎖了本地儲存空間 (LocalStorage)。這通常發生在『禁止第三方 Cookie』或『無痕模式』開啟時。")
-        
-        if st.button("🔄 強制從瀏覽器重新讀取"):
+        if st.button("🔄 強制重新讀取"):
             st.session_state.browser_state_loaded = False
-            st.session_state.browser_storage_blocked = False
             st.rerun()
             
-        st.info("💡 提示：若設定無法存檔，請確認瀏覽器是否開啟了『無痕模式』或『禁止第三方 Cookie』，這可能會阻礙 LocalStorage 運作。")
+        st.info("💡 提示：設定資料現已直接儲存在伺服器端，不再受瀏覽器限制。只要使用相同的 URL（含 `?uid=...`）即可自動取回設定。")
 
     st.stop()
 
