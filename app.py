@@ -2162,9 +2162,9 @@ today_str = now_tp.strftime("%Y-%m-%d")
 
 # 定義觸發時間 (Taipei Time)
 MARKET_SCHEDULE = {
-    "US": (4, 5),      # 美股 04:05
-    "CRYPTO": (5, 5),  # 加密貨幣 05:05
-    "TW": (6, 5)       # 台股 06:05
+    "US": (6, 0),      # 美股 06:00
+    "CRYPTO": (23, 5), # 加密貨幣 23:05
+    "TW": (14, 0)      # 台股 14:00
 }
 
 if st.session_state.active_page == "market":
