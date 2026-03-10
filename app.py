@@ -71,15 +71,10 @@ except ImportError:
     get_script_run_ctx = None
 
 def get_browser_state():
-    """從 LocalStorage 讀取 User ID 與 憑證。防止 JS 環境不穩定導致的永久卡死。"""
-    # 1. 如果已經載入成功，直接回傳
+    """從 LocalStorage 讀取 User ID 與 憑證 (非阻塞式)。即刻啟動，同步完成後自動更新。"""
+    # 1. 已經載入成功則直接回傳快取
     if st.session_state.get('browser_state_loaded'):
         return st.session_state.user_id, st.session_state.user_creds
-
-    # 初始化嘗試計數器
-    if 'sync_attempts' not in st.session_state:
-        st.session_state.sync_attempts = 0
-    st.session_state.sync_attempts += 1
 
     internal_id = "u_" + (get_script_run_ctx().session_id[:8] if get_script_run_ctx() else uuid.uuid4().hex[:6])
     defaults = {
@@ -91,21 +86,14 @@ def get_browser_state():
         }
     }
 
-    # 2. 顯示讀取中元件
-    placeholder = st.empty()
-    with placeholder.container():
-        st.info("⌛ 正在同步您的個人設定...")
-        # 如果嘗試次數過多，顯示跳過按鈕
-        if st.session_state.sync_attempts > 1:
-            if st.button("🚀 跳過同步並直接進入 (如果此畫面停留過久)"):
-                st.session_state.user_id = internal_id
-                st.session_state.user_creds = defaults["creds"]
-                st.session_state.browser_state_loaded = True
-                st.rerun()
-        st.spinner("載入中...")
+    # 初始化 Session State (如果還沒的話)
+    if 'user_id' not in st.session_state:
+        st.session_state.user_id = internal_id
+    if 'user_creds' not in st.session_state:
+        st.session_state.user_creds = defaults["creds"]
 
     try:
-        # 使用 JS 取得多個值
+        # 非同步觸發 JS 讀取
         js_code = """
         (function() {
             try {
@@ -118,50 +106,30 @@ def get_browser_state():
         """
         raw_json = st_javascript(js_code)
         
-        # 如果嘗試超次 (例如 10 次)，直接強制進入 fallback
-        if st.session_state.sync_attempts > 10:
-            st.session_state.user_id = internal_id
-            st.session_state.user_creds = defaults["creds"]
-            st.session_state.browser_state_loaded = True
-            placeholder.empty()
-            return st.session_state.user_id, st.session_state.user_creds
-
-        # 如果 JS 還在跑 (0, None, "null")，且用戶沒按跳過，則暫停等下次重跑
-        if not raw_json or raw_json == 0 or str(raw_json) == "null":
-            st.stop()
+        # 若 JS 有回傳有效值
+        if raw_json and raw_json != 0 and str(raw_json) != "null":
+            data = json.loads(str(raw_json))
             
-        data = json.loads(str(raw_json))
-        
-        # 處理 User ID
-        uid = data.get('user_id')
-        if uid and str(uid) != "null":
-            st.session_state.user_id = str(uid)
-        else:
-            # 初始化 User ID (使用 HTML 注入以防 st_javascript 失效)
-            st.components.v1.html(f"<script>localStorage.setItem('sinopac_user_id', '{internal_id}');</script>", height=0)
-            st.session_state.user_id = internal_id
-        
-        # 處理 Credentials
-        creds_raw = data.get('creds')
-        if creds_raw and str(creds_raw) != "null":
-            try:
-                loaded = json.loads(str(creds_raw))
-                defaults["creds"].update(loaded)
-                defaults["creds"]["_loaded"] = True
-            except:
-                pass
-        
-        st.session_state.user_creds = defaults["creds"]
-        st.session_state.browser_state_loaded = True
-        placeholder.empty()
-        return st.session_state.user_id, st.session_state.user_creds
+            # 靜默更新 Session State
+            uid = data.get('user_id')
+            if uid and str(uid) != "null":
+                st.session_state.user_id = str(uid)
+            
+            creds_raw = data.get('creds')
+            if creds_raw and str(creds_raw) != "null":
+                try:
+                    loaded = json.loads(str(creds_raw))
+                    st.session_state.user_creds.update(loaded)
+                    st.session_state.user_creds["_loaded"] = True
+                except: pass
+            
+            st.session_state.browser_state_loaded = True
 
-    except Exception as e:
-        placeholder.empty()
-        st.session_state.user_id = internal_id
-        st.session_state.user_creds = defaults["creds"]
-        st.session_state.browser_state_loaded = True
-        return st.session_state.user_id, st.session_state.user_creds
+    except Exception:
+        pass
+
+    # 無論 JS 是否回來，都立刻回傳當前狀態
+    return st.session_state.user_id, st.session_state.user_creds
 
 def is_mobile_device():
     """透過 User-Agent 與 Query Parameter 判斷是否為行動裝置 (優化版)"""
