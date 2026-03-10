@@ -2269,10 +2269,35 @@ if st.session_state.active_page == "settings":
         escaped = creds_json.replace("\\", "\\\\").replace("'", "\\'")
         st_javascript(f"localStorage.setItem('sinopac_credentials', '{escaped}');")
         
+        # 寫入 LocalStorage (改回 components.html 但優化語法與延遲)
+        creds_json = json.dumps(new_creds, ensure_ascii=False)
+        escaped_json = creds_json.replace("\\", "\\\\").replace("'", "\\'")
+        
+        # 使用一個具備延遲與錯誤處理的 JS 區塊
+        js_code = f"""
+            <script>
+                try {{
+                    localStorage.setItem('sinopac_credentials', '{escaped_json}');
+                    console.log('Credentials saved safely');
+                    // 標記儲存成功，讓 Python 端知道可以 rerun 了
+                    window.parent.postMessage({{type: 'streamlit:setComponentValue', value: true}}, '*');
+                }} catch (e) {{
+                    console.error('Save failed:', e);
+                }}
+            </script>
+        """
+        # 執行 JS 寫入
+        components.html(js_code, height=0)
+        
+        # 強制等待一小段時間確保瀏覽器寫入完成 (尤其是在 Cloud 環境)
+        time.sleep(1.5)
+        
         # 更新 session_state
         new_creds["_loaded"] = True
         st.session_state.user_creds = new_creds
-        st.success("✅ 設定已儲存至瀏覽器！即將重新整理以套用新金鑰...")
+        st.session_state.browser_state_loaded = False # 強制下次執行時重新檢查
+        
+        st.success("✅ 設定已儲存至瀏覽器！即將自動重新整理...")
         st.rerun()
     
     if bc2.button("🏠 返回", use_container_width=True):
