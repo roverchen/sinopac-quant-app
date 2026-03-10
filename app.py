@@ -71,10 +71,15 @@ except ImportError:
     get_script_run_ctx = None
 
 def get_browser_state():
-    """從 LocalStorage 讀取 User ID 與 憑證。使用 loading guard 確保 JS 回傳前不繼續執行。"""
+    """從 LocalStorage 讀取 User ID 與 憑證。防止 JS 環境不穩定導致的永久卡死。"""
     # 1. 如果已經載入成功，直接回傳
     if st.session_state.get('browser_state_loaded'):
         return st.session_state.user_id, st.session_state.user_creds
+
+    # 初始化嘗試計數器
+    if 'sync_attempts' not in st.session_state:
+        st.session_state.sync_attempts = 0
+    st.session_state.sync_attempts += 1
 
     internal_id = "u_" + (get_script_run_ctx().session_id[:8] if get_script_run_ctx() else uuid.uuid4().hex[:6])
     defaults = {
@@ -86,25 +91,42 @@ def get_browser_state():
         }
     }
 
-    # 2. 顯示讀取中元件 (會在 JS 回傳後自動消失)
+    # 2. 顯示讀取中元件
     placeholder = st.empty()
     with placeholder.container():
         st.info("⌛ 正在同步您的個人設定...")
+        # 如果嘗試次數過多，顯示跳過按鈕
+        if st.session_state.sync_attempts > 1:
+            if st.button("🚀 跳過同步並直接進入 (如果此畫面停留過久)"):
+                st.session_state.user_id = internal_id
+                st.session_state.user_creds = defaults["creds"]
+                st.session_state.browser_state_loaded = True
+                st.rerun()
         st.spinner("載入中...")
 
     try:
         # 使用 JS 取得多個值
         js_code = """
         (function() {
-            return JSON.stringify({
-                user_id: localStorage.getItem('sinopac_user_id'),
-                creds: localStorage.getItem('sinopac_credentials')
-            });
+            try {
+                return JSON.stringify({
+                    user_id: localStorage.getItem('sinopac_user_id'),
+                    creds: localStorage.getItem('sinopac_credentials')
+                });
+            } catch(e) { return "null"; }
         })()
         """
         raw_json = st_javascript(js_code)
         
-        # 關鍵：如果 JS 回傳 0 或 None，表示還在讀取，暫停 Python 執行直到下一次 rerun
+        # 如果嘗試超次 (例如 10 次)，直接強制進入 fallback
+        if st.session_state.sync_attempts > 10:
+            st.session_state.user_id = internal_id
+            st.session_state.user_creds = defaults["creds"]
+            st.session_state.browser_state_loaded = True
+            placeholder.empty()
+            return st.session_state.user_id, st.session_state.user_creds
+
+        # 如果 JS 還在跑 (0, None, "null")，且用戶沒按跳過，則暫停等下次重跑
         if not raw_json or raw_json == 0 or str(raw_json) == "null":
             st.stop()
             
@@ -115,8 +137,8 @@ def get_browser_state():
         if uid and str(uid) != "null":
             st.session_state.user_id = str(uid)
         else:
-            # 初始化 User ID
-            st_javascript(f"localStorage.setItem('sinopac_user_id', '{internal_id}');")
+            # 初始化 User ID (使用 HTML 注入以防 st_javascript 失效)
+            st.components.v1.html(f"<script>localStorage.setItem('sinopac_user_id', '{internal_id}');</script>", height=0)
             st.session_state.user_id = internal_id
         
         # 處理 Credentials
@@ -131,13 +153,14 @@ def get_browser_state():
         
         st.session_state.user_creds = defaults["creds"]
         st.session_state.browser_state_loaded = True
-        placeholder.empty() # 移除讀取中訊息
+        placeholder.empty()
         return st.session_state.user_id, st.session_state.user_creds
 
     except Exception as e:
+        placeholder.empty()
         st.session_state.user_id = internal_id
         st.session_state.user_creds = defaults["creds"]
-        placeholder.empty()
+        st.session_state.browser_state_loaded = True
         return st.session_state.user_id, st.session_state.user_creds
 
 def is_mobile_device():
