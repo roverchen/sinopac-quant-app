@@ -369,9 +369,10 @@ def _load_creds_from_localstorage():
         "max_api_key": "", "max_api_secret": "",
         "person_id": "", "ca_passwd": ""
     }
-    # 如果 session_state 已有已解析的憑證，直接回傳
-    if "user_creds" in st.session_state and st.session_state.user_creds.get("_loaded"):
+    # 防止 st_javascript 觸發過多不必要的 rerun，如果已經載入成功就不再讀取 JS
+    if "credentials_loaded" in st.session_state and st.session_state.credentials_loaded:
         return st.session_state.user_creds
+
     try:
         raw = st_javascript("localStorage.getItem('sinopac_credentials');")
         if raw and raw != 0 and str(raw) != "null":
@@ -379,6 +380,7 @@ def _load_creds_from_localstorage():
             defaults.update(saved)
             defaults["_loaded"] = True
             st.session_state.user_creds = defaults
+            st.session_state.credentials_loaded = True # 標記已載入
     except Exception as e:
         print(f"[Creds] LocalStorage read error: {e}")
     return defaults
@@ -1478,7 +1480,7 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
                 file_time = get_file_time(cache_file)
                 if file_time.date() == get_now().date():
                     df = pd.read_csv(cache_file)
-                    df['ts'] = pd.to_datetime(df['ts']) # 讀取 CSV 後轉換時間格式
+                    df['ts'] = pd.to_datetime(df['ts'], utc=True) # 讀取 CSV 後轉換時間格式
                     source = "💾 本地"
                     # --- [NEW] 安全檢查：若快取缺少必要的指標欄位，強制重算 ---
                     if 'signal' not in df.columns or 'macd' not in df.columns:
@@ -1502,7 +1504,7 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
                                 df.columns = [c.lower() for c in df.columns]
                                 if 'date' in df.columns:
                                     df = df.rename(columns={'date': 'ts'})
-                                df['ts'] = pd.to_datetime(df['ts'])
+                                df['ts'] = pd.to_datetime(df['ts'], utc=True)
                                 # 統一欄位
                                 df = df[['ts', 'open', 'high', 'low', 'close', 'volume']]
                                 source = f"🌐 Yahoo({suffix})"
@@ -1534,7 +1536,7 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
                                 df = df_yf.reset_index()
                                 df.columns = [c.lower() for c in df.columns]
                                 if 'date' in df.columns: df = df.rename(columns={'date': 'ts'})
-                                df['ts'] = pd.to_datetime(df['ts'])
+                                df['ts'] = pd.to_datetime(df['ts'], utc=True)
                                 df = df[['ts', 'open', 'high', 'low', 'close', 'volume']]
                                 source = "🌐 Yahoo"
                             else:
@@ -2031,7 +2033,7 @@ def show_order_dialog(row, user_id, api, max_api, ca_active):
     cache_file = os.path.join(CACHE_DIR, f"{row['代碼']}_y.csv")
     if os.path.exists(cache_file):
         df_selected = pd.read_csv(cache_file)
-        df_selected['ts'] = pd.to_datetime(df_selected['ts'])
+        df_selected['ts'] = pd.to_datetime(df_selected['ts'], utc=True)
         
         # --- 補齊圖表所需的技術指標 ---
         df_selected['ma20'] = df_selected['close'].rolling(window=20).mean()
