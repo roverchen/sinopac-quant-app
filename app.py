@@ -1576,7 +1576,8 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
                     for suffix in ['.TW', '.TWO']:
                         try:
                             t = yf.Ticker(code + suffix)
-                            df_yf = t.history(start=start_date, interval="1d", auto_adjust=True, threads=False)
+                            # [相容性修正] 此環境 yfinance 1.2.0 不支援 history(threads=...) 參數
+                            df_yf = t.history(start=start_date, interval="1d", auto_adjust=True)
                             if not df_yf.empty:
                                 df = df_yf.reset_index()
                                 df.columns = [c.lower() for c in df.columns]
@@ -1605,10 +1606,11 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
                     try:
                         query_code = code.replace('.', '-')
                         ticker = yf.Ticker(query_code)
-                        df_yf = ticker.history(start=start_date, interval="1d", auto_adjust=True, threads=False)
+                        # [相容性修正] 此環境 yfinance 1.2.0 不支援 history(threads=...) 參數
+                        df_yf = ticker.history(start=start_date, interval="1d", auto_adjust=True)
                         
                         if df_yf.empty and market_type == 'CRYPTO':
-                            df_yf = ticker.history(period="1y", interval="1d", auto_adjust=True, threads=False)
+                            df_yf = ticker.history(period="1y", interval="1d", auto_adjust=True)
                         
                         if not df_yf.empty:
                             df = df_yf.reset_index()
@@ -2134,18 +2136,42 @@ def show_order_dialog(row, user_id, api, max_api, ca_active):
 current_watchlist_key = ",".join(watchlist)
 should_sync = False
 
-# --- 每日定時自動任務 (Taipei 06:05) ---
+# --- 每日定時自動任務 (多市場互斥排程) ---
 now_tp = get_now()
-if now_tp.hour >= 6 and now_tp.minute >= 5:
-    today_str = now_tp.strftime("%Y-%m-%d")
-    # 檢查今日系統紀錄是否已存在
+today_str = now_tp.strftime("%Y-%m-%d")
+
+# 定義觸發時間 (Taipei Time)
+MARKET_SCHEDULE = {
+    "US": (4, 5),      # 美股 04:05
+    "CRYPTO": (5, 5),  # 加密貨幣 05:05
+    "TW": (6, 5)       # 台股 06:05
+}
+
+if st.session_state.active_page == "market":
     sys_logs = load_trading_log("system")
-    has_today = any(l['buy_time'].startswith(today_str) for l in sys_logs)
-    
-    if not has_today and st.session_state.active_page == "market":
-        # 觸發自動海選
-        st.session_state.trigger_daily_scan = True
-        st.info("⏰ 偵測到開盤時間，正在為您自動執行本日官方海選...")
+    for m_code, (h, m) in MARKET_SCHEDULE.items():
+        if now_tp.hour >= h and (now_tp.hour > h or now_tp.minute >= m):
+            # 檢查該市場今日是否已執行過 (buy_time 包含日期且 reason 包含市場標籤)
+            # 由於 shared_sys 可能有多市場交替，我們透過 reason 裡的市場識別或 symbol 判定
+            has_executed = False
+            for l in sys_logs:
+                if l['buy_time'].startswith(today_str):
+                    # 簡單判定：如果是美股，代碼通常沒數字；台股有數字；加密貨幣有 -USD
+                    sym = l['symbol']
+                    l_m = "TW"
+                    if "-USD" in sym: l_m = "CRYPTO"
+                    elif sym[0].isalpha() and "." not in sym: l_m = "US"
+                    
+                    if l_m == m_code:
+                        has_executed = True
+                        break
+            
+            if not has_executed:
+                st.session_state.trigger_daily_scan = True
+                st.session_state.scan_market = m_code
+                m_label = {"TW": "台股", "US": "美股", "CRYPTO": "加密貨幣"}.get(m_code)
+                st.info(f"⏰ 偵測到 {m_label} 開盤時間，正在為您自動執行本日官方海選...")
+                break # 一次只觸發一個，優先順序由迴圈決定
 
 # --- 啟動時優先從磁碟載入快取 (行動端穩定性關鍵) ---
 # 使用具備回退機制的 user_id，確保隨時獲得隔離的快取
