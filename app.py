@@ -4,6 +4,7 @@ import time
 import base64
 import json
 import uuid
+import hashlib
 from streamlit_javascript import st_javascript
 from dotenv import load_dotenv
 
