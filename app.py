@@ -95,23 +95,17 @@ def load_user_creds(uid):
     return {}
 
 def get_browser_state():
-    """從 URL 取得 UID，從伺服器檔案讀取憑證。完全不依賴瀏覽器 LocalStorage。"""
+    """從 LocalStorage 取得 UID，從伺服器檔案讀取憑證。URL 保持乾淨。"""
     # 1. 已經載入成功則直接回傳快取
     if st.session_state.get('browser_state_loaded'):
         return st.session_state.user_id, st.session_state.user_creds
 
-    # 取得當前 URL 中的 UID (唯一穩定的識別來源)
-    url_uid = st.query_params.get("uid")
-
-    # 備援內部 ID
-    internal_id = "u_" + (get_script_run_ctx().session_id[:8] if get_script_run_ctx() else uuid.uuid4().hex[:6])
-
-    # 確定使用者 ID
-    uid = url_uid if url_uid else internal_id
+    # 備援 ID (Session 層級，同一個瀏覽器分頁不會變)
+    session_id = "u_" + (get_script_run_ctx().session_id[:8] if get_script_run_ctx() else uuid.uuid4().hex[:6])
 
     # 初始化 Session State
     if 'user_id' not in st.session_state:
-        st.session_state.user_id = uid
+        st.session_state.user_id = session_id
     if 'user_creds' not in st.session_state:
         st.session_state.user_creds = {
             "sj_api_key": "", "sj_secret_key": "",
@@ -119,9 +113,14 @@ def get_browser_state():
             "person_id": "", "ca_passwd": ""
         }
 
-    # 如果 URL 沒 UID，主動填入 (確保 URL 始終帶有唯一識別碼)
-    if not url_uid:
-        st.query_params["uid"] = st.session_state.user_id
+    # 嘗試從 LocalStorage 讀取持久化的 UID
+    try:
+        stored_uid = st_javascript("localStorage.getItem('sinopac_user_id')")
+        # st_javascript 首次呼叫回傳 0，第二次 rerun 才會有真實值
+        if stored_uid and stored_uid != 0 and str(stored_uid) != "null":
+            st.session_state.user_id = str(stored_uid)
+    except Exception:
+        pass
 
     # 從伺服器端讀取憑證 (瞬間完成、無延遲、無阻塞)
     loaded = load_user_creds(st.session_state.user_id)
@@ -2266,6 +2265,13 @@ if st.session_state.active_page == "settings":
         # 存到伺服器端 JSON 檔案 (穩定、不受瀏覽器限制)
         save_user_creds(user_id, new_creds)
         
+        # 同時嘗試將 UID 寫入 LocalStorage (供下次開啟時辨識)
+        st.components.v1.html(f"""
+            <script>
+                try {{ localStorage.setItem('sinopac_user_id', '{user_id}'); }} catch(e) {{}}
+            </script>
+        """, height=0)
+        
         # 更新 session_state
         st.session_state.user_creds = new_creds
         st.session_state.browser_state_loaded = True
@@ -2280,7 +2286,6 @@ if st.session_state.active_page == "settings":
     # --- 🛠️ 診斷資訊 ---
     with st.expander("🛠️ 除錯與診斷資訊"):
         st.write(f"**目前識別碼 (UID):** `{user_id}`")
-        st.write(f"**URL UID:** `{st.query_params.get('uid', '無')}`")
         creds_path = os.path.join("cache", f"creds_{user_id}.json")
         st.write(f"**伺服器端憑證檔案:** `{creds_path}` {'✅ 存在' if os.path.exists(creds_path) else '⚪ 尚未建立'}")
         st.write(f"**已載入金鑰數:** {sum(1 for k in ['sj_api_key','sj_secret_key','max_api_key','max_api_secret'] if user_creds.get(k))}")
@@ -2289,7 +2294,7 @@ if st.session_state.active_page == "settings":
             st.session_state.browser_state_loaded = False
             st.rerun()
             
-        st.info("💡 提示：設定資料現已直接儲存在伺服器端，不再受瀏覽器限制。只要使用相同的 URL（含 `?uid=...`）即可自動取回設定。")
+        st.info("💡 設定資料儲存在伺服器端。UID 以 LocalStorage 持久化，若瀏覽器封鎖 LocalStorage，每次開新分頁會產生新 UID。")
 
     st.stop()
 
