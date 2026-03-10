@@ -1566,31 +1566,28 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
                     })
                     continue
 
-                # 取得合約物件 (支援台股與美股備用機制)
-                contract = None
-                
-                # 1. 優先嘗試標準路徑 (台股：數字開頭)
+                # 1. 台股處理 (數字開頭)
                 if code and code[0].isdigit():
-                    # 2. 獲取台股歷史數據 (統一改用 Yahoo Finance 模式)
-                    status_msg = "❌ 抓取失敗"
                     for suffix in ['.TW', '.TWO']:
                         try:
                             t = yf.Ticker(code + suffix)
-                            # 使用 auto_adjust=True 確保指標一致性，禁用 threads 避免 Segfault
                             df_yf = t.history(start=start_date, interval="1d", auto_adjust=True, threads=False)
                             if not df_yf.empty:
                                 df = df_yf.reset_index()
                                 df.columns = [c.lower() for c in df.columns]
-                                if 'date' in df.columns:
-                                    df = df.rename(columns={'date': 'ts'})
+                                if 'date' in df.columns: df = df.rename(columns={'date': 'ts'})
                                 df['ts'] = pd.to_datetime(df['ts'], utc=True, errors='coerce')
-                                # 統一欄位
                                 df = df[['ts', 'open', 'high', 'low', 'close', 'volume']]
                                 source = f"🌐 Yahoo({suffix})"
                                 break
-                        except: continue
+                        except Exception as e:
+                            # 偵測頻率限制
+                            if "Too Many Requests" in str(e) or "Rate limited" in str(e):
+                                is_rate_limited = True
+                                break
+                            continue
                     
-                    if df is None:
+                    if df is None and not is_rate_limited:
                         if not quiet_mode:
                             st.warning(f"無法取得台股 {code} 的 K 線資料")
                         data_list.append({
@@ -1599,50 +1596,42 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
                         })
                         continue
                 else:
-                    # 3. 處理美股 (透過 yfinance 補完計畫)
+                    # 2. 美股/加密貨幣處理
                     try:
-                        # 確保代碼符號對 Yahoo 友善 (如 BRK.B -> BRK-B)
                         query_code = code.replace('.', '-')
                         ticker = yf.Ticker(query_code)
-                        try:
-                            # 優先嘗試 start_date，禁用 threads 避免 Segfault
-                            df_yf = ticker.history(start=start_date, interval="1d", auto_adjust=True, threads=False)
-                            if df_yf.empty and market_type == 'CRYPTO':
-                                # 幣圈備援：若 start_date 抓不到，嘗試 period='1y' (解決時區與開始日期偏移問題)
-                                df_yf = ticker.history(period="1y", interval="1d", auto_adjust=True, threads=False)
-                            
-                            if not df_yf.empty:
-                                df = df_yf.reset_index()
-                                df.columns = [c.lower() for c in df.columns]
-                                if 'date' in df.columns: df = df.rename(columns={'date': 'ts'})
-                                df['ts'] = pd.to_datetime(df['ts'], utc=True, errors='coerce')
-                                df = df[['ts', 'open', 'high', 'low', 'close', 'volume']]
-                                source = "🌐 Yahoo"
-                            else:
-                                if not quiet_mode:
-                                    st.warning(f"Yahoo Finance 查無代碼 {code} 的歷史資料")
-                                data_list.append({
-                                    "代碼": code, "名稱": stock_name, "最新價格": 0, "操作建議": "❌ 無有效數據",
-                                    "一年位階": "-", "年線乖離": "-", "MA20乖離": "-", "MACD狀態": "-", "綜合評分": -1
-                                })
-                        except Exception as yf_err:
-                            if "Too Many Requests" in str(yf_err) or "Rate limited" in str(yf_err):
-                                is_rate_limited = True
-                                st.error("⚠️ Yahoo Finance 頻率限制 (Too Many Requests)，分析將自動停止以維護連線穩定。")
-                            else:
-                                if not quiet_mode:
-                                    st.error(f"單一數據抓取異常 ({code}): {yf_err}")
+                        df_yf = ticker.history(start=start_date, interval="1d", auto_adjust=True, threads=False)
                         
-                        # 個別抓取後的微小延遲
-                        time.sleep(0.3)
-                    except Exception as yf_outer_err:
-                        st.error(f"資料抓取過程中發生未預期錯誤 ({code}): {yf_outer_err}")
-                        continue
+                        if df_yf.empty and market_type == 'CRYPTO':
+                            df_yf = ticker.history(period="1y", interval="1d", auto_adjust=True, threads=False)
+                        
+                        if not df_yf.empty:
+                            df = df_yf.reset_index()
+                            df.columns = [c.lower() for c in df.columns]
+                            if 'date' in df.columns: df = df.rename(columns={'date': 'ts'})
+                            df['ts'] = pd.to_datetime(df['ts'], utc=True, errors='coerce')
+                            df = df[['ts', 'open', 'high', 'low', 'close', 'volume']]
+                            source = "🌐 Yahoo"
+                        else:
+                            if not quiet_mode:
+                                st.warning(f"Yahoo Finance 查無代碼 {code} 的歷史資料")
+                            data_list.append({
+                                "代碼": code, "名稱": stock_name, "最新價格": 0, "操作建議": "❌ 無有效數據",
+                                "一年位階": "-", "年線乖離": "-", "MA20乖離": "-", "MACD狀態": "-", "綜合評分": -1
+                            })
+                    except Exception as yf_err:
+                        if "Too Many Requests" in str(yf_err) or "Rate limited" in str(yf_err):
+                            is_rate_limited = True
+                            st.error("⚠️ Yahoo Finance 頻率限制 (Too Many Requests)，分析將自動停止。")
+                        else:
+                            if not quiet_mode:
+                                st.error(f"資料抓取異常 ({code}): {yf_err}")
+                
+                # 抓取後的微小延遲
+                time.sleep(0.3)
                 
                 # 確認資料有效性
                 if df is None or df.empty:
-                    if not quiet_mode:
-                        st.warning(f"代碼 {code} 無法獲取有效資料")
                     continue
 
             # 如果成功取得資料且不是從本地快取讀取的，則儲存到本地快取 (此處僅存原始數據，指標會統一在下方計算)
