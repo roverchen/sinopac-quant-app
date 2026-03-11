@@ -783,7 +783,8 @@ def check_revenue_momentum(code):
         if latest_yoy > 0:
             return f"📈 成長({latest_yoy:.1f}%)", True
         if latest_yoy > prev_yoy:
-        return "無法取得", True
+            return f"📉 轉機({latest_yoy:.1f}%)", True
+        return f"📉 衰退({latest_yoy:.1f}%)", True
     except:
         return "無法取得", True
 
