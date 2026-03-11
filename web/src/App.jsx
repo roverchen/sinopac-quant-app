@@ -4,7 +4,7 @@ import { LayoutDashboard, ListFilter, Settings, ShieldCheck, TrendingUp, Cpu, Lo
 import { motion, AnimatePresence } from 'framer-motion'
 import Watchlist from './components/Watchlist'
 import Login from './components/Login'
-import Settings from './components/Settings'
+import SettingsPage from './components/Settings'
 import Dashboard from './components/Dashboard'
 import StrategyScan from './components/StrategyScan'
 import TradingControl from './components/TradingControl'
@@ -200,7 +200,7 @@ function App() {
               {activeTab === 'watchlist' && <Watchlist />}
               {activeTab === 'scan' && <StrategyScan />}
               {activeTab === 'trading' && <TradingControl />}
-              {activeTab === 'settings' && <Settings />}
+              {activeTab === 'settings' && <SettingsPage />}
               
               {(['dashboard', 'watchlist', 'scan', 'trading', 'settings'].indexOf(activeTab) === -1) && (
                 <div className="mt-10 p-12 border-2 border-dashed border-slate-800 rounded-3xl flex flex-col items-center justify-center text-slate-500">
