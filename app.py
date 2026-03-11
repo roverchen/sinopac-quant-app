@@ -519,8 +519,8 @@ def save_results_cache(df, is_big_scan=False, market=None, user_id="shared"):
     except Exception as e:
         print(f"快取存檔失敗: {e}")
 
-def load_results_cache(user_id="shared", market=None):
-    """從磁碟載入上一次的掃描結果，支援市場級別的每日共享快取"""
+def load_results_cache(user_id="shared", market=None, shallow=True):
+    """從磁碟載入掃描結果。shallow=True 時不載入大體積的 dfs 欄位以節省記憶體。"""
     # 1. 優先檢查是否為「當日已掃過」的共享快取
     if market:
         shared_file = os.path.join(CACHE_DIR, f"shared_results_{market}.pkl")
@@ -532,11 +532,28 @@ def load_results_cache(user_id="shared", market=None):
                     cache_day = data.get('timestamp', '').split(' ')[0]
                     today_str = get_now().strftime("%Y-%m-%d")
                     if cache_day == today_str:
+                        if shallow and 'dfs' in data:
+                            del data['dfs'] # 刪除大體積 K 線池以節省記憶體
                         return data
             except: pass
 
     # 2. 回退到個人專屬快取 (Session 恢復)
     return None
+
+def load_pool_for_codes(market, codes):
+    """精準加載：僅從快取檔案中提取指定代碼的 K 線 DataFrames，極大地避免記憶體溢出。"""
+    if not market or not codes: return {}
+    shared_file = os.path.join(CACHE_DIR, f"shared_results_{market}.pkl")
+    if not os.path.exists(shared_file): return {}
+    
+    try:
+        with open(shared_file, "rb") as f:
+            full_data = pickle.load(f)
+            pool = full_data.get('dfs', {})
+            # 過濾出需要的代碼
+            return {c: pool[c] for c in codes if c in pool}
+    except:
+        return {}
 
 # --- 結果清單工具 ---
 
@@ -1086,9 +1103,10 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
     if market_type == 'CRYPTO':
         watchlist = [t for t in watchlist if "-USD" in str(t)]
     elif market_type == 'TW':
-        watchlist = [t for t in watchlist if str(t)[0].isdigit()]
+        # [修正] 使用 extract_stock_code 提取後再判斷開頭是否為數字，確保 "名稱(代碼)" 不會被過濾
+        watchlist = [t for t in watchlist if extract_stock_code(t)[0:1].isdigit()]
     elif market_type == 'US':
-        watchlist = [t for t in watchlist if str(t)[0].isalpha() and "-USD" not in str(t)]
+        watchlist = [t for t in watchlist if extract_stock_code(t)[0:1].isalpha() and "-USD" not in str(t)]
         
     data_list = []
     is_rate_limited = False 
@@ -1144,21 +1162,20 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
     if 'pooled_dfs' not in st.session_state:
         st.session_state.pooled_dfs = {}
         
-    # 檢查是否有名單中的代碼不在現有池子裡，若有則嘗試從磁碟重載對應市場
-    # 使用 extract_stock_code 確保對齊
+    # 檢查是否有名單中的代碼不在現有池子裡，若有則嘗試從磁碟「精準補完」
     normalized_watchlist = [extract_stock_code(c) for c in watchlist]
-    missing_any = any(c not in st.session_state.pooled_dfs for c in normalized_watchlist)
+    missing_codes = [c for c in normalized_watchlist if c not in st.session_state.pooled_dfs]
     
-    if missing_any:
+    if missing_codes:
         # 如果有指定市場，則優先載入該市場；否則尝试載入所有可能市場以補全 Watchlist
-        # 即使池子不是空的，只要有缺漏就嘗試「增量」載入共享數據
         markets_to_check = [market_type] if market_type else ["TW", "US", "CRYPTO"]
         for m in markets_to_check:
             if not m: continue
-            cached_data = load_results_cache(market=m)
-            if cached_data and "dfs" in cached_data:
-                st.session_state.pooled_dfs.update(cached_data["dfs"])
-                print(f"[Pool] Updated {len(cached_data['dfs'])} stocks from {m} cache.")
+            # 改用 load_pool_for_codes 精準加載，避免一次載入上千檔導致 Cloud 當機
+            new_dfs = load_pool_for_codes(m, missing_codes)
+            if new_dfs:
+                st.session_state.pooled_dfs.update(new_dfs)
+                print(f"[Pool] Memory-Optimized update: {len(new_dfs)} stocks from {m} cache.")
 
     pool = st.session_state.pooled_dfs
     
