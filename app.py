@@ -1751,42 +1751,46 @@ def show_order_dialog(row, user_id, api, max_api, ca_active):
 current_watchlist_key = ",".join(watchlist)
 should_sync = False
 
-# --- 每日定時自動任務 (多市場互斥排程) ---
-now_tp = get_now()
-today_str = now_tp.strftime("%Y-%m-%d")
+    # --- 每日定時自動任務 (多市場互斥排程) ---
+    now_tp = get_now()
+    today_str = now_tp.strftime("%H:%M:%S") # 用於日誌
+    
+    # 初始化自動執行追蹤器 (Session 層級)
+    if "auto_last_run" not in st.session_state:
+        st.session_state.auto_last_run = {}
 
-# 定義觸發時間 (Taipei Time)
-MARKET_SCHEDULE = {
-    "US": (6, 0),      # 美股 06:00
-    "CRYPTO": (23, 5), # 加密貨幣 23:05
-    "TW": (14, 0)      # 台股 14:00
-}
+    # 如果「手動」正在執行海選，暫停自動跳轉偵測，避免市場衝突
+    if not st.session_state.get("is_big_scan"):
+        for m_code, (h, m) in MARKET_SCHEDULE.items():
+            if now_tp.hour >= h and (now_tp.hour > h or now_tp.minute >= m):
+                # 1. 檢查 Session 今日是否已嘗試自動執行過，避免頻率限制時無限循環跳轉
+                last_run_day = st.session_state.auto_last_run.get(m_code)
+                if last_run_day == now_tp.date():
+                    continue
 
-if st.session_state.active_page == "market":
-    sys_logs = load_trading_log("system")
-    for m_code, (h, m) in MARKET_SCHEDULE.items():
-        if now_tp.hour >= h and (now_tp.hour > h or now_tp.minute >= m):
-            # 檢查該市場今日是否已執行過 (buy_time 包含日期且 reason 包含市場標籤)
-            # 由於 shared_sys 可能有多市場交替，我們透過 reason 裡的市場識別或 symbol 判定
-            has_executed = False
-            for l in sys_logs:
-                if l['buy_time'].startswith(today_str):
-                    # 簡單判定：如果是美股，代碼通常沒數字；台股有數字；加密貨幣有 -USD
-                    sym = l['symbol']
-                    l_m = "TW"
-                    if "-USD" in sym: l_m = "CRYPTO"
-                    elif sym[0].isalpha() and "." not in sym: l_m = "US"
+                # 2. 檢查資料庫/日誌今日是否已執行成功
+                has_executed = False
+                for l in sys_logs:
+                    if l['buy_time'].startswith(now_tp.strftime("%Y-%m-%d")):
+                        sym = l['symbol']
+                        l_m = "TW"
+                        if "-USD" in sym: l_m = "CRYPTO"
+                        elif sym[0].isalpha() and "." not in sym: l_m = "US"
+                        if l_m == m_code:
+                            has_executed = True
+                            break
+                
+                if not has_executed:
+                    # 標記為今日已嘗試執行，防止重複跳轉 (即使失敗也等下次手動觸發)
+                    st.session_state.auto_last_run[m_code] = now_tp.date()
                     
-                    if l_m == m_code:
-                        has_executed = True
-                        break
-            
-            if not has_executed:
-                st.session_state.trigger_daily_scan = True
-                st.session_state.scan_market = m_code
-                m_label = {"TW": "台股", "US": "美股", "CRYPTO": "加密貨幣"}.get(m_code)
-                st.info(f"⏰ 偵測到 {m_label} 開盤時間，正在為您自動執行本日官方海選...")
-                break # 一次只觸發一個，優先順序由迴圈決定
+                    st.session_state.trigger_daily_scan = True
+                    st.session_state.scan_market = m_code
+                    st.session_state.is_big_scan = True # 正式宣示主權
+                    m_label = {"TW": "台股", "US": "美股", "CRYPTO": "加密貨幣"}.get(m_code)
+                    st.info(f"⏰ 偵測到 {m_label} 開盤時間，正在為您自動執行本日官方海選...")
+                    st.rerun() # 立即重刷以套用新市場設定
+                    break
 
 # --- 啟動時優先從磁碟載入快取 (行動端穩定性關鍵) ---
 # 使用具備回退機制的 user_id，確保隨時獲得隔離的快取
