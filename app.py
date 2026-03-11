@@ -2145,6 +2145,16 @@ if st.session_state.active_page == "settings":
                         st.session_state.last_update = sync_data["timestamp"]
                         st.session_state.results = sync_df
                         st.toast(f"🚀 {sync_m} 離線數據已就緒", icon="📡")
+
+                        # --- 🧪 模擬交易：自動跟單 (第二類：Local 同步觸發) ---
+                        # 如果上傳的是「大選股」結果，且尚未有今日該市場的系統單，則自動補上一筆
+                        if sync_data.get("is_big_scan") and not sync_df.empty:
+                            top_stock = sync_df.iloc[0]
+                            # 補齊市場標籤，確保 record_trade 的 market_mark 邏輯能正確識別
+                            reason = f"({sync_m}) {build_buy_reason(top_stock)}"
+                            if record_trade("shared_sys", "Auto", top_stock['代碼'], top_stock['名稱'], top_stock['最新價格'], reason, is_system=True):
+                                st.success(f"🤖 偵測到海選同步，系統已自動為「全域共享」模擬下單：{top_stock['代碼']} {top_stock['名稱']}")
+                                st.toast(f"📈 系統同步買入：{top_stock['代碼']}", icon="📥")
                     else:
                         st.error(f"❌ 市場不匹配：檔案內容似乎不屬於 {sync_m}。")
             except Exception as e:
