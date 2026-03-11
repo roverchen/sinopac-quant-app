@@ -1785,7 +1785,19 @@ def show_order_dialog(row, user_id, api, max_api, ca_active):
 
     if df_selected is not None:
         # 確保 ts 為 datetime 且排序正確
-        df_selected['ts'] = pd.to_datetime(df_selected['ts'], utc=True, errors='coerce')
+        if 'ts' not in df_selected.columns:
+            if 'Date' in df_selected.columns:
+                df_selected = df_selected.rename(columns={'Date': 'ts'})
+            elif 'date' in df_selected.columns:
+                df_selected = df_selected.rename(columns={'date': 'ts'})
+            else:
+                df_selected = df_selected.reset_index()
+                df_selected.columns = [c.lower() for c in df_selected.columns]
+                if 'date' in df_selected.columns:
+                    df_selected = df_selected.rename(columns={'date': 'ts'})
+
+        if 'ts' in df_selected.columns:
+            df_selected['ts'] = pd.to_datetime(df_selected['ts'], utc=True, errors='coerce')
         df_selected = df_selected.sort_values("ts")
         
         # --- 補齊圖表所需的技術指標 ---

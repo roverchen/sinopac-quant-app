@@ -82,6 +82,9 @@ def fetch_and_analyze_local(watchlist, market_type='TW'):
                 if t in batch_data:
                     d = batch_data[t].dropna()
                     if not d.empty:
+                        d = d.reset_index()
+                        d.columns = [c.lower() for c in d.columns]
+                        if 'date' in d.columns: d = d.rename(columns={'date': 'ts'})
                         all_dfs[ticker_to_code[t]] = d
         except Exception as e:
             print(f"❌ 批次下載失敗: {e}")
