@@ -1766,10 +1766,27 @@ def show_order_dialog(row, user_id, api, max_api, ca_active):
     # --- [NEW] 在對話框內顯示 K 線與 MACD 指標 ---
     st.divider()
     st.markdown(f"#### 📊 {row['代碼']} {row['名稱']} 技術圖表")
-    cache_file = os.path.join(CACHE_DIR, f"{row['代碼']}_y.csv")
-    if os.path.exists(cache_file):
-        df_selected = pd.read_csv(cache_file)
+    
+    df_selected = None
+    # 1. 優先從 Pooled Data (打包同步來的詳細 K 線) 獲取
+    pooled_data = st.session_state.get("pooled_dfs", {})
+    if row['代碼'] in pooled_data:
+        df_selected = pooled_data[row['代碼']]
+        # 打包的資料可能是純 DataFrame 或已處理過的
+        if isinstance(df_selected, pd.DataFrame) and not df_selected.empty:
+            source = "📡 離線同步"
+    
+    # 2. 回退到本地 CSV 快取
+    if df_selected is None:
+        cache_file = os.path.join(CACHE_DIR, f"{row['代碼']}_y.csv")
+        if os.path.exists(cache_file):
+            df_selected = pd.read_csv(cache_file)
+            source = "💾 本地快取"
+
+    if df_selected is not None:
+        # 確保 ts 為 datetime 且排序正確
         df_selected['ts'] = pd.to_datetime(df_selected['ts'], utc=True, errors='coerce')
+        df_selected = df_selected.sort_values("ts")
         
         # --- 補齊圖表所需的技術指標 ---
         df_selected['ma20'] = df_selected['close'].rolling(window=20).mean()
@@ -1859,6 +1876,8 @@ if "results" not in st.session_state:
             st.session_state.last_update = cache_data["timestamp"]
             st.session_state.is_big_scan = cache_data.get("is_big_scan", False)
             st.session_state.scan_market = cache_data.get("scan_market")
+            st.session_state.pooled_dfs = cache_data.get("dfs", {}) # 載入詳細 K 線池
+            
             st.session_state.last_watchlist = current_watchlist_key
             st.toast("💾 已從快取恢復上次數據", icon="📥")
         else:
@@ -2108,6 +2127,7 @@ if st.session_state.active_page == "settings":
                         pickle.dump(sync_data, f)
                     
                     st.success(f"✅ {sync_m} 數據同步成功！所有使用者現在都能看到您上傳的最新結果。")
+                    st.session_state.pooled_dfs = sync_data.get("dfs", {}) # 即時生效於當前 Session
                     st.toast(f"🚀 {sync_m} 離線數據已就緒", icon="📡")
                 else:
                     st.error(f"❌ 市場不匹配：檔案內容似乎不屬於 {sync_m}。")

@@ -6,6 +6,8 @@ import pickle
 from shioaji import Order
 from shioaji.constant import Action, StockPriceType, OrderType
 
+import pandas as pd
+import numpy as np
 # --- 模擬與初始化邏輯 ---
 
 class MockApi:
@@ -47,6 +49,29 @@ def init_api(api_key, secret_key):
     return api
 
 # --- 合約與搜尋邏輯 ---
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def fetch_sp500_tickers():
+    """從 Wikipedia 抓取 S&P 500 標的清單"""
+    try:
+        import ssl
+        ssl_context = ssl._create_unverified_context()
+        url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+        # 使用 requests 配合 verify=False 或是直接讓 pandas 處理但帶入 ssl context
+        # 由於 pandas 依賴 urllib/lxml，這裡最保險是用 requests
+        import requests
+        headers = {"User-Agent": "Mozilla/5.0"}
+        response = requests.get(url, headers=headers, verify=False, timeout=15)
+        tables = pd.read_html(response.text)
+        df = tables[0]
+        # Wikipedia 格式：'Symbol', 'Security'
+        tickers = df.set_index('Symbol')['Security'].to_dict()
+        # [相容性修正] Wikipedia 符號中的 . 應轉為 - 供 Yahoo 使用 (例如 BRK.B -> BRK-B)
+        processed = {k.replace('.', '-'): v for k, v in tickers.items()}
+        return processed
+    except Exception as e:
+        print(f"⚠️ S&P 500 抓取失敗: {e}")
+        return {}
 
 @st.cache_data(show_spinner=False)
 def get_stock_name_map(_api):
@@ -94,6 +119,11 @@ def get_stock_name_map(_api):
         "CMG": "Chipotle"
     }
     code_to_name.update(US_STOCK_FALLBACK)
+    
+    # --- 🇺🇸 S&P 500 動態補全 (嘗試獲取 500+ 標的) ---
+    sp500 = fetch_sp500_tickers()
+    if sp500:
+        code_to_name.update(sp500)
 
     # 嘗試從 Shioaji 抓取最新合約 (台股)
     is_mock = isinstance(_api, MockApi)

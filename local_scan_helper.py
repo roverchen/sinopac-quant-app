@@ -75,8 +75,7 @@ def fetch_and_analyze_local(watchlist, market_type='TW'):
                 threads=True, 
                 progress=False, 
                 timeout=30, 
-                auto_adjust=True,
-                session=YF_SESSION
+                auto_adjust=True
             )
             
             for t in tickers:
@@ -182,7 +181,7 @@ def fetch_and_analyze_local(watchlist, market_type='TW'):
             print(f"⚠️ 分析 {code} 失敗: {e}")
             
     print(f"✅ 分析完成，成功取得 {len(data_list)} 筆數據。")
-    return pd.DataFrame(data_list)
+    return pd.DataFrame(data_list), all_dfs
 
 def main():
     parser = argparse.ArgumentParser(description='Sinopac Local Scan Helper')
@@ -201,15 +200,16 @@ def main():
         print("❌ 無法獲取名單，請檢查 sinopac_api.py 或相關權限。")
         return
         
-    df_results = fetch_and_analyze_local(watchlist, market_type=market)
+    df_results, all_dfs = fetch_and_analyze_local(watchlist, market_type=market)
     
     if not df_results.empty:
         # 排序
         df_results = df_results.sort_values(by="綜合評分", ascending=False)
         
-        # 封裝成 app.py 識別的格式
+        # 封裝成 app.py 識別的格式，並打包所有 K 線歷史 (解決 Cloud 版缺少 CSV 問題)
         data = {
             "df": df_results,
+            "dfs": all_dfs,  # 將所有標的的詳細歷史也打包進去
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "is_big_scan": True,
             "scan_market": market
