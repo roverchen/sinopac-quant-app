@@ -11,6 +11,7 @@ import argparse
 
 # 導入 Sinopac API 邏輯
 import sinopac_api
+import re # 用於解析 secrets.toml
 
 # 設定環境
 CACHE_DIR = "cache"
@@ -193,14 +194,12 @@ def main():
     
     market = args.market
     
-    # 獲交代碼名單
-    # 注意：本地運行時如果要掃台股，需要 SINOPAC 帳密設定在環境變數或 secrets.toml 中
-    # 這裡我們主要針對被 YF 封鎖的 CRYPTO/US
-    print(f"🔍 正在獲取 {market} 代碼清單...")
+    print(f"🔍 正在獲取 {market} 代碼清單 (不依賴 Shioaji 登入)...")
+    # 直接傳入 None，sinopac_api 會自動使用公開來源抓取清單
     watchlist = sinopac_api.get_mass_scan_list(None, market=market)
     
     if not watchlist:
-        print("❌ 無法獲取名單，請檢查 sinopac_api.py 或相關權限。")
+        print("❌ 無法獲取名單，請確認網路連線或 sinopac_api.py 邏輯。")
         return
         
     df_results, all_dfs = fetch_and_analyze_local(watchlist, market_type=market)

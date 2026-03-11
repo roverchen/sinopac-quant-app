@@ -8,6 +8,7 @@ from shioaji.constant import Action, StockPriceType, OrderType
 
 import pandas as pd
 import numpy as np
+import requests
 # --- 模擬與初始化邏輯 ---
 
 class MockApi:
@@ -73,6 +74,39 @@ def fetch_sp500_tickers():
         print(f"⚠️ S&P 500 抓取失敗: {e}")
         return {}
 
+@st.cache_data(ttl=86400, show_spinner=False)
+def fetch_tw_tickers():
+    """從公開來源 (TWSE) 獲取台股代碼清單 (備援方案)"""
+    try:
+        # 使用證交所公開資料 (僅示範，實際上可連接更多來源)
+        url = "https://isin.twse.com.tw/isin/C_public.jsp?strMode=2"
+        response = requests.get(url, verify=False, timeout=15)
+        response.encoding = 'big5'
+        tables = pd.read_html(response.text)
+        df = tables[0]
+        # 證交所格式：第一欄為 "有價證券代號及名稱"，格式為 "2330 台積電"
+        mapping = {}
+        for val in df[0].dropna():
+            parts = str(val).split('\u3000') # 這是全型空格
+            if len(parts) == 2 and parts[0].isdigit() and len(parts[0]) == 4:
+                mapping[parts[0]] = parts[1]
+        
+        # OTC (上櫃)
+        url_otc = "https://isin.twse.com.tw/isin/C_public.jsp?strMode=4"
+        response_otc = requests.get(url_otc, verify=False, timeout=15)
+        response_otc.encoding = 'big5'
+        tables_otc = pd.read_html(response_otc.text)
+        df_otc = tables_otc[0]
+        for val in df_otc[0].dropna():
+            parts = str(val).split('\u3000')
+            if len(parts) == 2 and parts[0].isdigit() and len(parts[0]) == 4:
+                mapping[parts[0]] = parts[1]
+                
+        return mapping
+    except Exception as e:
+        print(f"⚠️ 台股清單抓取失敗: {e}")
+        return {}
+
 @st.cache_data(show_spinner=False)
 def get_stock_name_map(_api):
     """建立 代碼 -> 名稱 的映射表，包含台、美 (備用專案) 市場"""
@@ -126,7 +160,7 @@ def get_stock_name_map(_api):
         code_to_name.update(sp500)
 
     # 嘗試從 Shioaji 抓取最新合約 (台股)
-    is_mock = isinstance(_api, MockApi)
+    is_mock = isinstance(_api, MockApi) or _api is None
     if not is_mock and hasattr(_api, "Contracts") and hasattr(_api.Contracts, "Stocks"):
         stocks = _api.Contracts.Stocks
         for market_attr in ["TSE", "OTC"]:
@@ -136,6 +170,12 @@ def get_stock_name_map(_api):
                     code_to_name[stock.code] = stock.name
             except:
                 pass
+                
+    else:
+        # 如果沒有 API 登入，則嘗試從公開來源補完 (本地掃描需求)
+        tw_fallback = fetch_tw_tickers()
+        if tw_fallback:
+            code_to_name.update(tw_fallback)
                 
     return code_to_name
 
