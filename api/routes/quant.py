@@ -88,13 +88,24 @@ async def analyze_watchlist(request: StockAnalysisRequest):
     # 這裡未來可以優先從 data_pool 讀取以加速
     data_pool = fetch_batch_data(request.watchlist, request.market_type)
     
+    # 取得名稱對照表
+    tw_symbols = fetch_tw_symbols()
+    us_symbols = fetch_us_symbols()
+    
     for symbol in request.watchlist:
         code = extract_stock_code(symbol)
         df = data_pool.get(symbol)
         
         if df is not None:
-            # 嘗試取得名稱 (雖然 watchlist 可能沒給，但可以從 TW/US 名單補)
-            name = "未知"
+            # 自動從對照表中補齊名稱
+            name = tw_symbols.get(code)
+            if not name:
+                name = us_symbols.get(code)
+            if not name:
+                if "BTC" in code: name = "Bitcoin"
+                elif "ETH" in code: name = "Ethereum"
+                else: name = "未知"
+                
             analysis = analyze_stock(df, code, name, request.defense_weight, request.market_type)
             results.append(AnalysisResult(**analysis))
         else:
