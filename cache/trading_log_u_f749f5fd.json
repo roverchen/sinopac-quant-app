@@ -1,0 +1,18 @@
+[
+  {
+    "trade_id": "f01e7e5f",
+    "category": "Manual",
+    "trade_type": "Real",
+    "shares": 260,
+    "symbol": "DOT-USD",
+    "name": "波卡幣",
+    "buy_time": "2026-03-09 10:46:52",
+    "buy_price": 1.5,
+    "reason": "MAX 實盤買入 (19014870051)",
+    "status": "Open",
+    "sell_time": null,
+    "sell_price": null,
+    "pnl": null,
+    "pnl_percent": null
+  }
+]

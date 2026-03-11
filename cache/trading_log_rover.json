@@ -1,0 +1,18 @@
+[
+  {
+    "trade_id": "e7b2e8cc",
+    "category": "Manual",
+    "trade_type": "Simulated",
+    "shares": 1000,
+    "symbol": "META",
+    "name": "Meta",
+    "buy_time": "2026-03-10 23:27:19",
+    "buy_price": 651.8,
+    "reason": "[強勢] (配置:50%成長/50%防禦) 位階:57.4% | 年偏:-1.8% | MA20偏:+1.1% | MA20價:651.8 | ATR損:612.7",
+    "status": "Open",
+    "sell_time": null,
+    "sell_price": null,
+    "pnl": null,
+    "pnl_percent": null
+  }
+]

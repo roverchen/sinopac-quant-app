@@ -1,0 +1,18 @@
+[
+  {
+    "trade_id": "1c01a041",
+    "category": "Manual",
+    "trade_type": "Simulated",
+    "shares": 1000,
+    "symbol": "2330",
+    "name": "台積電",
+    "buy_time": "2026-03-09 22:45:50",
+    "buy_price": 1866.8,
+    "reason": "[強勢] (配置:50%成長/50%防禦) 位階:83.5% | 年偏:+42.1% | MA20偏:-3.0% | MA20價:1866.8 | ATR損:1666.2",
+    "status": "Open",
+    "sell_time": null,
+    "sell_price": null,
+    "pnl": null,
+    "pnl_percent": null
+  }
+]

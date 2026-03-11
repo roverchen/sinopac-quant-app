@@ -25,3 +25,9 @@ multitasking==0.0.12
 ta==0.5.25
 finmind==1.9.6
 altair==6.0.0
+fastapi==0.115.11
+uvicorn==0.34.0
+google-cloud-storage==2.14.0
+google-cloud-firestore==2.14.0
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
