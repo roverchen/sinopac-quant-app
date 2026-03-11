@@ -1,5 +1,3 @@
-import yfinance as yf
-import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from api.services.quant_service import get_yahoo_ticker
 
@@ -8,6 +6,8 @@ def fetch_batch_data(symbols, market_type='TW', period="1y"):
     使用 ThreadPoolExecutor 併發抓取多檔股票數據。
     比單一循環抓取快得多。
     """
+    import yfinance as yf
+    import pandas as pd
     results = {}
     tickers_map = {s: get_yahoo_ticker(s, market_type) for s in symbols}
     

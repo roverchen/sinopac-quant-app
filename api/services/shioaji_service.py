@@ -1,6 +1,3 @@
-import shioaji as sj
-from shioaji import Order
-from shioaji.constant import Action, StockPriceType, OrderType
 import os
 import threading
 import random
@@ -28,16 +25,13 @@ class MockShioajiClient:
 
 class ShioajiService:
     _instance_lock = threading.Lock()
-    _instances: Dict[str, sj.Shioaji] = {}
-
     @classmethod
-    def get_api_client(cls, email: str) -> Optional[sj.Shioaji]:
+    def get_api_client(cls, email: str):
         """
         為特定使用者取得或建立 Shioaji API 實例（Singleton per user）。
         """
         with cls._instance_lock:
             if email in cls._instances:
-                # 簡單檢查是否還在登入狀態（這裡 shioaji 沒有直接的 is_connected，通常靠呼叫測試）
                 return cls._instances[email]
 
             creds = get_user_credentials(email)
@@ -45,6 +39,7 @@ class ShioajiService:
                 return None
 
             try:
+                import shioaji as sj
                 api = sj.Shioaji()
                 api.login(
                     api_key=creds['shioaji_api_key'],
@@ -59,10 +54,16 @@ class ShioajiService:
                 return mock_api
 
     @classmethod
-    def place_order(cls, email: str, symbol: str, qty: int, price: float, action: Action = Action.Buy):
+    def place_order(cls, email: str, symbol: str, qty: int, price: float, action=None):
         """
         執行下單操作。
         """
+        from shioaji.constant import Action, StockPriceType, OrderType
+        from shioaji import Order
+        
+        if action is None:
+            action = Action.Buy
+            
         api = cls.get_api_client(email)
         if not api:
             raise Exception("無法取得 API 連線，請檢查憑證設定。")

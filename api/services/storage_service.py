@@ -4,22 +4,33 @@ import pickle
 from google.cloud import storage, firestore
 from api.config import PROJECT_ID, CACHE_DIR
 
-# 初始化 Firestore 用戶端
-try:
-    db = firestore.Client(project=PROJECT_ID)
-except Exception as e:
-    print(f"[Storage] Firestore client failed: {e}. Falling back to local.")
-    db = None
+# 延遲初始化 Firestore 用戶端
+_db = None
+def get_db():
+    global _db
+    if _db is None:
+        try:
+            from google.cloud import firestore
+            _db = firestore.Client(project=PROJECT_ID)
+        except Exception as e:
+            print(f"[Storage] Firestore client failed: {e}")
+    return _db
 
-# 初始化 GCS 用戶端
-try:
-    gcs = storage.Client(project=PROJECT_ID)
-except Exception as e:
-    print(f"[Storage] GCS client failed: {e}. Falling back to local.")
-    gcs = None
+# 延遲初始化 GCS 用戶端
+_gcs = None
+def get_gcs():
+    global _gcs
+    if _gcs is None:
+        try:
+            from google.cloud import storage
+            _gcs = storage.Client(project=PROJECT_ID)
+        except Exception as e:
+            print(f"[Storage] GCS client failed: {e}")
+    return _gcs
 
 def update_user_credentials(user_id, creds):
     """保存憑證：優先使用 Firestore，失敗則存入本地 JSON"""
+    db = get_db()
     if db:
         try:
             db.collection("users").document(user_id).set({"credentials": creds}, merge=True)
@@ -36,6 +47,7 @@ def update_user_credentials(user_id, creds):
 
 def get_user_credentials(user_id):
     """加載憑證：優先從 Firestore 讀取"""
+    db = get_db()
     if db:
         try:
             doc = db.collection("users").document(user_id).get()
@@ -57,6 +69,7 @@ save_credentials = update_user_credentials
 
 def save_user_watchlist(user_id, market, watchlist):
     """保存使用者追蹤清單"""
+    db = get_db()
     if db:
         try:
             db.collection("users").document(user_id).set({f"watchlist_{market}": watchlist}, merge=True)
@@ -73,6 +86,7 @@ def save_user_watchlist(user_id, market, watchlist):
 
 def get_user_watchlist(user_id, market):
     """取得使用者追蹤清單"""
+    db = get_db()
     if db:
         try:
             doc = db.collection("users").document(user_id).get()
@@ -91,6 +105,7 @@ def get_user_watchlist(user_id, market):
 def save_data_pool(market, data):
     """將海選數據池保存到 GCS (或本地 .pkl)"""
     # 這裡的 data 通常是包含 'dfs' 的大型 dict
+    gcs = get_gcs()
     if gcs:
         try:
             bucket = gcs.bucket(f"{PROJECT_ID}-data")
@@ -110,6 +125,7 @@ def save_data_pool(market, data):
 
 def load_data_pool(market):
     """從 GCS 加載海選數據池"""
+    gcs = get_gcs()
     if gcs:
         try:
             bucket = gcs.bucket(f"{PROJECT_ID}-data")

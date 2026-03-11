@@ -1,8 +1,6 @@
 import re
 import pandas as pd
 import numpy as np
-import yfinance as yf
-import requests
 from datetime import datetime, timedelta
 
 def extract_stock_code(raw_str):
@@ -15,6 +13,7 @@ def extract_stock_code(raw_str):
 
 def fetch_tw_symbols():
     """從公開來源獲取台股代碼清單"""
+    import requests
     try:
         # 證交所 (上市)
         url = "https://isin.twse.com.tw/isin/C_public.jsp?strMode=2"
@@ -45,6 +44,7 @@ def fetch_tw_symbols():
 
 def fetch_us_symbols():
     """獲取 S&P 500 代碼清單"""
+    import requests
     try:
         url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
         headers = {"User-Agent": "Mozilla/5.0"}
@@ -67,6 +67,7 @@ def get_yahoo_ticker(code, market_type='TW'):
 
 def fetch_stock_data(code, ticker_str, period="1y"):
     """從 Yahoo Finance 抓取即時數據"""
+    import yfinance as yf
     try:
         ticker = yf.Ticker(ticker_str)
         df = ticker.history(period=period, interval="1d")
