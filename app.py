@@ -2077,7 +2077,7 @@ if "results" in st.session_state:
     is_big = st.session_state.get("is_big_scan", False)
     scan_market = st.session_state.get("scan_market", "TW")
     market_label = {"TW": "台灣", "US": "美國", "CRYPTO": "加密貨幣"}.get(scan_market, "未知")
-    list_title = f"🏆 {market_label}全市場海選排行榜" if is_big else "📊 目前追蹤清單"
+    list_title = f"🏆 {market_label}全市場大選股排行榜" if is_big else "📊 目前追蹤清單"
     st.markdown(f"### {list_title}")
     
     # 分頁計算
