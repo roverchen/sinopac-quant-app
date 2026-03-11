@@ -25,18 +25,29 @@ class MockShioajiClient:
 
 class ShioajiService:
     _instance_lock = threading.Lock()
+    _instances: Dict[str, any] = {}
+    
     @classmethod
     def get_api_client(cls, email: str):
         """
         為特定使用者取得或建立 Shioaji API 實例（Singleton per user）。
         """
         with cls._instance_lock:
+            # 確保 _instances 存在於 cls
+            if not hasattr(cls, '_instances'):
+                cls._instances = {}
+                
             if email in cls._instances:
                 return cls._instances[email]
 
             creds = get_user_credentials(email)
+            
+            # 如果沒有憑證，直接返回 MockClient 進入模擬模式
             if not creds or 'shioaji_api_key' not in creds:
-                return None
+                print(f"No credentials for {email}, returning MockShioajiClient for simulation.")
+                mock_api = MockShioajiClient()
+                cls._instances[email] = mock_api
+                return mock_api
 
             try:
                 import shioaji as sj
