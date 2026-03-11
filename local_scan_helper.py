@@ -79,7 +79,7 @@ def fetch_and_analyze_local(watchlist, market_type='TW'):
                     threads=True, 
                     progress=False, 
                     timeout=30, 
-                    auto_adjust=True
+                    auto_adjust=False  # 改為 False 以獲取標稱價格，避免還原權價導致的偏差
                 )
                 if batch_data is not None and not batch_data.empty:
                     break
@@ -140,6 +140,13 @@ def fetch_and_analyze_local(watchlist, market_type='TW'):
             df['macd'] = ema12 - ema26
             df['signal'] = df['macd'].ewm(span=9).mean()
             df['hist'] = df['macd'] - df['signal']
+            
+            # 計算 ATR (用於手機版停損顯示)
+            high_low = df['high'] - df['low']
+            high_cp = (df['high'] - df['close'].shift()).abs()
+            low_cp = (df['low'] - df['close'].shift()).abs()
+            tr = pd.concat([high_low, high_cp, low_cp], axis=1).max(axis=1)
+            df['atr'] = tr.rolling(window=14).mean()
             
             last_price = df['close'].iloc[-1]
             year_high = df['close'].max()
@@ -206,7 +213,10 @@ def fetch_and_analyze_local(watchlist, market_type='TW'):
                 "MACD狀態": macd_status,
                 "綜合評分": round(final_score, 1),
                 "操作建議": suggestion,
-                "_ma_base": defense_base # 用於排序
+                "_ma_base": defense_base, # 用於排序
+                "_ma20": ma20_last,        # 手機版顯示所需
+                "_atr": df['atr'].iloc[-1] if 'atr' in df.columns else 0,
+                "_atr_mult": atr_multiplier
             })
             
         except Exception as e:

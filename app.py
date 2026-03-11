@@ -57,6 +57,20 @@ import yfinance as yf
 import math
 import pickle
 import requests
+import re
+
+def extract_stock_code(raw_str):
+    """強大代碼提取器：處理 '台積電(2330)', '2330', 'ETH-USD' 等各種格式"""
+    if not raw_str: return ""
+    raw_str = str(raw_str).strip()
+    
+    # 範本 1: 含有括號的代碼，例如 "台積電(2330)" -> "2330"
+    match = re.search(r'\((.*?)\)', raw_str)
+    if match: return match.group(1).upper()
+    
+    # 範本 2: 含有點的代碼 (美股/Yahoo)，例如 "AAPL.US"
+    # 直接清理空白並轉大寫
+    return raw_str.upper()
 
 # --- 🚀 Yahoo Finance 強化功能 (針對雲端環境優化) ---
 # 建立帶有現代瀏覽器特徵的持久 Session，降低被 Yahoo 判定為爬蟲的機率
@@ -1130,9 +1144,13 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
         st.session_state.pooled_dfs = {}
         
     # 檢查是否有名單中的代碼不在現有池子裡，若有則嘗試從磁碟重載對應市場
-    missing_any = any(c not in st.session_state.pooled_dfs for c in watchlist)
+    # 使用 extract_stock_code 確保對齊
+    normalized_watchlist = [extract_stock_code(c) for c in watchlist]
+    missing_any = any(c not in st.session_state.pooled_dfs for c in normalized_watchlist)
+    
     if missing_any:
-        # 如果有指定市場，則載入該市場；否則尝试載入所有可能市場以補全 Watchlist
+        # 如果有指定市場，則優先載入該市場；否則尝试載入所有可能市場以補全 Watchlist
+        # 即使池子不是空的，只要有缺漏就嘗試「增量」載入共享數據
         markets_to_check = [market_type] if market_type else ["TW", "US", "CRYPTO"]
         for m in markets_to_check:
             if not m: continue
@@ -1146,8 +1164,8 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
     # 1. 優先從同步池中提取基礎歷史資料
     need_download = []
     for c_raw in watchlist:
-        c = c_raw.strip().upper()
-        if c in pool:
+        c = extract_stock_code(c_raw)
+        if c and c in pool:
             # 必須重置索引並規範欄位，因為 Pooled 裡的可能是原始格式
             d = pool[c].copy()
             d.columns = [col.lower() for col in d.columns]
@@ -1276,8 +1294,8 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
             except: pass
 
     for i, code_raw in enumerate(watchlist):
-        # 0. 代碼正規化 (確保大小寫一致，利於名稱比對與 API 調用)
-        code = code_raw.strip().upper()
+        # 0. 代碼正規化 (提取純代碼)
+        code = extract_stock_code(code_raw)
         
         progress_info = f"🕒 正在分析 ({i+1}/{len(watchlist)}): {code} ..."
         status_placeholder.info(progress_info)
