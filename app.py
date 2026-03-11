@@ -848,7 +848,8 @@ def build_buy_reason(row):
     else:
         stop_val = row.get('_y_low', row['最新價格'] * 0.95) * 0.95
         
-    return f"[{strategy}] (配置:{w_gro}%成長/{w_def}%防禦) 位階:{level:.1f}% | 年偏:{y_bias:+.1f}% | MA20偏:{ma20_bias:+.1f}% | MA20價:{ma20_val:.1f} | ATR損:{stop_val:.1f}"
+    score = row.get('綜合評分', 0.0)
+    return f"[{strategy}] 評分:{score:.1f} | (配置:{w_gro}%成長/{w_def}%防禦) 位階:{level:.1f}% | 年偏:{y_bias:+.1f}% | MA20偏:{ma20_bias:+.1f}% | MA20價:{ma20_val:.1f} | ATR損:{stop_val:.1f}"
 
 def get_mass_scan_list(api, market='TW'):
     """橫向串接 sinopac_api 的海選清單過濾功能"""
