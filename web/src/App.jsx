@@ -99,7 +99,7 @@ function App() {
               <Cpu className="w-6 h-6 text-white" />
             </div>
             <h1 className="text-xl font-bold bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
-              Quant Pro
+              金融商品報明牌
             </h1>
             <span className="text-[10px] text-slate-700 font-mono mt-1">v2.0.5</span>
           </div>
@@ -178,9 +178,6 @@ function App() {
           </div>
           
           <div className="flex items-center gap-3 md:gap-4">
-            <button className="hidden sm:block px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm transition-colors border border-slate-700">
-              重啟掃描
-            </button>
             <div className="hidden sm:block h-8 w-px bg-slate-800"></div>
             <div className="flex items-center gap-1.5 md:gap-2 text-emerald-400 text-xs md:text-sm font-medium bg-emerald-500/10 px-3 py-1.5 rounded-full border border-emerald-500/20">
               <ShieldCheck className="w-3.5 h-3.5 md:w-4 md:h-4" />
