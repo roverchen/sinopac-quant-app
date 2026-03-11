@@ -1992,13 +1992,13 @@ if st.session_state.active_page == "market":
 
 # --- 啟動時優先從磁碟載入快取 (行動端穩定性關鍵) ---
 if "results" not in st.session_state:
-    # 1. 嘗試載入個人快取
-    cache_data = load_results_cache(user_id=user_id)
+    # 1. 嘗試載入個人快取 (啟動階段需要完整資料以恢復數據池)
+    cache_data = load_results_cache(user_id=user_id, shallow=False)
     
     # 2. 如果無個人快取，嘗試尋找最近的市場共享快取 (TW 優先)
     if not cache_data:
         for m in ["TW", "US", "CRYPTO"]:
-            cache_data = load_results_cache(market=m)
+            cache_data = load_results_cache(market=m, shallow=False) # 啟動階段必須完整載入
             if cache_data: break
             
     if cache_data:
@@ -2065,7 +2065,8 @@ if (big_scan_tw_btn or big_scan_us_btn or big_scan_crypto_btn or scan_btn or sho
         
         # 如果是全市場大選股，且不是強制刷新，先試著讀取今日共享快取
         if st.session_state.is_big_scan and not st.session_state.get("force_rescan"):
-            cached_data = load_results_cache(user_id=user_id, market=st.session_state.scan_market)
+            # [修正] 手動刷新共享快取時，也需要完整資料
+            cached_data = load_results_cache(user_id=user_id, market=st.session_state.scan_market, shallow=False)
             if cached_data:
                 cache_day = cached_data['timestamp'].split(' ')[0]
                 if cache_day == get_now().strftime("%Y-%m-%d"):
