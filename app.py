@@ -515,15 +515,8 @@ def load_results_cache(user_id="shared", market=None):
                 with open(shared_file, "rb") as f:
                     data = pickle.load(f)
                     # 檢查快取日期是否為「今天」
-                    cache_day = data.get('timestamp', '').split(' ')[0]
-                    today_str = get_now().strftime("%Y-%m-%d")
                     if cache_day == today_str:
-                        # 3. 額外驗證快取內容是否符合市場 (雙重防護)
-                        cache_df = data.get('df', pd.DataFrame())
-                        if validate_market_tickers(cache_df, market):
-                            return data
-                        else:
-                            print(f"[Warning] Loading ignored: Cache content mismatch for {market}")
+                        return data
             except: pass
 
     # 2. 回退到個人專屬快取 (Session 恢復)
@@ -1127,9 +1120,25 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
     # 用於顯示進度的佔位符
     status_placeholder = st.empty()
     
-    # --- [NEW] 混合模式：優先使用同步池 (Pooled Data)，若無則採用 Yahoo 批次下載 ---
+    # --- [NEW] 混合模式：優先使用同步池 (Pooled Data)，若無則嘗試從磁碟重載 ---
     all_dfs = {}
-    pool = st.session_state.get("pooled_dfs", {})
+    
+    # 確保 pooled_dfs 存在於 session_state 並嘗試自動補完 (涵蓋所有市場)
+    if 'pooled_dfs' not in st.session_state or not st.session_state.pooled_dfs:
+        st.session_state.pooled_dfs = {}
+        
+    # 如果目前的池子是空的，嘗試從快取載入
+    if not st.session_state.pooled_dfs:
+        # 如果有指定市場，則載入該市場；否則尝试載入所有可能市場以補全 Watchlist
+        markets_to_check = [market_type] if market_type else ["TW", "US", "CRYPTO"]
+        for m in markets_to_check:
+            if not m: continue
+            cached_data = load_results_cache(market=m)
+            if cached_data and "dfs" in cached_data:
+                st.session_state.pooled_dfs.update(cached_data["dfs"])
+                print(f"[Pool] Loaded {len(cached_data['dfs'])} stocks from {m} cache.")
+
+    pool = st.session_state.pooled_dfs
     
     # 1. 優先從同步池中提取基礎歷史資料
     need_download = []
@@ -1161,10 +1170,6 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
         # 執行批次下載
         try:
             chunk_size = 100 
-            for k in range(0, len(tickers), chunk_size):
-                if is_rate_limited: break
-                chunk = tickers[k:k+chunk_size]
-            
             for k in range(0, len(tickers), chunk_size):
                 if is_rate_limited: break
                 chunk = tickers[k:k+chunk_size]
@@ -1941,25 +1946,30 @@ if st.session_state.active_page == "market":
                     break
 
 # --- 啟動時優先從磁碟載入快取 (行動端穩定性關鍵) ---
-# 使用具備回退機制的 user_id，確保隨時獲得隔離的快取
 if "results" not in st.session_state:
+    # 1. 嘗試載入個人快取
     cache_data = load_results_cache(user_id=user_id)
-    if cache_data:
-        # 檢查快取資料結構是否相容 (版本遷移檢查)
-        cache_df = cache_data.get("df", pd.DataFrame())
-        if "_ma_base" in cache_df.columns:
-            st.session_state.results = cache_df
-            st.session_state.last_update = cache_data["timestamp"]
-            st.session_state.is_big_scan = cache_data.get("is_big_scan", False)
-            st.session_state.scan_market = cache_data.get("scan_market")
-            st.session_state.pooled_dfs = cache_data.get("dfs", {}) # 載入詳細 K 線池
+    
+    # 2. 如果無個人快取，嘗試尋找最近的市場共享快取 (TW 優先)
+    if not cache_data:
+        for m in ["TW", "US", "CRYPTO"]:
+            cache_data = load_results_cache(market=m)
+            if cache_data: break
             
+    if cache_data:
+        cache_df = cache_data.get("df", pd.DataFrame())
+        if not cache_df.empty:
+            st.session_state.results = cache_df
+            st.session_state.last_update = cache_data.get("timestamp", "未知")
+            st.session_state.is_big_scan = cache_data.get("is_big_scan", False)
+            st.session_state.scan_market = cache_data.get("scan_market", "TW")
+            # 重要：將基礎 K 線池載入 Session
+            st.session_state.pooled_dfs = cache_data.get("dfs", {})
             st.session_state.last_watchlist = current_watchlist_key
-            st.toast("💾 已從快取恢復上次數據", icon="📥")
-        else:
-            # 如果快取太舊，則不載入，強制觸發新掃描
-            print("[Incompatibility] Old cache version detected, ignoring file.")
-            st.sidebar.warning("⚠️ 發現舊版快取資料，將自動進行全新掃描以套用新功能。")
+            st.toast("💾 已從共享/個人快取恢復數據池", icon="📥")
+    else:
+        # 完全沒快取時，檢查是否自動同步
+        if watchlist:
             should_sync = True
     else:
         # 完全沒快取時，才考慮是否自動啟動 (謹慎觸發)
