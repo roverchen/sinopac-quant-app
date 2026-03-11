@@ -1091,7 +1091,14 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
         watchlist = [t for t in watchlist if str(t)[0].isalpha() and "-USD" not in str(t)]
         
     data_list = []
-    is_rate_limited = False # [修正] 初始化變數，避免小樣本名單時報錯
+    is_rate_limited = False 
+    # 決定是否開啟靜音模式 (當目標數量大於 10 時自動開啟)
+    quiet_mode = len(watchlist) > 10
+    # 海選模式標記 (主要用於跳過耗時的營收檢查)
+    use_batch = st.session_state.get("is_big_scan", False) or len(watchlist) > 100
+    
+    # 用於顯示進度的佔位符
+    status_placeholder = st.empty()
 
     
     # 每次新掃描前，重置自動重連標記，以便未來再次觸發時能重連
@@ -1129,14 +1136,6 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
     
     # 紀錄是否已經在迴圈中嘗試過重抓合約，避免每檔都重抓
     has_retried_contracts = False
-    
-    # 決定是否開啟靜音模式 (當目標數量大於 10 時自動開啟，避免 UI 警告塞車)
-    quiet_mode = len(watchlist) > 10
-    # 海選模式標記 (主要用於跳過耗時的營收檢查)
-    use_batch = st.session_state.get("is_big_scan", False) or len(watchlist) > 100
-    
-    # 用於顯示進度的佔位符
-    status_placeholder = st.empty()
     
     # --- [NEW] 混合模式：優先使用同步池 (Pooled Data)，若無則嘗試從磁碟重載 ---
     all_dfs = {}
