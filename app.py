@@ -2078,6 +2078,41 @@ if st.session_state.active_page == "settings":
         st.session_state.browser_state_loaded = True
         
         st.success("✅ 設定已儲存！系統自動更新中...")
+
+    st.divider()
+    
+    # --- 📡 離線數據同步 (Local-to-Cloud Sync) ---
+    st.markdown("### 📡 離線數據同步 (Local-to-Cloud Sync)")
+    st.info("💡 如果 Cloud 環境被 Yahoo Finance 頻率限制 (無法取得數據)，您可以在本地端執行 `local_scan_helper.py` 後，將產生的 `.pkl` 檔案上傳至此。")
+    
+    sync_market = st.selectbox("選擇要同步的市場", ["CRYPTO", "US", "TW"], key="sync_market_select")
+    uploaded_sync_file = st.file_uploader(f"上傳今日 {sync_market} 掃描結果 (.pkl)", type=["pkl"], key="sync_uploader")
+    
+    if uploaded_sync_file is not None:
+        try:
+            # 1. 讀取並驗證
+            sync_data = pickle.load(uploaded_sync_file)
+            if not isinstance(sync_data, dict) or "df" not in sync_data:
+                st.error("❌ 格式錯誤：無效的掃描數據檔案。")
+            else:
+                sync_df = sync_data["df"]
+                sync_m = sync_data.get("scan_market", sync_market)
+                
+                # 2. 嚴格驗證市場一致性 (使用已存在的 validate_market_tickers)
+                if validate_market_tickers(sync_df, sync_m):
+                    # 3. 儲存至共享快取路徑
+                    shared_file = os.path.join(CACHE_DIR, f"shared_results_{sync_m}.pkl")
+                    with open(shared_file, "wb") as f:
+                        # 確保 timestamp 是最新的，避免載入時被判定為過期
+                        sync_data["timestamp"] = get_now().strftime("%Y-%m-%d %H:%M:%S")
+                        pickle.dump(sync_data, f)
+                    
+                    st.success(f"✅ {sync_m} 數據同步成功！所有使用者現在都能看到您上傳的最新結果。")
+                    st.toast(f"🚀 {sync_m} 離線數據已就緒", icon="📡")
+                else:
+                    st.error(f"❌ 市場不匹配：檔案內容似乎不屬於 {sync_m}。")
+        except Exception as e:
+            st.error(f"❌ 同步失敗: {e}")
         st.rerun()
     
     if bc2.button("🏠 返回", use_container_width=True):
