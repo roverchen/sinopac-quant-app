@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Play, ShieldAlert, CheckCircle2, Loader2, Search, Filter } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { quantService } from '../services/api';
 
 const StrategyScan = () => {
   const [scanning, setScanning] = useState(false);
@@ -8,25 +9,46 @@ const StrategyScan = () => {
   const [market, setMarket] = useState('TW');
   const [results, setResults] = useState([]);
 
-  const startScan = () => {
-    setScanning(true);
-    setProgress(0);
-    // Simulate progress
-    const interval = setInterval(() => {
-      setProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setScanning(false);
-          setResults([
-            { code: '2330', name: '台積電', score: 92, reason: '價值位階極低 + MA20 金叉' },
-            { code: '2454', name: '聯發科', score: 85, reason: '季線支撐守穩 + MACD 翻紅' },
-            { code: '2317', name: '鴻海', score: 78, reason: '量價齊揚突破頸線' },
-          ]);
-          return 100;
+  const startScan = async () => {
+    try {
+      setScanning(true);
+      setProgress(0);
+      setResults([]);
+      
+      // 呼叫後端 API 啟動海選
+      await quantService.startScan(market, 0.5);
+      
+      // 每 1.5 秒輪詢進度
+      const poll = setInterval(async () => {
+        try {
+          const resp = await quantService.getScanProgress();
+          setProgress(resp.progress || 0);
+          
+          if (resp.status === 'completed' || resp.status === 'error') {
+            clearInterval(poll);
+            setScanning(false);
+            
+            // 將後端回傳的真實 Top 10 更新至畫面
+            if (resp.top_results && resp.top_results.length > 0) {
+              const formattedResults = resp.top_results.map(r => ({
+                code: r.代碼,
+                name: r.名稱,
+                score: r.綜合評分,
+                reason: r.操作建議
+              }));
+              setResults(formattedResults);
+            }
+          }
+        } catch (err) {
+          console.error("Failed to fetch scan progress", err);
         }
-        return prev + 2;
-      });
-    }, 100);
+      }, 1500);
+      
+    } catch (err) {
+      console.error("Failed to start scan", err);
+      // 若後端回傳 400 Scan already in progress 等，需解除鎖定並接續進度
+      setScanning(false);
+    }
   };
 
   return (

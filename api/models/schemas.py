@@ -43,3 +43,4 @@ class ScanProgressResponse(BaseModel):
     progress: float
     message: str
     results_count: int = 0
+    top_results: Optional[List[AnalysisResult]] = []

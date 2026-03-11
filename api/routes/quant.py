@@ -13,7 +13,8 @@ scan_status = {
     "status": "idle",
     "progress": 0,
     "message": "系統就緒",
-    "results_count": 0
+    "results_count": 0,
+    "top_results": []
 }
 
 async def run_market_scan(market_type: str, defense_weight: float):
@@ -57,6 +58,7 @@ async def run_market_scan(market_type: str, defense_weight: float):
         scan_status["message"] = "分析完成，正在保存數據池..."
         save_data_pool(market_type, {"results": results, "dfs": all_dfs, "timestamp": datetime.now().isoformat()})
         
+        scan_status["top_results"] = sorted(results, key=lambda x: x.綜合評分, reverse=True)[:10]
         scan_status["status"] = "completed"
         scan_status["progress"] = 100
         scan_status["message"] = f"海選完成！成功分析 {len(results)} 檔標的。"
