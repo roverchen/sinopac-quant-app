@@ -1,99 +1,87 @@
 import { useState } from 'react';
 import { authService } from '../services/api';
-import { Cpu, Lock, User, Loader2 } from 'lucide-react';
+import { Cpu, Loader2, ShieldCheck } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { GoogleLogin } from '@react-oauth/google';
 
 const Login = ({ onLoginSuccess }) => {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleGoogleSuccess = async (credentialResponse) => {
     setLoading(true);
     setError('');
     try {
-      await authService.login(username, password);
+      await authService.login(credentialResponse.credential);
       onLoginSuccess();
     } catch (err) {
-      setError(err.response?.data?.detail || '登入失敗，請檢查暱稱與密碼');
+      setError(err.response?.data?.detail || '驗證失敗，請再試一次');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-[radial-gradient(circle_at_center,rgba(30,41,59,1),rgba(2,6,23,1))] p-6">
+    <div className="min-h-screen w-full flex items-center justify-center bg-[radial-gradient(circle_at_center,rgba(30,41,59,1),rgba(2,6,23,1))] p-6 relative overflow-hidden">
+      {/* 裝飾背景 */}
+      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-indigo-500/20 rounded-full blur-[100px] pointer-events-none" />
+      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-500/20 rounded-full blur-[100px] pointer-events-none" />
+
       <motion.div 
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="w-full max-w-md bg-slate-900/40 border border-slate-800 backdrop-blur-2xl rounded-[2.5rem] p-10 shadow-2xl"
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
+        className="relative w-full max-w-md bg-slate-900/60 border border-slate-700/50 backdrop-blur-2xl rounded-[2.5rem] p-10 shadow-2xl flex flex-col items-center text-center z-10"
       >
-        <div className="flex flex-col items-center mb-10">
-          <div className="p-4 bg-indigo-600 rounded-3xl shadow-lg shadow-indigo-500/20 mb-6">
-            <Cpu className="w-10 h-10 text-white" />
-          </div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">Quant Pro</h1>
-          <p className="text-slate-500 mt-2">量化交易專業管理系統</p>
+        <div className="p-4 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-3xl shadow-lg shadow-indigo-500/20 mb-6">
+          <Cpu className="w-10 h-10 text-white" />
+        </div>
+        
+        <h1 className="text-3xl font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent tracking-tight">Quant Pro</h1>
+        <p className="text-slate-400 mt-2 mb-10 font-medium">您的專業量化交易工作站</p>
+
+        <div className="w-full flex flex-col items-center justify-center min-h-[120px] bg-slate-800/30 rounded-3xl border border-slate-700/50 p-6">
+          {loading ? (
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              className="flex flex-col items-center justify-center text-indigo-400"
+            >
+              <Loader2 className="w-8 h-8 animate-spin mb-4" />
+              <p className="text-sm font-medium">正在建立專屬加密環境...</p>
+            </motion.div>
+          ) : (
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.2 }}
+            >
+              <GoogleLogin
+                onSuccess={handleGoogleSuccess}
+                onError={() => setError('Google 登入失敗')}
+                theme="filled_black"
+                shape="pill"
+                text="signin_with"
+                size="large"
+                width="300"
+              />
+            </motion.div>
+          )}
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-400 ml-1">帳戶暱稱</label>
-            <div className="relative group">
-              <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500 group-focus-within:text-indigo-400 transition-colors" />
-              <input 
-                type="text"
-                required
-                className="w-full pl-12 pr-4 py-4 bg-slate-800/50 border border-slate-700 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all font-inter placeholder:text-slate-600"
-                placeholder="請輸入暱稱"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-400 ml-1">個人密碼</label>
-            <div className="relative group">
-              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500 group-focus-within:text-indigo-400 transition-colors" />
-              <input 
-                type="password"
-                required
-                className="w-full pl-12 pr-4 py-4 bg-slate-800/50 border border-slate-700 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all font-inter placeholder:text-slate-600"
-                placeholder="請輸入密碼"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
-          </div>
-
-          {error && (
-            <motion.p 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="text-rose-400 text-sm bg-rose-500/10 p-3 rounded-xl border border-rose-500/20 text-center"
-            >
-              {error}
-            </motion.p>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-2xl shadow-lg shadow-indigo-600/25 transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2"
+        {error && (
+          <motion.p 
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-rose-400 text-sm bg-rose-500/10 p-4 rounded-2xl border border-rose-500/20 w-full mt-6 text-center font-medium"
           >
-            {loading ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              '進入系統'
-            )}
-          </button>
-        </form>
+            {error}
+          </motion.p>
+        )}
 
-        <div className="mt-8 text-center text-xs text-slate-600">
-          首次登入將以此暱稱密碼建立永久環境
+        <div className="flex items-center gap-2 mt-10 text-xs text-slate-500 font-medium bg-slate-800/50 px-4 py-2 rounded-full border border-slate-700/50">
+          <ShieldCheck className="w-4 h-4 text-emerald-500" />
+          <span>使用 Google 身分驗證，登入即自動同步雲端設定</span>
         </div>
       </motion.div>
     </div>

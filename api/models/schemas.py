@@ -25,8 +25,7 @@ class AnalysisResponse(BaseModel):
     timestamp: str
 
 class AuthRequest(BaseModel):
-    username: str
-    password: str
+    credential: str
 
 class Token(BaseModel):
     access_token: str

@@ -16,8 +16,8 @@ api.interceptors.request.use((config) => {
 });
 
 export const authService = {
-  login: async (username, password) => {
-    const response = await api.post('/auth/login', { username, password });
+  login: async (credential) => {
+    const response = await api.post('/auth/login', { credential });
     if (response.data.access_token) {
       localStorage.setItem('token', response.data.access_token);
     }
