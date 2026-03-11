@@ -84,8 +84,12 @@ class ShioajiService:
                 if contract: break
             except: continue
 
-        if not contract:
+        if not contract and not isinstance(api, MockShioajiClient):
             raise Exception(f"找不到標的 {symbol} 的合約。")
+
+        # 如果是模擬模式，直接調用 mock 的 place_order，跳過 Order 物件的驗證
+        if isinstance(api, MockShioajiClient):
+            return api.place_order(None, None)
 
         order = Order(
             price=price,
