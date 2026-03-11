@@ -8,7 +8,7 @@ import os
 app = FastAPI(
     title="Sinopac Quant Pro API",
     description="Professional backend for quantitative stock analysis and trading.",
-    version="1.0.1" # Incrementing to verify deployment
+    version="1.0.2" # Incrementing to 1.0.2 for final verification
 )
 
 # 配置 CORS，允許前端訪問
