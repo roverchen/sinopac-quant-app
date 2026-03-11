@@ -22,7 +22,7 @@ try:
 except ImportError:
     pass
 
-import shioaji as sj
+import sinopac_api
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta, timezone
@@ -408,56 +408,11 @@ def init_max_api_v4():
             return MaxExchangeAPI(key, secret)
     return None
 
-class MockApi:
-    """模擬用的 API 類別，當連線數過多或連線失敗時使用。"""
-    def list_accounts(self): return []
-    def fetch_contracts(self, **kwargs): pass
-    def login(self, **kwargs): pass
-    def activate_ca(self, **kwargs): pass
-
-def init_api(api_key, secret_key):
-    """手動管理 API 實例於 session_state 中，避免及早載入合約導致 Segfault。"""
-    if not api_key or not secret_key:
-        return None
-        
-    # 檢查是否有已存在的且金鑰相同的實例
-    if "api_instance" in st.session_state:
-        if st.session_state.get("last_sj_key") == api_key and st.session_state.get("last_sj_secret") == secret_key:
-            return st.session_state.api_instance
-        else:
-            # 金鑰更換，嘗試登出舊實例 (防止 native 層多重實例衝突)
-            try:
-                st.session_state.api_instance.logout()
-            except: pass
-
-    api = sj.Shioaji()
-    try:
-        api.login(api_key=api_key, secret_key=secret_key)
-        # [REMOVED] 不在此處 fetch_contracts，延後到需要時再抓取，減少啟動不穩定性
-        st.session_state.api_instance = api
-        st.session_state.last_sj_key = api_key
-        st.session_state.last_sj_secret = secret_key
-        st.session_state.sj_error = None
-    except Exception as e:
-        error_msg = str(e)
-        st.session_state.sj_error = error_msg
-        if "451" in error_msg or "Too Many Connections" in error_msg:
-            return MockApi()
-        else:
-            return None
-    return api
-
-# @st.cache_resource 為了讓 Secrets 更新能立即生效，這裡也把金鑰當成參數
-def init_max_api_v5(key, secret):
-    if MaxExchangeAPI and key and secret and len(key) > 10:
-        return MaxExchangeAPI(key, secret)
-    return None
-
 # --- 🔌 API 初始化 (Per-User Credentials from browser state) ---
 # 永豐金 API：僅 LocalStorage
 sj_key = user_creds.get("sj_api_key", "")
 sj_secret = user_creds.get("sj_secret_key", "")
-api = init_api(sj_key, sj_secret)
+api = sinopac_api.init_api(sj_key, sj_secret)
 
 # MAX API：LocalStorage → Secrets → .env → 空
 max_key = user_creds.get("max_api_key") or st.secrets.get("MAX_API_KEY") or os.getenv("MAX_API_KEY")
@@ -472,7 +427,7 @@ m_api_status = f"已偵測{v_tag}" if max_key else "待設定"
 # [REMOVED] 依要求移除 API 進階設定區塊
 
 # 核心連線狀態檢查 (背景邏輯)
-is_mock = isinstance(api, MockApi) if api is not None else True
+is_mock = isinstance(api, sinopac_api.MockApi) if api is not None else True
 
 if max_api:
     bal = max_api.get_account_balance()
@@ -537,295 +492,16 @@ def load_results_cache(user_id="shared", market=None):
             except: pass
 
     # 2. 回退到個人專屬快取 (Session 恢復)
-    cache_file = os.path.join(CACHE_DIR, f"results_cache_{user_id}.pkl")
-    if os.path.exists(cache_file):
-        try:
-            with open(cache_file, "rb") as f:
-                return pickle.load(f)
-        except:
-            pass
     return None
 
 @st.cache_data(show_spinner=False)
 def get_stock_name_map(_api):
-    """建立 代碼 -> 名稱 的映射表，包含台、美 (備用專案) 市場"""
-    code_to_name = {}
-    
-    # --- 🇺🇸 美股備用清單 (針對函式庫版本限制的補全) ---
-    US_STOCK_FALLBACK = {
-        "NVDA": "NVIDIA", "AAPL": "Apple", "MSFT": "Microsoft",
-        "GOOGL": "Alphabet", "AMZN": "Amazon", "TSLA": "Tesla",
-        "META": "Meta", "AMD": "AMD", "INTC": "Intel",
-        "NFLX": "Netflix", "DIS": "Disney", "NKE": "NIKE",
-        "MCD": "McDonald's", "KO": "Coca-Cola", "PEP": "PepsiCo",
-        "COST": "Costco", "PYPL": "PayPal", "BABA": "Alibaba",
-        "T": "AT&T", "VZ": "Verizon", "PFE": "Pfizer",
-        "JPM": "JPMorgan", "V": "Visa", "MA": "Mastercard",
-        "BRK.B": "Berkshire", "LLY": "Eli Lilly", "XOM": "Exxon",
-        "AVGO": "Broadcom", "ORCL": "Oracle", "CRM": "Salesforce",
-        "ADBE": "Adobe", "CSCO": "Cisco", "CVX": "Chevron",
-        "MRK": "Merck", "ABBV": "AbbVie", "ACN": "Accenture",
-        "BAC": "BofA", "ABT": "Abbott", "TMUS": "T-Mobile", "WMT": "Walmart",
-        "TXN": "Texas Inst", "DHR": "Danaher", "NEE": "NextEra",
-        "RTX": "Raytheon", "LOW": "Lowe's", "UNP": "Union Pacific",
-        "AMAT": "Applied Mat", "HON": "Honeywell", "SPGI": "S&P Global",
-        "PGR": "Progressive", "GS": "Goldman Sachs", "CAT": "Caterpillar",
-        "INTU": "Intuit", "QCOM": "Qualcomm", "IBM": "IBM",
-        "SBUX": "Starbucks", "GE": "GE", "TJX": "TJX Cos",
-        "MDLZ": "Mondelez", "BLK": "BlackRock", "NOW": "ServiceNow",
-        "ISRG": "Intuitive Surg", "PLTR": "Palantir", "SMCI": "SMCI",
-        "COIN": "Coinbase", "U": "Unity", "SE": "Sea Ltd",
-        "SQ": "Square", "SHOP": "Shopify", "SNOW": "Snowflake",
-        "MSTR": "MicroStrategy", "MARA": "Marathon", "RIOT": "Riot",
-        "MU": "Micron", "ARM": "ARM", "ASML": "ASML", "TSM": "TSMC ADR",
-        "PANW": "Palo Alto", "FTNT": "Fortinet", "CRWD": "CrowdStrike", "DDOG": "Datadog",
-        "SNOW": "Snowflake", "MSTR": "MicroStrategy", "COIN": "Coinbase", "PLTR": "Palantir",
-        "ABNB": "Airbnb", "LRCX": "Lam Research", "MU": "Micron", "ADI": "Analog Devices",
-        "KLAC": "KLA Corp", "MELI": "MercadoLibre", "REGN": "Regeneron", "VRTX": "Vertex",
-        "ADSK": "Autodesk", "NXPI": "NXP"}
-    # 追加更多常用美股
-    US_STOCK_ADDITIONAL = {
-        "PYPL": "PayPal", "SQ": "Block", "U": "Unity", "SE": "Sea Ltd",
-        "DOCU": "DocuSign", "RBLX": "Roblox", "SNAP": "Snapchat", "PINS": "Pinterest",
-        "TWLO": "Twilio", "OKTA": "Okta", "ZS": "Zscaler", "NET": "Cloudflare",
-        "MRVL": "Marvell", "WDAY": "Workday", "TEAM": "Atlassian", "MDB": "MongoDB",
-        "FSLY": "Fastly", "NET": "Cloudflare", "SHOP": "Shopify", "SPOT": "Spotify",
-        "AFRM": "Affirm", "SOFI": "SoFi", "HOOD": "Robinhood", "COIN": "Coinbase",
-        "DKNG": "DraftKings", "PATH": "UiPath", "AI": "C3.ai", "SMCI": "Super Micro",
-        "ARM": "Arm Holdings", "LLY": "Eli Lilly", "V": "Visa", "MA": "Mastercard",
-        "JPM": "JPMorgan", "BAC": "Bank of America", "WFC": "Wells Fargo", "C": "Citigroup",
-        "GS": "Goldman Sachs", "MS": "Morgan Stanley", "BRK.B": "Berkshire B", "BLK": "BlackRock",
-        "XOM": "Exxon", "CVX": "Chevron", "SHEL": "Shell", "TTE": "TotalEnergies",
-        "BP": "BP", "COP": "ConocoPhillips", "SLB": "Schlumberger", "HAL": "Halliburton",
-        "NKE": "Nike", "SBUX": "Starbucks", "MCD": "McDonald's", "CMG": "Chipotle",
-        "TJX": "TJX Companies", "LULU": "Lululemon", "TGT": "Target", "LOW": "Lowe's",
-        "HD": "Home Depot", "COST": "Costco", "WMT": "Walmart", "PG": "P&G",
-        "KO": "Coca-Cola", "PEP": "PepsiCo", "MDLZ": "Mondelez", "PM": "Philip Morris",
-        "MO": "Altria", "CL": "Colgate", "KMB": "Kimberly-Clark", "EL": "Estee Lauder",
-        "PFE": "Pfizer", "MRK": "Merck", "JNJ": "Johnson & Johnson", "ABT": "Abbott",
-        "MDT": "Medtronic", "TMO": "Thermo Fisher", "DHR": "Danaher", "ISRG": "Intuitive",
-        "AMT": "American Tower", "PLD": "Prologis", "CCI": "Crown Castle", "PSA": "Public Storage",
-        "EQIX": "Equinix", "DLR": "Digital Realty", "SPG": "Simon Property", "WY": "Weyerhaeuser",
-        "T": "AT&T", "VZ": "Verizon", "TMUS": "T-Mobile", "META": "Meta", "GOOGL": "Alphabet",
-        "NFLX": "Netflix", "DIS": "Disney", "CMCSA": "Comcast", "CHTR": "Charter",
-        "WBD": "Warner Bros", "PARA": "Paramount", "LYV": "Live Nation", "TTWO": "Take-Two",
-        "EA": "Electronic Arts", "ZM": "Zoom", "DASH": "DoorDash", "UBER": "Uber",
-        "LYFT": "Lyft", "ABNB": "Airbnb", "BKNG": "Booking", "EXPE": "Expedia",
-        "TSLA": "Tesla", "F": "Ford", "GM": "GM", "RIVN": "Rivian", "LCID": "Lucid",
-        "DAL": "Delta Air", "UAL": "United Air", "AAL": "American Air", "LUV": "Southwest",
-        "CAT": "Caterpillar", "DE": "John Deere", "HON": "Honeywell", "GE": "GE Aerospace",
-        "RTX": "Raytheon", "LMT": "Lockheed", "BA": "Boeing", "UPS": "UPS",
-        "FDX": "FedEx", "UNP": "Union Pacific", "CSX": "CSX", "NSC": "Norfolk Southern",
-        "A": "Agilent", "ACN": "Accenture", "ADBE": "Adobe", "ADI": "Analog Devices",
-        "ADP": "Automatic Data", "ADSK": "Autodesk", "AEE": "Ameren", "AEP": "Am Electric",
-        "AES": "AES Corp", "AFL": "Aflac", "AIG": "Am International", "AIZ": "Assurant",
-        "AJG": "Arthur J. Gallagher", "AKAM": "Akamai", "ALB": "Albemarle", "ALGN": "Align",
-        "ALL": "Allstate", "ALLE": "Allegion", "AMAT": "Applied Materials", "AMCR": "Amcor",
-        "AMD": "AMD", "AME": "AMETEK", "AMGN": "Amgen", "AMP": "Ameriprise",
-        "AMT": "American Tower", "AMZN": "Amazon", "ANET": "Arista", "ANSS": "ANSYS",
-        "AON": "Aon", "AOS": "A.O. Smith", "APD": "Air Products", "APH": "Amphenol",
-        "APTV": "Aptiv", "ARE": "Alexandria", "ATO": "Atmos Energy", "AVB": "AvalonBay",
-        "AVGO": "Broadcom", "AVY": "Avery Dennison", "AWK": "Am Water Works", "AXP": "Am Express",
-        "AZO": "AutoZone", "BA": "Boeing", "BAC": "BofA", "BALL": "Ball Corp",
-        "BAX": "Baxter", "BBWI": "Bath & Body Works", "BBY": "Best Buy", "BDX": "Becton Dickinson",
-        "BEN": "Franklin Resources", "BF.B": "Brown-Forman", "BIIB": "Biogen", "BIO": "Bio-Rad",
-        "BK": "BNY Mellon", "BKNG": "Booking", "BKR": "Baker Hughes", "BLK": "BlackRock",
-        "BMY": "Bristol-Myers", "BR": "Broadridge", "BRK.B": "Berkshire B", "BRO": "Brown & Brown",
-        "BSX": "Boston Scientific", "BWA": "BorgWarner", "BXP": "Boston Properties", "C": "Citigroup",
-        "CAG": "Conagra", "CAH": "Cardinal Health", "CARR": "Carrier", "CAT": "Caterpillar",
-        "CB": "Chubb", "CBOE": "Cboe", "CBRE": "CBRE Group", "CCI": "Crown Castle",
-        "CCL": "Carnival", "CDNS": "Cadence", "CDW": "CDW", "CE": "Celanese",
-        "CEG": "Constellation Energy", "CF": "CF Industries", "CFG": "Citizens Financial", "CHD": "Church & Dwight",
-        "CHRW": "C.H. Robinson", "CHTR": "Charter", "CI": "Cigna", "CINF": "Cincinnati Financial",
-        "CL": "Colgate", "CLX": "Clorox", "CMA": "Comerica", "CMCSA": "Comcast",
-        "CME": "CME Group", "CMG": "Chipotle", "CMI": "Cummins", "CMS": "CMS Energy",
-        "CNC": "Centene", "CNP": "CenterPoint", "COF": "Capital One", "COO": "CooperCos",
-        "COP": "ConocoPhillips", "COST": "Costco", "CPB": "Campbell Soup", "CPRT": "Copart",
-        "CPT": "Camden Property", "CRL": "Charles River", "CRM": "Salesforce", "CSGP": "CoStar",
-        "CSX": "CSX", "CTAS": "Cintas", "CTLT": "Catalent", "CTRA": "Coterra",
-        "CTSH": "Cognizant", "CTVA": "Corteva", "CVS": "CVS Health", "CVX": "Chevron",
-        "CZR": "Caesars", "D": "Dominion Energy", "DAL": "Delta", "DD": "DuPont",
-        "DE": "John Deere", "DFS": "Discover", "DG": "Dollar General", "DGX": "Quest",
-        "DHI": "D.R. Horton", "DHR": "Danaher", "DIS": "Disney", "DLR": "Digital Realty",
-        "DLTR": "Dollar Tree", "DOV": "Dover", "DOW": "Dow", "DPZ": "Domino's",
-        "DRI": "Darden", "DTE": "DTE Energy", "DUK": "Duke Energy", "DVA": "DaVita",
-        "DVN": "Devon", "DXC": "DXC Technology", "DXCM": "Dexcom", "EA": "Electronic Arts",
-        "EBAY": "eBay", "ECL": "Ecolab", "ED": "Consol Edison", "EFX": "Equifax",
-        "EIX": "Edison International", "EL": "Estee Lauder", "ELV": "Elevance", "EMN": "Eastman",
-        "EMR": "Emerson", "ENPH": "Enphase", "EOG": "EOG Resources", "EPAM": "EPAM",
-        "EQIX": "Equinix", "EQT": "EQT", "ES": "Eversource", "ESS": "Essex Property",
-        "ETN": "Eaton", "ETR": "Entergy", "ETSY": "Etsy", "EVRG": "Evergy",
-        "EW": "Edwards Lifesciences", "EXC": "Exelon", "EXPD": "Expeditors", "EXPE": "Expedia",
-        "EXR": "Extra Space", "F": "Ford", "FANG": "Diamondback", "FAST": "Fastenal",
-        "FCX": "Freeport-McMoRan", "FDS": "FactSet", "FDX": "FedEx", "FE": "FirstEnergy",
-        "FFIV": "F5", "FIS": "FIS", "FISV": "Fiserv", "FITB": "Fifth Third",
-        "FLT": "Fleetcor", "FMC": "FMC", "FOX": "Fox Corp B", "FOXA": "Fox Corp A",
-        "FRT": "Federal Realty", "FSLR": "First Solar", "FTNT": "Fortinet", "FTV": "Fortive",
-        "GD": "General Dynamics", "GE": "GE", "GEHC": "GE HealthCare", "GEN": "Gen Digital",
-        "GILD": "Gilead", "GIS": "General Mills", "GL": "Globe Life", "GLW": "Corning",
-        "GM": "GM", "GNRC": "Generac", "GOOG": "Alphabet C", "GOOGL": "Alphabet A",
-        "GPC": "Genuine Parts", "GPN": "Global Payments", "GRMN": "Garmin", "GS": "Goldman Sachs",
-        "GWW": "Grainger", "HAL": "Halliburton", "HAS": "Hasbro", "HBAN": "Huntington",
-        "HCA": "HCA Healthcare", "HD": "Home Depot", "HES": "Hess", "HIG": "Hartford",
-        "HII": "Huntington Ingalls", "HLT": "Hilton", "HOLX": "Hologic", "HON": "Honeywell",
-        "HPE": "HP Ent", "HPQ": "HP Inc", "HRL": "Hormel", "HSIC": "Henry Schein",
-        "HST": "Host Hotels", "HSY": "Hershey", "HUM": "Humana", "HWM": "Howmet Aerospace",
-        "IBM": "IBM", "ICE": "ICE", "IDXX": "IDEXX", "IEX": "IDEX", "IFF": "IFF",
-        "ILMN": "Illumina", "INCY": "Incyte", "INTC": "Intel", "INTU": "Intuit",
-        "IP": "Intl Paper", "IPG": "Interpublic Group", "IQV": "IQVIA", "IRM": "Iron Mountain",
-        "ISRG": "Intuitive", "IT": "Gartner", "ITW": "Illinois Tool", "IVZ": "Invesco",
-        "J": "Jacobs", "JBHT": "J.B. Hunt", "JCI": "Johnson Controls", "JKHY": "Jack Henry",
-        "JNJ": "J&J", "JNPR": "Juniper", "JPM": "JPMorgan", "K": "Kellogg",
-        "KDP": "Keurig Dr Pepper", "KEY": "KeyCorp", "KEYS": "Keysight", "KHC": "Kraft Heinz",
-        "KIM": "Kimco", "KMB": "Kimberly-Clark", "KMI": "Kinder Morgan", "KMX": "CarMax",
-        "KO": "Coca-Cola", "KR": "Kroger", "L": "Loews", "LRCX": "Lam Research",
-        "LULU": "Lululemon", "LUV": "Southwest", "LYB": "LyondellBasell", "MA": "Mastercard",
-        "MAR": "Marriott", "MAS": "Masco", "MCD": "McDonald's", "MCHP": "Microchip",
-        "MCK": "McKesson", "MCO": "Moody's", "MDLZ": "Mondelez", "MDT": "Medtronic",
-        "MET": "MetLife", "META": "Meta", "MGM": "MGM Resorts", "MHK": "Mohawk",
-        "MKC": "McCormick", "MKTX": "MarketAxess", "MLM": "Martin Marietta", "MMC": "Marsh McLennan",
-        "MMM": "3M", "MNST": "Monster", "MO": "Altria", "MOH": "Molina",
-        "MOS": "Mosaic", "MPC": "Marathon Petroleum", "MPWR": "Monolithic Power", "MRK": "Merck",
-        "MRNA": "Moderna", "MRO": "Marathon Oil", "MS": "Morgan Stanley", "MSCI": "MSCI",
-        "MSFT": "Microsoft", "MSI": "Motorola", "MTB": "M&T Bank", "MTCH": "Match Group",
-        "MTD": "Mettler Toledo", "MU": "Micron", "NCLH": "Norwegian Cruise", "NDAQ": "Nasdaq",
-        "NDSN": "Nordson", "NEE": "NextEra", "NEM": "Newmont", "NFLX": "Netflix",
-        "NI": "NiSource", "NKE": "Nike", "NOC": "Northrop Grumman", "NOW": "ServiceNow",
-        "NRG": "NRG Energy", "NSC": "Norfolk Southern", "NTAP": "NetApp", "NTRS": "Northern Trust",
-        "NUE": "Nucor", "NVDA": "NVIDIA", "NVR": "NVR", "NWL": "Newell Brands",
-        "NWS": "News Corp B", "NWSA": "News Corp A", "O": "Realty Income", "ODFL": "Old Dominion",
-        "OKE": "ONEOK", "OMC": "Omnicom", "ON": "ON Semiconductor", "ORCL": "Oracle",
-        "ORLY": "O'Reilly", "OTIS": "Otis", "OXY": "Occidental", "PANW": "Palo Alto",
-        "PARA": "Paramount", "PAYC": "Paycom", "PAYX": "Paychex", "PCAR": "PACCAR",
-        "PCG": "PG&E", "PEG": "Public Service", "PEP": "PepsiCo", "PFE": "Pfizer",
-        "PFG": "Principal Financial", "PG": "P&G", "PGR": "Progressive", "PH": "Parker-Hannifin",
-        "PHM": "PulteGroup", "PKG": "Packaging Corp", "PKI": "PerkinElmer", "PLD": "Prologis",
-        "PM": "Philip Morris", "PNC": "PNC", "PNR": "Pentair", "PNW": "Pinnacle West",
-        "POOL": "Pool Corp", "PPG": "PPG", "PPL": "PPL Corp", "PRU": "Prudential",
-        "PSA": "Public Storage", "PSX": "Phillips 66", "PTC": "PTC", "PYPL": "PayPal",
-        "QCOM": "Qualcomm", "QRVO": "Qorvo", "RCL": "Royal Caribbean", "RE": "Everest Re",
-        "REG": "Regency Centers", "REGN": "Regeneron", "RF": "Regions Financial", "RHI": "Robert Half",
-        "RJF": "Raymond James", "RL": "Ralph Lauren", "RMD": "ResMed", "ROK": "Rockwell",
-        "ROL": "Rollins", "ROP": "Roper", "ROST": "Ross Stores", "RSG": "Republic Services",
-        "RTX": "Raytheon", "RVTY": "Revvity", "SBAC": "SBA Comm", "SBUX": "Starbucks",
-        "SCHW": "Schwab", "SEDG": "SolarEdge", "SEE": "Sealed Air", "SHW": "Sherwin-Williams",
-        "SJM": "J.M. Smucker", "SLB": "Schlumberger", "SNA": "Snap-on", "SNPS": "Synopsys",
-        "SO": "Southern Co", "SPG": "Simon Property", "SPGI": "S&P Global", "SRE": "Sempra",
-        "STE": "STERIS", "STT": "State Street", "STX": "Seagate", "STZ": "Constellation Brands",
-        "SWK": "Stanley Black & Decker", "SWKS": "Skyworks", "SYF": "Synchrony", "SYK": "Stryker",
-        "SYY": "Sysco", "T": "AT&T", "TAP": "Molson Coors", "TDG": "TransDigm",
-        "TDY": "Teledyne", "TECH": "Bio-Techne", "TEL": "TE Connectivity", "TER": "Teradyne",
-        "TFC": "Truist", "TFX": "Teleflex", "TGT": "Target", "TJX": "TJX Companies",
-        "TMO": "Thermo Fisher", "TMUS": "T-Mobile", "TPR": "Tapestry", "TRMB": "Trimble",
-        "TROW": "T. Rowe Price", "TRV": "Travelers", "TSCO": "Tractor Supply", "TSLA": "Tesla",
-        "TSN": "Tyson Foods", "TT": "Trane", "TTWO": "Take-Two", "TXN": "Texas Instruments",
-        "TXT": "Textron", "TYL": "Tyler Technologies", "UAL": "United Airlines", "UDR": "UDR",
-        "UHS": "Universal Health", "ULTA": "Ulta Beauty", "UNH": "UnitedHealth", "UNP": "Union Pacific",
-        "UPS": "UPS", "URI": "United Rentals", "USB": "U.S. Bancorp", "V": "Visa",
-        "VFC": "VF Corp", "VICI": "VICI Properties", "VLO": "Valero", "VMC": "Vulcan",
-        "VNO": "Vornado", "VRSK": "Verisk", "VRSN": "Verisign", "VRTX": "Vertex",
-        "VTR": "Ventas", "VTRS": "Viatris", "VZ": "Verizon", "WAB": "Wabtec",
-        "WAT": "Waters", "WBA": "Walgreens", "WBD": "Warner Bros", "WDC": "Western Digital",
-        "WEC": "WEC Energy", "WELL": "Welltower", "WFC": "Wells Fargo", "WHR": "Whirlpool",
-        "WM": "Waste Management", "WMB": "Williams Cos", "WMT": "Walmart", "WRB": "W.R. Berkley",
-        "WRK": "WestRock", "WST": "West Pharmaceutical", "WTW": "Willis Towers Watson", "WY": "Weyerhaeuser"
-    }
-    
-    # --- 🇹🇼 台股重點備用清單 (防止 API 同步延遲導致的名稱缺失) ---
-    TW_STOCK_FALLBACK = {
-        "2330": "台積電", "2317": "鴻海", "2454": "聯發科", "2382": "廣達",
-        "2330.TW": "台積電", "2317.TW": "鴻海", "2454.TW": "聯發科", "2382.TW": "廣達",
-        "2308": "台達電", "2881": "富邦金", "2882": "國泰金", "2303": "聯電",
-        "0050": "元大台灣50", "0056": "元大高股息", "00878": "國泰永續高股息", "00919": "群益台灣精選高息"
-    }
-    
-    # --- 🪙 加密貨幣名稱補全 (針對 Yahoo Finance 代碼) ---
-    CRYPTO_FALLBACK = {
-        "BTC-USD": "比特幣", "ETH-USD": "以太幣", "SOL-USD": "Solana",
-        "BNB-USD": "幣安幣", "XRP-USD": "瑞波幣", "ADA-USD": "卡爾達諾",
-        "DOGE-USD": "狗狗幣", "AVAX-USD": "雪崩幣", "DOT-USD": "波卡幣",
-        "TRX-USD": "波場幣", "LINK-USD": "Chainlink", "POL28321-USD": "Polygon (POL)",
-        "NEAR-USD": "NEAR", "LTC-USD": "萊特幣", "BCH-USD": "比特現金",
-        "SHIB-USD": "柴犬幣", "DAI-USD": "DAI", "UNI7083-USD": "Uniswap",
-        "LEO-USD": "LEO", "APT21794-USD": "Aptos", "STX4847-USD": "Stacks",
-        "OKB-USD": "OKB", "ATOM-USD": "Cosmos", "IMX10603-USD": "Immutable",
-        "HBAR-USD": "HBAR", "KAS-USD": "Kaspa", "ETC-USD": "以太經典",
-        "RENDER-USD": "Render", "FIL-USD": "Filecoin", "LDO-USD": "Lido"
-    }
-    
-    code_to_name.update(US_STOCK_FALLBACK)
-    if 'US_STOCK_ADDITIONAL' in locals():
-        code_to_name.update(US_STOCK_ADDITIONAL)
-    code_to_name.update(TW_STOCK_FALLBACK)
-    code_to_name.update(CRYPTO_FALLBACK)
+    # 此處保留對 sinopac_api 的轉發，以確保現有程式碼不報錯
+    return None
 
-    # 檢查是否為 MockApi (連線衝突模式) 或 API 尚未初始化
-    is_mock_internal = isinstance(_api, MockApi) if _api is not None else True
-
-    # --- 強化合約同步 (關鍵修復：解決 82 檔問題) ---
-    if not is_mock_internal and hasattr(_api, "Contracts") and hasattr(_api.Contracts, "Stocks"):
-        # 如果當前合約庫太小，強制啟動深度下載
-        if len(code_to_name) < 1000:
-            with st.spinner("📦 正在深度同步市場數據 (預計 15 秒)..."):
-                try:
-                    _api.fetch_contracts(contract_download=True)
-                except Exception as e:
-                    try:
-                        _api.fetch_contracts()
-                    except Exception as e2:
-                        print(f"Fetch contracts failed in get_stock_name_map: {e2}")
-    
-    if not is_mock and hasattr(_api, "Contracts") and hasattr(_api.Contracts, "Stocks"):
-        stocks = _api.Contracts.Stocks
-        
-        def recursive_scan(item, depth=0):
-            if depth > 5: return # 防止過深
-            
-            # [優先級 1] 合約直接映射節點
-            if hasattr(item, '_code2contract'):
-                c2c = item._code2contract
-                for c, contract in c2c.items():
-                    c_code = str(c).upper()
-                    if c_code not in code_to_name:
-                        code_to_name[c_code] = getattr(contract, 'name', 'Unknown')
-                return
-
-            # [優先級 2] 屬性遞迴
-            for attr in dir(item):
-                if attr.startswith('_') or attr in ['append', 'get', 'keys', 'post_init']: continue
-                try:
-                    val = getattr(item, attr)
-                    # 只有具備子節點特徵的才進去
-                    if val and (hasattr(val, '_code2contract') or hasattr(val, '__dict__')):
-                        recursive_scan(val, depth + 1)
-                except: continue
-
-        # 針對常見市場節點進行優先顯性掃描
-        for mk in ['TSE', 'OTC', 'OES', 'US', 'USA']:
-            if hasattr(stocks, mk):
-                recursive_scan(getattr(stocks, mk))
-        
-        # 成功抓取後，存入磁碟快取
-        if len(code_to_name) > 1000:
-            try:
-                with open(NAME_MAP_CACHE_FILE, "wb") as f:
-                    pickle.dump(code_to_name, f)
-            except: pass
-    else:
-        # 如果是 MockApi 或抓取失敗，嘗試從磁碟載入
-        if os.path.exists(NAME_MAP_CACHE_FILE):
-            try:
-                with open(NAME_MAP_CACHE_FILE, "rb") as f:
-                    cached_map = pickle.load(f)
-                    code_to_name.update(cached_map)
-            except: pass
-
-    # 驗證機制 (已移除側邊欄 info，改由主側邊欄邏輯統一處理)
-    if not is_mock_internal and len(code_to_name) < 1000:
-        # 只在側邊欄顯示一次輕量警告，不打斷主畫面
-        st.sidebar.caption(f"ℹ️ 載入 {len(code_to_name)} 檔清單...")
-
-    return code_to_name
+def get_stock_name_map(_api):
+    """橫向串接 sinopac_api 的映射表功能"""
+    return sinopac_api.get_stock_name_map(_api)
 
 
 
@@ -1107,91 +783,13 @@ def check_revenue_momentum(code):
         if latest_yoy > 0:
             return f"📈 成長({latest_yoy:.1f}%)", True
         if latest_yoy > prev_yoy:
-            return f"🔄 轉機({latest_yoy:.1f}%)", True
-        if is_trending_down and latest_yoy < -10:
-            return f"⚠️ 衰退({latest_yoy:.1f}%)", False
-            
-        return f"偏弱({latest_yoy:.1f}%)", True
+        return "無法取得", True
     except:
         return "無法取得", True
 
-
 def resolve_stock_code(input_str, api):
-    """
-    將使用者輸入（代碼或名稱）解析為代碼。
-    如果無法精確解析，則傳回建議清單。
-    """
-    input_str = input_str.strip().upper()
-    if not input_str:
-        return None, []
-    
-    code_to_name = get_stock_name_map(api)
-    if not code_to_name:
-        return None, []
-
-    # 1. 精確比對 (代碼優先)
-    if input_str in code_to_name:
-        return input_str, []
-    
-    # 2. 精確比對 (名稱優先)
-    for code, name in code_to_name.items():
-        if name.upper() == input_str:
-            return code, []
-
-    # 3. 如果輸入是純英文 (可能為美股 Ticker) - 針對 Ticker 做優先處理
-    if input_str.isalpha():
-        # A. 前綴比對 (例如 NV -> NVDA)
-        prefix_matches = []
-        for code, name in code_to_name.items():
-            if code.upper().startswith(input_str):
-                prefix_matches.append((name, code))
-        if prefix_matches:
-            return None, sorted(prefix_matches, key=lambda x: len(x[1]))[:8]
-
-        # B. 針對 Ticker 的拼寫糾錯 (更寬鬆的門檻以捕捉 nvida -> NVDA)
-        tickers = [c for c in code_to_name.keys() if not (c and c[0].isdigit())]
-        close_tickers = difflib.get_close_matches(input_str, tickers, n=5, cutoff=0.5)
-        if close_tickers:
-            results = [(code_to_name[c], c) for c in close_tickers]
-            return None, results
-
-    # 4. 處理台股同音/錯別字變體 (錸德/萊德等)
-    var_set = {input_str}
-    for char in ["來", "萊", "錸"]:
-        if char in input_str:
-            for target in ["來", "萊", "錸"]:
-                var_set.add(input_str.replace(char, target))
-    for char in ["德", "得"]:
-        if char in input_str:
-            for target in ["德", "得"]:
-                var_set.add(input_str.replace(char, target))
-    variants = list(var_set)
-
-    # 5. 模糊建議 (包含子字串與名稱相似度)
-    suggestions = []
-    
-    # A. 名稱包含子字串 (包含變體)
-    for code, name in code_to_name.items():
-        if any(v in name.upper() for v in variants):
-            suggestions.append((name, code))
-    
-    # B. 如果建議太少，才使用慢速的 difflib 比對全市場名稱
-    if len(suggestions) < 5:
-        all_names = list(code_to_name.values())
-        # 限制比對深度與提高門檻，避免找太久與出現亂湊的結果
-        close_names = difflib.get_close_matches(input_str, all_names, n=5, cutoff=0.5)
-        name_to_code = {v: k for k, v in code_to_name.items()}
-        for n in close_names:
-            c = name_to_code.get(n)
-            if c and not any(s[1] == c for s in suggestions):
-                suggestions.append((n, c))
-
-    if suggestions:
-        # 排序：長度越接近輸入的排越前面
-        suggestions.sort(key=lambda x: abs(len(x[0]) - len(input_str)))
-        return None, suggestions[:8]
-            
-    return None, []
+    """橫向串接 sinopac_api 的代碼解析功能"""
+    return sinopac_api.resolve_stock_code(input_str, api)
 
 def build_buy_reason(row):
     """根據分析結果列生成詳細的買入理由描述"""
@@ -1219,40 +817,8 @@ def build_buy_reason(row):
     return f"[{strategy}] (配置:{w_gro}%成長/{w_def}%防禦) 位階:{level:.1f}% | 年偏:{y_bias:+.1f}% | MA20偏:{ma20_bias:+.1f}% | MA20價:{ma20_val:.1f} | ATR損:{stop_val:.1f}"
 
 def get_mass_scan_list(api, market='TW'):
-    '從 4.6 萬檔合約中過濾出真正的股票. market="TW": 台股; "US": 美股'
-    if market == 'CRYPTO':
-        # 加密貨幣：自定義主流幣清單 (Yahoo Finance 格式)
-        return [
-            "BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "XRP-USD", 
-            "ADA-USD", "DOGE-USD", "AVAX-USD", "DOT-USD", "TRX-USD",
-            "LINK-USD", "POL28321-USD", "NEAR-USD", "LTC-USD", "BCH-USD",
-            "SHIB-USD", "DAI-USD", "UNI7083-USD", "LEO-USD", "APT21794-USD",
-            "STX4847-USD", "OKB-USD", "ATOM-USD", "IMX10603-USD", "HBAR-USD",
-            "KAS-USD", "ETC-USD", "RENDER-USD", "FIL-USD", "LDO-USD"
-        ]
-
-    all_map = get_stock_name_map(api)
-    filtered = []
-    for code, name in all_map.items():
-        if market == 'TW':
-            # 台股規則優化：
-            # 1. 只有 4 碼數字 (普通股) 或 00/01 開頭的 6 碼 (ETF/REITs) 才納入
-            # 2. 排除權證與特殊標的 (名稱含 購/售/牛/熊/認/特/債/定)
-            if code and code[0].isdigit():
-                if any(k in name for k in ['購', '售', '牛', '熊', '認', '特', '債', '定']):
-                    continue
-                # 嚴格限制普通股 (4碼) 與主流 ETF (6碼且00或01開頭)
-                if len(code) == 4:
-                    filtered.append(code)
-                elif len(code) == 6 and code.startswith(('00', '01')):
-                    filtered.append(code)
-        elif market == 'US':
-            # 美股：字母開頭且排除加密貨幣代碼
-            if code and code[0].isalpha() and not (code.endswith('.TW') or code.endswith('.TWO') or '-USD' in str(code)):
-                filtered.append(code)
-    
-    # 排序：台股按數字、美股按字母
-    return sorted(filtered)
+    """橫向串接 sinopac_api 的海選清單過濾功能"""
+    return sinopac_api.get_mass_scan_list(api, market)
 
 # --- 🛠️ 核心隔離邏輯：Native Session ID 優先 (背景執行) ---
 # user_id 已在上方初始化並啟動背景同步
@@ -1408,6 +974,16 @@ with st.sidebar.form("add_stock_form", clear_on_submit=True):
         for name, code in suggestions:
             if st.sidebar.button(f"{name} ({code})", key=f"suggest_{code}"):
                 auto_close_sidebar()
+                if code not in st.session_state.watchlist:
+                    st.session_state.watchlist.append(code)
+                    save_watchlist(st.session_state.watchlist, user_id)
+                    st.session_state.active_page = "market"
+                    if "last_suggestions" in st.session_state:
+                        del st.session_state.last_suggestions
+                    st.rerun()
+
+def get_mass_scan_list(api, market='TW'):
+    return sinopac_api.get_mass_scan_list(api, market)
                 if code not in st.session_state.watchlist:
                     st.session_state.watchlist.append(code)
                     save_watchlist(st.session_state.watchlist, user_id)
@@ -2133,41 +1709,17 @@ def show_order_dialog(row, user_id, api, max_api, ca_active):
         if ca_active:
             if c2.button("💰 API 實盤下單", use_container_width=True, type="primary"):
                 try:
-                    # 1. 取得合約
-                    contract = None
-                    for mk in ["TSE", "OTC"]:
-                        try:
-                            contract = getattr(api.Contracts.Stocks, mk)[row['代碼']]
-                            if contract: break
-                        except: continue
+                    trade = sinopac_api.place_sinopac_order(api, row['代碼'], qty, buy_price)
                     
-                    if not contract:
-                        st.error("❌ 找不到該標的合約，無法下單。")
-                    else:
-                        from shioaji import Order
-                        from shioaji.constant import Action, StockPriceType, OrderType
-                        
-                        order = Order(
-                            price=buy_price,
-                            quantity=qty,
-                            action=Action.Buy,
-                            price_type=StockPriceType.LMT, # 限價
-                            order_type=OrderType.ROD, # 當日有效
-                            account=api.list_accounts()[0] # 預設取第一個帳號
-                        )
-                        
-                        trade = api.place_order(contract, order)
-                        # Shioaji place_order returns a Trade object, not a dict with 'error'.
-                        # Error handling is typically done via exceptions or checking trade status.
-                        # Assuming a successful placement if no exception is raised.
-                        # [NEW] 成功後也記錄在「個人紀錄」中作為持倉追蹤 (類型為 Real)
-                        reason = f"永豐金實盤買入 (委託號: {trade.order.id})" # Use trade.order.id for order ID
-                        record_trade(user_id, "Manual", row['代碼'], row['名稱'], buy_price, reason, is_system=False, trade_type="Real", shares=qty)
-                        
-                        st.session_state.last_order = f"{get_now().strftime('%H:%M:%S')} - 永豐金已送出 {row['代碼']} {qty}股 (限價:{buy_price})"
-                        st.toast("✅ 永豐金委託已送出！已加入持倉紀錄。", icon="🚀")
-                        st.rerun()
+                    # [NEW] 成功後也記錄在「個人紀錄」中作為持倉追蹤 (類型為 Real)
+                    reason = f"永豐金實盤買入 (委託號: {trade.order.id})"
+                    record_trade(user_id, "Manual", row['代碼'], row['名稱'], buy_price, reason, is_system=False, trade_type="Real", shares=qty)
+                    
+                    st.session_state.last_order = f"{get_now().strftime('%H:%M:%S')} - 永豐金已送出 {row['代碼']} {qty}股 (限價:{buy_price})"
+                    st.toast("✅ 永豐金委託已送出！已加入持倉紀錄。", icon="🚀")
+                    st.rerun()
                 except Exception as e:
+                    st.error(f"❌ 下單失敗: {e}")
                     st.error(f"❌ API 下單失敗: {e}")
         else:
             c2.link_button("🌐 官網開啟下單", 
