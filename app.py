@@ -400,10 +400,8 @@ if nav_cols[4].button("🪙 加密", use_container_width=True):
 # --- 手機版側邊欄提示 ---
 
 # @st.cache_resource  <-- [REMOVED] 為了確保能套用最新的 max_api.py 修改，暫時關閉快取
-def init_max_api_v4():
+def init_max_api_v5(key, secret):
     if MaxExchangeAPI:
-        key = os.getenv("MAX_API_KEY")
-        secret = os.getenv("MAX_API_SECRET")
         if key and secret and len(key) > 10:
             return MaxExchangeAPI(key, secret)
     return None
