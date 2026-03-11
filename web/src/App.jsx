@@ -1,3 +1,4 @@
+// Final check: Ensuring TradingControl is visible in navItems
 import { useState, useEffect } from 'react'
 import { LayoutDashboard, ListFilter, Settings, ShieldCheck, TrendingUp, Cpu, LogOut, Menu, X } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
