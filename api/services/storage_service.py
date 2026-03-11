@@ -18,7 +18,7 @@ except Exception as e:
     print(f"[Storage] GCS client failed: {e}. Falling back to local.")
     gcs = None
 
-def save_credentials(user_id, creds):
+def update_user_credentials(user_id, creds):
     """保存憑證：優先使用 Firestore，失敗則存入本地 JSON"""
     if db:
         try:
@@ -34,7 +34,7 @@ def save_credentials(user_id, creds):
         json.dump(creds, f, ensure_ascii=False)
     return True
 
-def load_credentials(user_id):
+def get_user_credentials(user_id):
     """加載憑證：優先從 Firestore 讀取"""
     if db:
         try:
@@ -51,9 +51,9 @@ def load_credentials(user_id):
             return json.load(f)
     return {}
 
-# 別名以相容於新服務
-get_user_credentials = load_credentials
-update_user_credentials = save_credentials
+#保留舊名稱別名以相容舊路由
+load_credentials = get_user_credentials
+save_credentials = update_user_credentials
 
 def save_user_watchlist(user_id, market, watchlist):
     """保存使用者追蹤清單"""

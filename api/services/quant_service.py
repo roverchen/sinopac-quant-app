@@ -2,6 +2,7 @@ import re
 import pandas as pd
 import numpy as np
 import yfinance as yf
+import requests
 from datetime import datetime, timedelta
 
 def extract_stock_code(raw_str):
