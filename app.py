@@ -1132,6 +1132,8 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
     
     # 決定是否開啟靜音模式 (當目標數量大於 10 時自動開啟，避免 UI 警告塞車)
     quiet_mode = len(watchlist) > 10
+    # 海選模式標記 (主要用於跳過耗時的營收檢查)
+    use_batch = st.session_state.get("is_big_scan", False) or len(watchlist) > 100
     
     # 用於顯示進度的佔位符
     status_placeholder = st.empty()
@@ -1409,6 +1411,10 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
                 
                 # 確認資料有效性
                 if df is None or df.empty:
+                    data_list.append({
+                        "代碼": code, "名稱": stock_name, "最新價格": 0, "操作建議": "❌ 無法取得數據",
+                        "一年位階": "-", "年線乖離": "-", "MA20乖離": "-", "MACD狀態": "-", "綜合評分": -1
+                    })
                     continue
 
             # 如果成功取得資料且不是從本地快取讀取的，則儲存到本地快取 (此處僅存原始數據，指標會統一在下方計算)
