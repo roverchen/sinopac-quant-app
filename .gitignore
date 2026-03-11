@@ -17,7 +17,7 @@ pyvenv.cfg
 secrets.toml
 *.pfx
 shioaji.log
-cache/
+# cache/
 watchlist.json
 
 # Streamlit
