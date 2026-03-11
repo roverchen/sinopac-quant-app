@@ -465,7 +465,7 @@ def save_results_cache(df, is_big_scan=False, market=None, user_id="shared"):
         with open(cache_file, "wb") as f:
             pickle.dump(data, f)
             
-        # 2. 如果是大數據海選，同步存入「每日全域共享快取」
+        # 2. 如果是全市場大選股，同步存入「每日全域共享快取」
         if is_big_scan and market:
             shared_file = os.path.join(CACHE_DIR, f"shared_results_{market}.pkl")
             with open(shared_file, "wb") as f:
@@ -880,7 +880,7 @@ if st.sidebar.button("📊 交易紀錄儀表板", use_container_width=True):
     st.rerun()
 st.markdown('</div>', unsafe_allow_html=True)
 
-st.sidebar.markdown("###  大數據海選")
+st.sidebar.markdown("###  全市場大選股")
 
 # 2. 台灣/美國股票海選
 with st.sidebar.container():
@@ -1863,7 +1863,7 @@ if (big_scan_tw_btn or big_scan_us_btn or big_scan_crypto_btn or scan_btn or sho
         results = pd.DataFrame()
         cached_data = None
         
-        # 如果是大數據海選，且不是強制刷新，先試著讀取今日共享快取
+        # 如果是全市場大選股，且不是強制刷新，先試著讀取今日共享快取
         if st.session_state.is_big_scan and not st.session_state.get("force_rescan"):
             cached_data = load_results_cache(user_id=user_id, market=st.session_state.scan_market)
             if cached_data:
@@ -1889,7 +1889,7 @@ if (big_scan_tw_btn or big_scan_us_btn or big_scan_crypto_btn or scan_btn or sho
             target_count = len(scan_list)
             success_rate = (success_count / target_count) if target_count > 0 else 0
             
-            # 對於名單較少的掃描 (watchlist)，隨時存檔；對於「大數據海選」，則需要 30% 門檻
+            # 對於名單較少的掃描 (watchlist)，隨時存檔；對於「全市場大選股」，則需要 30% 門檻
             do_shared_save = True
             if st.session_state.is_big_scan and success_rate < 0.3:
                 do_shared_save = False
