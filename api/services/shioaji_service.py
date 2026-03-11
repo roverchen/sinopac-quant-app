@@ -7,6 +7,7 @@ from api.services.storage_service import get_user_credentials
 class MockShioajiClient:
     """模擬 Shioaji API 用於無憑證測試"""
     def __init__(self):
+        self.is_mock = True
         self.Contracts = self
         self.Stocks = self
         self.TSE = self
@@ -88,7 +89,8 @@ class ShioajiService:
             raise Exception(f"找不到標的 {symbol} 的合約。")
 
         # 如果是模擬模式，直接調用 mock 的 place_order，跳過 Order 物件的驗證
-        if isinstance(api, MockShioajiClient):
+        # 使用多重檢查以防止 isinstance 在模組重載時失敗
+        if hasattr(api, 'is_mock') or type(api).__name__ == 'MockShioajiClient':
             return api.place_order(None, None)
 
         order = Order(
@@ -109,7 +111,8 @@ class ShioajiService:
         取得資金與庫存資訊。
         """
         api = cls.get_api_client(email)
-        if isinstance(api, MockShioajiClient):
+        # 使用多重檢查以防止 isinstance 在模組重載時失敗
+        if hasattr(api, 'is_mock') or type(api).__name__ == 'MockShioajiClient':
             return {
                 "account_id": "MOCK-PAPER-001",
                 "status": "connected",
