@@ -55,6 +55,25 @@ export const quantService = {
   getScanProgress: async () => {
     const response = await api.get('/quant/scan/progress');
     return response.data;
+  },
+};
+
+export const tradeService = {
+  async getStatus() {
+    const response = await api.get('/trade/status');
+    return response.data;
+  },
+  async toggleAutoTrade(enabled) {
+    const response = await api.post(`/trade/toggle?enabled=${enabled}`);
+    return response.data;
+  },
+  async getAccount() {
+    const response = await api.get('/trade/account');
+    return response.data;
+  },
+  async placeOrder(orderData) {
+    const response = await api.post('/trade/order', orderData);
+    return response.data;
   }
 };
 

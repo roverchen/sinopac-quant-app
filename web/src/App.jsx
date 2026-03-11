@@ -3,9 +3,10 @@ import { LayoutDashboard, ListFilter, Settings, ShieldCheck, TrendingUp, Cpu, Lo
 import { motion, AnimatePresence } from 'framer-motion'
 import Watchlist from './components/Watchlist'
 import Login from './components/Login'
-import SettingsPage from './components/Settings'
+import Settings from './components/Settings'
 import Dashboard from './components/Dashboard'
 import StrategyScan from './components/StrategyScan'
+import TradingControl from './components/TradingControl'
 import { authService } from './services/api'
 import React from 'react'
 
@@ -48,7 +49,8 @@ class ErrorBoundary extends React.Component {
 const navItems = [
   { id: 'dashboard', label: '儀表板', icon: LayoutDashboard },
   { id: 'watchlist', label: '追蹤清單', icon: ListFilter },
-  { id: 'strategy', label: '策略海選', icon: TrendingUp },
+  { id: 'scan', label: '策略海選', icon: TrendingUp },
+  { id: 'trading', label: '交易掌控', icon: ShieldCheck },
   { id: 'settings', label: '系統設定', icon: Settings },
 ]
 
@@ -195,10 +197,11 @@ function App() {
             <ErrorBoundary>
               {activeTab === 'dashboard' && <Dashboard />}
               {activeTab === 'watchlist' && <Watchlist />}
-              {activeTab === 'strategy' && <StrategyScan />}
-              {activeTab === 'settings' && <SettingsPage />}
+              {activeTab === 'scan' && <StrategyScan />}
+              {activeTab === 'trading' && <TradingControl />}
+              {activeTab === 'settings' && <Settings />}
               
-              {(['dashboard', 'watchlist', 'strategy', 'settings'].indexOf(activeTab) === -1) && (
+              {(['dashboard', 'watchlist', 'scan', 'trading', 'settings'].indexOf(activeTab) === -1) && (
                 <div className="mt-10 p-12 border-2 border-dashed border-slate-800 rounded-3xl flex flex-col items-center justify-center text-slate-500">
                   <Cpu className="w-12 h-12 mb-4 opacity-20" />
                   <p className="text-lg font-medium">正在構建 {navItems.find(i => i.id === activeTab)?.label} 模組...</p>
