@@ -442,10 +442,15 @@ if max_api:
 # 確保合約在登入後只抓一次 (強制下載模式)
 if api is not None and not st.session_state.get('contracts_fetched', False):
     try:
+        # 強制抓取全市場存量合約
         api.fetch_contracts()
         if hasattr(api, 'Contracts') and (not hasattr(api.Contracts, 'Stocks') or len(dir(api.Contracts.Stocks)) < 3):
             api.fetch_contracts(contract_download=True)
-        st.session_state.contracts_fetched = True
+        
+        # 額外確認數量是否達標 (台股約 1800+)
+        code_map = sinopac_api.get_stock_name_map(api)
+        if len(code_map) > 1500:
+            st.session_state.contracts_fetched = True
     except:
         pass
 
@@ -494,8 +499,9 @@ def load_results_cache(user_id="shared", market=None):
 
 # --- 結果清單工具 ---
 
+@st.cache_data(show_spinner=False)
 def get_stock_name_map(_api):
-    """橫向串接 sinopac_api 的映射表功能"""
+    """橫向串接 sinopac_api 的映射表功能 (具備快取以加速 UI)"""
     return sinopac_api.get_stock_name_map(_api)
 
 
@@ -2051,8 +2057,8 @@ if "results" in st.session_state:
         st.session_state.results = results
         st.session_state.last_weight = st.session_state.defense_weight
 
-    # 2. 自動補完名稱
-    if (results['名稱'] == '未知').any():
+    # 2. 自動補完名稱 (增加 empty 檢查預防 KeyError)
+    if not results.empty and (results['名稱'] == '未知').any():
         code_map = get_stock_name_map(api)
         if code_map:
             results['名稱'] = results.apply(
