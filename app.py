@@ -515,6 +515,8 @@ def load_results_cache(user_id="shared", market=None):
                 with open(shared_file, "rb") as f:
                     data = pickle.load(f)
                     # 檢查快取日期是否為「今天」
+                    cache_day = data.get('timestamp', '').split(' ')[0]
+                    today_str = get_now().strftime("%Y-%m-%d")
                     if cache_day == today_str:
                         return data
             except: pass
@@ -1124,11 +1126,12 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
     all_dfs = {}
     
     # 確保 pooled_dfs 存在於 session_state 並嘗試自動補完 (涵蓋所有市場)
-    if 'pooled_dfs' not in st.session_state or not st.session_state.pooled_dfs:
+    if 'pooled_dfs' not in st.session_state:
         st.session_state.pooled_dfs = {}
         
-    # 如果目前的池子是空的，嘗試從快取載入
-    if not st.session_state.pooled_dfs:
+    # 檢查是否有名單中的代碼不在現有池子裡，若有則嘗試從磁碟重載對應市場
+    missing_any = any(c not in st.session_state.pooled_dfs for c in watchlist)
+    if missing_any:
         # 如果有指定市場，則載入該市場；否則尝试載入所有可能市場以補全 Watchlist
         markets_to_check = [market_type] if market_type else ["TW", "US", "CRYPTO"]
         for m in markets_to_check:
@@ -1136,13 +1139,14 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
             cached_data = load_results_cache(market=m)
             if cached_data and "dfs" in cached_data:
                 st.session_state.pooled_dfs.update(cached_data["dfs"])
-                print(f"[Pool] Loaded {len(cached_data['dfs'])} stocks from {m} cache.")
+                print(f"[Pool] Updated {len(cached_data['dfs'])} stocks from {m} cache.")
 
     pool = st.session_state.pooled_dfs
     
     # 1. 優先從同步池中提取基礎歷史資料
     need_download = []
-    for c in watchlist:
+    for c_raw in watchlist:
+        c = c_raw.strip().upper()
         if c in pool:
             # 必須重置索引並規範欄位，因為 Pooled 裡的可能是原始格式
             d = pool[c].copy()
@@ -1271,9 +1275,9 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
                             target.at[last_idx, '_is_live'] = True
             except: pass
 
-    for i, code in enumerate(watchlist):
+    for i, code_raw in enumerate(watchlist):
         # 0. 代碼正規化 (確保大小寫一致，利於名稱比對與 API 調用)
-        code = code.upper()
+        code = code_raw.strip().upper()
         
         progress_info = f"🕒 正在分析 ({i+1}/{len(watchlist)}): {code} ..."
         status_placeholder.info(progress_info)
