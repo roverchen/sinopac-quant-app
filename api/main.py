@@ -21,8 +21,8 @@ app.add_middleware(
 )
 
 # 註冊路由
-app.include_router(quant.router)
-app.include_router(auth.router)
+app.include_router(quant.router, prefix="/api")
+app.include_router(auth.router, prefix="/api")
 
 # 靜態檔案掛載 (React Build 結果)
 # 優先檢查 static 目錄是否存在，若存在則掛載
