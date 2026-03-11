@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { authService } from '../services/api';
-import { Save, Shield, Key, Landmark, Database, CheckCircle2 } from 'lucide-react';
+import { Save, Shield, Key, Landmark, Database, CheckCircle2, Settings as SettingsIcon } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const Settings = () => {
@@ -43,7 +43,7 @@ const Settings = () => {
     <div className="max-w-4xl mx-auto space-y-8">
       <div className="flex flex-col gap-2">
         <h2 className="text-2xl font-bold text-white flex items-center gap-3">
-          <Settings className="w-6 h-6 text-indigo-400" />
+          <SettingsIcon className="w-6 h-6 text-indigo-400" />
           交易環境設定
         </h2>
         <p className="text-slate-400 text-sm">設定您的券商 API 憑證，這將永久儲存於加密資料庫中。</p>
