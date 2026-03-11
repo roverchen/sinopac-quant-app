@@ -39,17 +39,14 @@ def fetch_and_analyze_local(watchlist, market_type='TW'):
     data_list = []
     start_date = (get_now() - timedelta(days=365)).strftime("%Y-%m-%d")
     
-    # 建立映射
-    # 注意：本地端需要 shioaji api 才能獲取台股名單
-    # 但如果是美股或加密貨幣，get_mass_scan_list 內部有寫死或邏輯
-    code_to_name = {} 
-    # 這裡我們嘗試不依賴 api 物件獲取名單，改從 sinopac_api.py 邏輯獲取
-    # 如果是台股，通常本地端執行也會有 shioaji api 權限，這裡暫設為空
+    # 建立映射 (支援台、美、加密貨幣)
+    print(f"📇 正在載入 {market_type} 名稱為代碼映射...")
+    code_to_name = sinopac_api.get_stock_name_map(None)
     
     print(f"🚀 開始分析 {len(watchlist)} 檔標的 (市場: {market_type})...")
     
     # 批次下載優化 (yf.download)
-    chunk_size = 100
+    chunk_size = 20 if market_type == 'TW' else 100
     all_dfs = {}
     
     for k in range(0, len(watchlist), chunk_size):
@@ -68,31 +65,62 @@ def fetch_and_analyze_local(watchlist, market_type='TW'):
             tickers.append(t_code)
             ticker_to_code[t_code] = c
             
-        try:
-            batch_data = yf.download(
-                tickers, 
-                period="1y", 
-                group_by='ticker', 
-                threads=True, 
-                progress=False, 
-                timeout=30, 
-                auto_adjust=True
-            )
+        # 增加重新嘗試機制
+        retry_count = 0
+        max_retries = 3
+        batch_data = None
+        
+        while retry_count < max_retries:
+            try:
+                batch_data = yf.download(
+                    tickers, 
+                    period="1y", 
+                    group_by='ticker', 
+                    threads=True, 
+                    progress=False, 
+                    timeout=30, 
+                    auto_adjust=True
+                )
+                if batch_data is not None and not batch_data.empty:
+                    break
+            except Exception as e:
+                if "Rate limited" in str(e) or "429" in str(e):
+                    retry_count += 1
+                    wait_time = 10 * retry_count
+                    print(f"⚠️ 受到頻率限制，等待 {wait_time} 秒後重試 ({retry_count}/{max_retries})...")
+                    time.sleep(wait_time)
+                else:
+                    print(f"❌ 批次下載失敗: {e}")
+                    break
             
+            retry_count += 1
+            if retry_count < max_retries:
+                time.sleep(5)
+
+        if batch_data is not None and not batch_data.empty:
             for t in tickers:
-                if t in batch_data:
-                    d = batch_data[t].dropna()
+                # 處理多層索引或單層索引
+                try:
+                    if len(tickers) > 1:
+                        d = batch_data[t].dropna()
+                    else:
+                        d = batch_data.dropna()
+                        
                     if not d.empty:
                         d = d.reset_index()
                         d.columns = [c.lower() for c in d.columns]
                         if 'date' in d.columns: d = d.rename(columns={'date': 'ts'})
                         all_dfs[ticker_to_code[t]] = d
-        except Exception as e:
-            print(f"❌ 批次下載失敗: {e}")
+                except:
+                    continue
+            
+        # 增加短暫延遲以減緩 Yahoo 頻率限制
+        sleep_time = 5 if market_type == 'TW' else 1
+        time.sleep(sleep_time)
             
     # 開始分析
     for i, code in enumerate(watchlist):
-        stock_name = code # 簡化
+        stock_name = code_to_name.get(code, code) # 從映射表取名
         df = all_dfs.get(code)
         
         if df is None or df.empty:
