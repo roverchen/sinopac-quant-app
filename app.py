@@ -455,10 +455,36 @@ if api is not None and not st.session_state.get('contracts_fetched', False):
         pass
 
 # --- 結果暫存 (Persistence) 邏輯 ---
-# --- 結果暫存 (Persistence) 邏輯 ---
+def validate_market_tickers(df, market):
+    """驗證 DataFrame 內的代碼是否符合所屬市場 (嚴防 Crypto 混入美股)"""
+    if df.empty or not market:
+        return True
+    
+    tickers = df['代碼'].astype(str).tolist()
+    if not tickers:
+        return True
+        
+    if market == 'CRYPTO':
+        # 加密貨幣代碼應包含 -USD
+        crypto_count = sum(1 for t in tickers if "-USD" in t)
+        return (crypto_count / len(tickers)) > 0.5
+    elif market == 'TW':
+        # 台股代碼通常為純數字
+        tw_count = sum(1 for t in tickers if t[0].isdigit())
+        return (tw_count / len(tickers)) > 0.5
+    elif market == 'US':
+        # 美股代碼通常為字母且不含 -USD
+        us_count = sum(1 for t in tickers if t[0].isalpha() and "-USD" not in t)
+        return (us_count / len(tickers)) > 0.5
+    return True
+
 def save_results_cache(df, is_big_scan=False, market=None, user_id="shared"):
     """將掃描結果存入磁碟，防止手機重新整理後消失"""
-    try:
+        # 0. 嚴格驗證市場一致性，防止資料污染
+        if not validate_market_tickers(df, market):
+            print(f"[Critical] Refusing to save cache: Market mismatch for {market}")
+            return
+
         data = {
             "df": df,
             "timestamp": get_now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -491,7 +517,12 @@ def load_results_cache(user_id="shared", market=None):
                     cache_day = data.get('timestamp', '').split(' ')[0]
                     today_str = get_now().strftime("%Y-%m-%d")
                     if cache_day == today_str:
-                        return data
+                        # 3. 額外驗證快取內容是否符合市場 (雙重防護)
+                        cache_df = data.get('df', pd.DataFrame())
+                        if validate_market_tickers(cache_df, market):
+                            return data
+                        else:
+                            print(f"[Warning] Loading ignored: Cache content mismatch for {market}")
             except: pass
 
     # 2. 回退到個人專屬快取 (Session 恢復)
@@ -1040,6 +1071,14 @@ watchlist = st.session_state.watchlist
 
 # --- 核心邏輯 ---
 def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
+    # --- [NEW] 嚴格過濾清單，確保代碼符合市場所屬，防止交叉污染 ---
+    if market_type == 'CRYPTO':
+        watchlist = [t for t in watchlist if "-USD" in str(t)]
+    elif market_type == 'TW':
+        watchlist = [t for t in watchlist if str(t)[0].isdigit()]
+    elif market_type == 'US':
+        watchlist = [t for t in watchlist if str(t)[0].isalpha() and "-USD" not in str(t)]
+        
     data_list = []
     is_rate_limited = False # [修正] 初始化變數，避免小樣本名單時報錯
 
