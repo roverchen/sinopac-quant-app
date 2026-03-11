@@ -34,13 +34,41 @@ const TradingControl = () => {
   const toggleAutoTrade = async () => {
     setLoading(true);
     try {
-      await tradeService.toggleAutoTrade(!status.auto_trade_enabled);
+      const resp = await tradeService.toggleAutoTrade(!status.auto_trade_enabled);
       await fetchStatus();
+      alert(resp.message || "設定已更新");
     } catch (err) {
       console.error(err);
+      alert("切換失敗，請檢查網路連線");
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleManualOrder = async () => {
+    const symbol = prompt("請輸入下單代碼 (例如 2330):", "2330");
+    if (!symbol) return;
+    
+    setLoading(true);
+    try {
+      const resp = await tradeService.placeOrder({
+        symbol,
+        qty: 1,
+        price: 0, // 市價或現價處理邏輯在後端
+        action: "Buy"
+      });
+      alert(`下單成功！單號: ${resp.trade_id}`);
+      fetchAccount();
+    } catch (err) {
+      console.error(err);
+      alert("下單失敗: " + (err.response?.data?.detail || "未知錯誤"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const showPlaceholderAlert = (feature) => {
+    alert(`${feature} 功能開發中，敬請期待！`);
   };
 
   return (
@@ -129,7 +157,10 @@ const TradingControl = () => {
               </div>
             </div>
             
-            <button className="w-full py-4 bg-slate-800 hover:bg-slate-700 rounded-2xl text-slate-300 font-bold transition-all flex items-center justify-center gap-3">
+            <button 
+              onClick={() => showPlaceholderAlert('資金明細')}
+              className="w-full py-4 bg-slate-800 hover:bg-slate-700 rounded-2xl text-slate-300 font-bold transition-all flex items-center justify-center gap-3"
+            >
               <Landmark className="w-5 h-5" />
               資金明細
             </button>
@@ -144,7 +175,10 @@ const TradingControl = () => {
                 <TrendingUp className="w-6 h-6 text-emerald-400" />
                 <h3 className="text-xl font-bold text-white">當前持倉</h3>
               </div>
-              <button className="text-indigo-400 text-sm font-bold hover:text-indigo-300 transition-all flex items-center gap-2">
+              <button 
+                onClick={() => showPlaceholderAlert('交易歷史')}
+                className="text-indigo-400 text-sm font-bold hover:text-indigo-300 transition-all flex items-center gap-2"
+              >
                 <History className="w-4 h-4" />
                 交易歷史
               </button>
@@ -175,7 +209,11 @@ const TradingControl = () => {
                     <p className="text-xs text-slate-500">直接對接 Shioaji API 執行即時委託</p>
                   </div>
                 </div>
-                <button className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-black transition-all">
+                <button 
+                  onClick={handleManualOrder}
+                  disabled={loading}
+                  className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-black transition-all disabled:opacity-50"
+                >
                   立即執行
                 </button>
               </div>
