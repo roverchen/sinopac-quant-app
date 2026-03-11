@@ -985,11 +985,6 @@ with st.sidebar.form("add_stock_form", clear_on_submit=True):
 
 def get_mass_scan_list(api, market='TW'):
     return sinopac_api.get_mass_scan_list(api, market)
-                if code not in st.session_state.watchlist:
-                    st.session_state.watchlist.append(code)
-                    save_watchlist(st.session_state.watchlist, user_id)
-                    del st.session_state.last_suggestions
-                    st.rerun()
 
 # 4. 🔒 交易憑證設定 (sidebar button → main area page)
 st.sidebar.divider()
