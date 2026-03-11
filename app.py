@@ -1127,30 +1127,43 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
     # 用於顯示進度的佔位符
     status_placeholder = st.empty()
     
-    # --- [NEW] 混合模式：如果是海選（名單較多），採用 Yahoo 批次下載以達閃電速度 ---
-    use_batch = len(watchlist) > 5
-    if use_batch:
-        status_placeholder.info(f"⚡ 啟動閃電海選模式 (批次下載 {len(watchlist)} 檔)...")
-        # 1. 將 4 碼轉為 Yahoo 格式 (上市 .TW, 上櫃 .TWO)
-        # 為了效率，先全部嘗試 .TW，後續分析時若沒資料再補抓 .TWO
-        ticker_to_code = {} # 紀錄 Ticker -> 原代碼 的映射
+    # --- [NEW] 混合模式：優先使用同步池 (Pooled Data)，若無則採用 Yahoo 批次下載 ---
+    all_dfs = {}
+    pool = st.session_state.get("pooled_dfs", {})
+    
+    # 1. 優先從同步池中提取基礎歷史資料
+    need_download = []
+    for c in watchlist:
+        if c in pool:
+            # 必須重置索引並規範欄位，因為 Pooled 裡的可能是原始格式
+            d = pool[c].copy()
+            d.columns = [col.lower() for col in d.columns]
+            if 'date' in d.columns: d = d.rename(columns={'date': 'ts'})
+            all_dfs[c] = d
+        else:
+            need_download.append(c)
+            
+    # 如果名單中有池子裡沒有的，則啟動 yfinance 批次下載
+    if need_download:
+        status_placeholder.info(f"⚡ 名單中有 {len(need_download)} 檔資料缺失，嘗試從網路抓取...")
+        ticker_to_code = {} 
         tickers = []
-        for c in watchlist:
-            if c and c[1:2].isdigit() or c[0].isdigit():
-                # 台股：預設嘗試 .TW (批次模式下僅嘗試一種以節省配額)
+        for c in need_download:
+            if c and (c[1:2].isdigit() or c[0].isdigit()):
                 t = f"{c}.TW" 
                 tickers.append(t)
                 ticker_to_code[t] = c
             else:
-                # 美股處理
                 t = c.replace('.', '-')
                 tickers.append(t)
                 ticker_to_code[t] = c
         
-        # 2. 執行批次下載 (分段執行以提高成功率)
+        # 執行批次下載
         try:
-            all_dfs = {}
-            chunk_size = 100 # 回歸高效批次下載
+            chunk_size = 100 
+            for k in range(0, len(tickers), chunk_size):
+                if is_rate_limited: break
+                chunk = tickers[k:k+chunk_size]
             
             for k in range(0, len(tickers), chunk_size):
                 if is_rate_limited: break
@@ -1206,6 +1219,53 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
         except Exception as e:
             st.error(f"批次下載發生異常: {e}")
 
+    # 3. [Tier 2] 實時價格注入 (永豐/MAX) 
+    # 此步驟將「最新現價」蓋過歷史最後一筆，形成實時指標
+    if api is not None and not isinstance(api, sinopac_api.MockApi) and market_type == 'TW':
+        try:
+            contracts = []
+            valid_codes = []
+            for c in watchlist:
+                if c and (c[0].isdigit()):
+                    for mk in ["TSE", "OTC"]:
+                        try:
+                            contract = getattr(api.Contracts.Stocks, mk)[c]
+                            if contract: 
+                                contracts.append(contract)
+                                valid_codes.append(c)
+                                break
+                        except: continue
+            if contracts:
+                snaps = api.snapshots(contracts)
+                for s in snaps:
+                    if s.code in all_dfs:
+                        target = all_dfs[s.code]
+                        if not target.empty:
+                            last_idx = target.index[-1]
+                            target.at[last_idx, 'close'] = s.close
+                            if hasattr(s, 'high') and s.high > 0: target.at[last_idx, 'high'] = s.high
+                            if hasattr(s, 'low') and s.low > 0: target.at[last_idx, 'low'] = s.low
+                            target.at[last_idx, '_is_live'] = True
+        except: pass
+
+    if market_type == 'CRYPTO':
+        m_key = st.session_state.get("max_api_key")
+        m_secret = st.session_state.get("max_api_secret")
+        if m_key and m_secret:
+            try:
+                from max_api import MaxExchangeAPI
+                max_api = MaxExchangeAPI(m_key, m_secret)
+                snaps = max_api.get_snapshots()
+                for c in watchlist:
+                    mid = c.replace("-USD", "usdt").lower()
+                    if mid in snaps and c in all_dfs:
+                        target = all_dfs[c]
+                        if not target.empty:
+                            last_idx = target.index[-1]
+                            target.at[last_idx, 'close'] = float(snaps[mid]['last'])
+                            target.at[last_idx, '_is_live'] = True
+            except: pass
+
     for i, code in enumerate(watchlist):
         # 0. 代碼正規化 (確保大小寫一致，利於名稱比對與 API 調用)
         code = code.upper()
@@ -1221,12 +1281,15 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
             df = None
             source = "☁️ 雲端"
 
-            # 混合模式：優先檢查剛才批次抓取的結果
-            if use_batch and code in all_dfs:
-                df = all_dfs[code].reset_index()
-                df.columns = [c.lower() for c in df.columns]
-                if 'date' in df.columns: df = df.rename(columns={'date': 'ts'})
-                source = "⚡ 閃電"
+            # 混合模式：優先檢查剛才緩存中 (Pool 或 Batch) 的結果
+            if code in all_dfs:
+                df = all_dfs[code].copy()
+                # 確保規範化
+                if 'ts' not in df.columns and 'date' in df.columns:
+                    df = df.reset_index().rename(columns={'date': 'ts'})
+                
+                is_live = df['_is_live'].iloc[-1] if '_is_live' in df.columns else False
+                source = "🟢 實時" if is_live else "🧬 同步"
 
             # 檢查快取是否存在且為「今日」更新
             if os.path.exists(cache_file):

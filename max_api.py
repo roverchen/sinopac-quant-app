@@ -107,6 +107,21 @@ class MaxExchangeAPI:
         except Exception as e:
             return {"error": str(e)}
 
+    def get_snapshots(self) -> dict:
+        """
+        獲取所有市場的即時報價 (Public API)
+        回傳 {market_id: ticker_info}
+        """
+        url = f"{self.base_url}/api/v2/tickers"
+        try:
+            response = requests.get(url, timeout=10)
+            if response.status_code == 200:
+                return response.json()
+            else:
+                return {}
+        except Exception:
+            return {}
+
     def get_markets(self) -> list:
         """
         獲獲取所有可交易的市場清單
