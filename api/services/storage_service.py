@@ -46,22 +46,31 @@ def update_user_credentials(user_id, creds):
     return True
 
 def get_user_credentials(user_id):
-    """加載憑證：優先從 Firestore 讀取"""
+    """加載憑證：優先從 Firestore 讀取。增加強健性檢查避免 TypeError。"""
     db = get_db()
+    creds = {}
     if db:
         try:
             doc = db.collection("users").document(user_id).get()
             if doc.exists:
-                return doc.to_dict().get("credentials", {})
+                creds = doc.to_dict().get("credentials", {})
         except Exception as e:
             print(f"Firestore load error: {e}")
             
-    # 本地備援
-    path = os.path.join(CACHE_DIR, f"creds_{user_id}.json")
-    if os.path.exists(path):
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return {}
+    # 如果 Firestore 沒抓到，嘗試本地
+    if not isinstance(creds, dict):
+        creds = {}
+        
+    if not creds:
+        path = os.path.join(CACHE_DIR, f"creds_{user_id}.json")
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                try:
+                    creds = json.load(f)
+                except:
+                    creds = {}
+    
+    return creds if isinstance(creds, dict) else {}
 
 #保留舊名稱別名以相容舊路由
 load_credentials = get_user_credentials
