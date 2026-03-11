@@ -1095,15 +1095,13 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
         ticker_to_code = {} # 紀錄 Ticker -> 原代碼 的映射
         tickers = []
         for c in watchlist:
-            if c and c[0].isdigit():
-                t1 = f"{c}.TW"
-                t2 = f"{c}.TWO"
-                tickers.append(t1)
-                tickers.append(t2)
-                ticker_to_code[t1] = c
-                ticker_to_code[t2] = c
+            if c and c[1:2].isdigit() or c[0].isdigit():
+                # 台股：預設嘗試 .TW (批次模式下僅嘗試一種以節省配額)
+                t = f"{c}.TW" 
+                tickers.append(t)
+                ticker_to_code[t] = c
             else:
-                # 美股處理：將 BRK.B 轉為 BRK-B 以利 Yahoo 識別
+                # 美股處理
                 t = c.replace('.', '-')
                 tickers.append(t)
                 ticker_to_code[t] = c
@@ -1125,11 +1123,11 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
                 try:
                     batch_data = yf.download(
                         chunk, 
-                        start=start_date, 
+                        period="1y", # 改用 period="1y" 更穩定
                         group_by='ticker', 
                         threads=False, 
                         progress=False, 
-                        timeout=15, 
+                        timeout=20, 
                         auto_adjust=True,
                         session=YF_SESSION
                     )
@@ -1212,9 +1210,13 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
                 if code and code[0].isdigit():
                     for suffix in ['.TW', '.TWO']:
                         try:
-                            t = yf.Ticker(code + suffix, session=YF_SESSION)
-                            # [相容性修正] 此環境 yfinance 1.2.0 不支援 history(threads=...) 參數
-                            df_yf = t.history(start=start_date, interval="1d", auto_adjust=True)
+                            # 隨機切換 UA 以降低封鎖
+                            temp_session = requests.Session()
+                            temp_session.headers.update({"User-Agent": get_random_ua()})
+                            
+                            t = yf.Ticker(code + suffix, session=temp_session)
+                            # 增加 period=1y 備援，並放寬逾時
+                            df_yf = t.history(period="1y", interval="1d", auto_adjust=True, timeout=15)
                             if not df_yf.empty:
                                 df = df_yf.reset_index()
                                 df.columns = [c.lower() for c in df.columns]
@@ -2075,7 +2077,7 @@ if "results" in st.session_state:
     is_big = st.session_state.get("is_big_scan", False)
     scan_market = st.session_state.get("scan_market", "TW")
     market_label = {"TW": "台灣", "US": "美國", "CRYPTO": "加密貨幣"}.get(scan_market, "未知")
-    list_title = f"🏆 {market_label}全市場大選股排行榜" if is_big else "📊 目前追蹤清單"
+    list_title = f"🏆 {market_label}全市場海選排行榜" if is_big else "📊 目前追蹤清單"
     st.markdown(f"### {list_title}")
     
     # 分頁計算
