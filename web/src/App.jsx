@@ -8,6 +8,13 @@ import Dashboard from './components/Dashboard'
 import StrategyScan from './components/StrategyScan'
 import { authService } from './services/api'
 
+const navItems = [
+  { id: 'dashboard', label: '儀表板', icon: LayoutDashboard },
+  { id: 'watchlist', label: '追蹤清單', icon: ListFilter },
+  { id: 'strategy', label: '策略海選', icon: TrendingUp },
+  { id: 'settings', label: '系統設定', icon: Settings },
+]
+
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard')
   const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('token'))
