@@ -1,8 +1,9 @@
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
+from api.routes.auth import get_current_user
 from api.models.schemas import StockAnalysisRequest, AnalysisResponse, AnalysisResult, ScanRequest, ScanProgressResponse
 from api.services.quant_service import extract_stock_code, analyze_stock, fetch_tw_symbols, fetch_us_symbols
 from api.services.data_fetcher import fetch_batch_data
-from api.services.storage_service import save_data_pool
+from api.services.storage_service import save_data_pool, get_user_watchlist, save_user_watchlist
 from datetime import datetime
 import asyncio
 
