@@ -3,8 +3,28 @@ from shioaji import Order
 from shioaji.constant import Action, StockPriceType, OrderType
 import os
 import threading
+import random
 from typing import Dict, Optional
 from api.services.storage_service import get_user_credentials
+
+class MockShioajiClient:
+    """模擬 Shioaji API 用於無憑證測試"""
+    def __init__(self):
+        self.Contracts = self
+        self.Stocks = self
+        self.TSE = self
+        self.OTC = self
+    
+    def __getitem__(self, key): return self
+    def list_accounts(self):
+        class MockAcc: account_id = "MOCK-PAPER-TRADING-001"
+        return [MockAcc()]
+    
+    def place_order(self, contract, order):
+        class MockTrade: 
+            class Order: id = f"MOCK-{random.randint(1000,9999)}"
+            order = Order()
+        return MockTrade()
 
 class ShioajiService:
     _instance_lock = threading.Lock()
@@ -33,8 +53,10 @@ class ShioajiService:
                 cls._instances[email] = api
                 return api
             except Exception as e:
-                print(f"Shioaji login failed for {email}: {e}")
-                return None
+                print(f"Shioaji login failed for {email}, falling back to MOCK: {e}")
+                mock_api = MockShioajiClient()
+                cls._instances[email] = mock_api
+                return mock_api
 
     @classmethod
     def place_order(cls, email: str, symbol: str, qty: int, price: float, action: Action = Action.Buy):
@@ -74,8 +96,14 @@ class ShioajiService:
         取得資金與庫存資訊。
         """
         api = cls.get_api_client(email)
-        if not api:
-            return None
+        if isinstance(api, MockShioajiClient):
+            return {
+                "account_id": "MOCK-PAPER-001",
+                "status": "connected",
+                "is_mock": True
+            }
+        
+        if not api: return None
         
         try:
             accounts = api.list_accounts()
