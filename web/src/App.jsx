@@ -101,6 +101,7 @@ function App() {
             <h1 className="text-xl font-bold bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
               Quant Pro
             </h1>
+            <span className="text-[10px] text-slate-700 font-mono mt-1">v2.0.5</span>
           </div>
           <button 
             className="md:hidden p-2 text-slate-400 hover:text-white"
