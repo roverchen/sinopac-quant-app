@@ -6,12 +6,23 @@ import { tradeService } from '../services/api';
 const TradingControl = () => {
   const [status, setStatus] = useState({ auto_trade_enabled: false, mode: 'Simulation' });
   const [account, setAccount] = useState({ balance: 0, positions: [], status: 'loading' });
+  const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     fetchStatus();
     fetchAccount();
+    fetchOrders();
   }, []);
+
+  const fetchOrders = async () => {
+    try {
+      const resp = await tradeService.getOrders();
+      setOrders(resp.orders || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const fetchStatus = async () => {
     try {
@@ -59,6 +70,7 @@ const TradingControl = () => {
       });
       alert(`下單成功！單號: ${resp.trade_id}`);
       fetchAccount();
+      fetchOrders();
     } catch (err) {
       console.error(err);
       alert("下單失敗: " + (err.response?.data?.detail || "未知錯誤"));
@@ -184,19 +196,45 @@ const TradingControl = () => {
               </button>
             </div>
 
-            {account.positions?.length === 0 ? (
+            {orders.length === 0 ? (
               <div className="flex-1 flex flex-col items-center justify-center py-12 text-center">
                 <div className="w-20 h-20 bg-slate-800/50 rounded-full flex items-center justify-center mb-4 border border-slate-700">
                   <TrendingUp className="w-10 h-10 text-slate-600" />
                 </div>
-                <h4 className="text-lg font-bold text-slate-400">尚無持倉部位</h4>
+                <h4 className="text-lg font-bold text-slate-400">尚無持倉/委託部位</h4>
                 <p className="text-slate-500 text-sm mt-2 max-w-xs">
                   機器人啟動後，若篩選到符合條件的優質標的將自動在此顯示。
                 </p>
               </div>
             ) : (
-              <div className="space-y-4">
-                {/* 庫存列表 (預留空間) */}
+              <div className="space-y-4 flex-1 overflow-y-auto pr-2 custom-scrollbar">
+                {orders.map((order) => (
+                  <div key={order.order_id} className="p-5 bg-slate-800/40 border border-slate-700 rounded-2xl flex items-center justify-between hover:bg-slate-800/60 transition-all">
+                    <div className="flex items-center gap-4">
+                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold ${
+                        order.action === "Buy" ? "bg-emerald-500/10 text-emerald-500" : "bg-rose-500/10 text-rose-500"
+                      }`}>
+                        {order.action === "Buy" ? "買" : "賣"}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-bold text-white text-lg">{order.symbol}</p>
+                          <span className="text-xs px-2 py-0.5 bg-slate-700 text-slate-400 rounded-md uppercase font-mono">{order.order_id}</span>
+                        </div>
+                        <p className="text-sm text-slate-500 font-medium">
+                          {order.qty} 股 · ${order.price} · {order.time}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                        order.status === "Filled" ? "bg-emerald-500/20 text-emerald-500" : "bg-amber-500/20 text-amber-500"
+                      }`}>
+                        {order.status === "Filled" ? "已成交" : "委託中"}
+                      </span>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
             

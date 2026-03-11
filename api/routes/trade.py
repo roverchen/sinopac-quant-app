@@ -62,3 +62,9 @@ async def place_manual_order(order: OrderRequest, current_user: str = Depends(ge
         return {"status": "success", "trade_id": str(trade.order.id)}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+@router.get("/orders")
+async def get_orders(current_user: str = Depends(get_current_user)):
+    """取得委託紀錄"""
+    orders = ShioajiService.get_orders(current_user)
+    return {"orders": orders}

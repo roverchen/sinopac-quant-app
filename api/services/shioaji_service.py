@@ -12,17 +12,39 @@ class MockShioajiClient:
         self.Stocks = self
         self.TSE = self
         self.OTC = self
+        self._mock_orders = [] # 儲存模擬訂單
     
     def __getitem__(self, key): return self
     def list_accounts(self):
         class MockAcc: account_id = "MOCK-PAPER-TRADING-001"
         return [MockAcc()]
     
-    def place_order(self, contract, order):
+    def place_order(self, contract, order, symbol="2330"):
+        # 建立一個較完整的模擬訂單物件
+        order_id = f"MOCK-{random.randint(1000,9999)}"
+        new_order = {
+            "order_id": order_id,
+            "symbol": symbol,
+            "action": "Buy",
+            "qty": 1,
+            "price": 500.0,
+            "status": "Filled",
+            "time": "剛剛"
+        }
+        self._mock_orders.insert(0, new_order)
+        
         class MockTrade: 
-            class Order: id = f"MOCK-{random.randint(1000,9999)}"
+            class Order: id = order_id
             order = Order()
         return MockTrade()
+
+    def get_orders(self):
+        # 如果還沒有訂單，給一個初始範例
+        if not self._mock_orders:
+            self._mock_orders = [
+                {"order_id": "MOCK-0001", "symbol": "2330", "action": "Buy", "qty": 1, "price": 1025.0, "status": "Filled", "time": "2026-03-11"}
+            ]
+        return self._mock_orders
 
 # 全域變數以避免 Class Attribute 查找問題
 _shioaji_instances = {}
@@ -78,7 +100,7 @@ class ShioajiService:
         
         if is_mock:
             print(f"DEBUG: [v1.0.2] Extreme Bypass Triggered for {email}")
-            return api.place_order(None, None) if api else MockShioajiClient().place_order(None, None)
+            return api.place_order(None, None, symbol=symbol) if api else MockShioajiClient().place_order(None, None, symbol=symbol)
 
         from shioaji.constant import Action, StockPriceType, OrderType
         from shioaji import Order
@@ -141,6 +163,38 @@ class ShioajiService:
             }
         except:
             return None
+
+    @classmethod
+    def get_orders(cls, email: str):
+        """
+        取得委託紀錄。
+        """
+        api = cls.get_api_client(email)
+        if not api: return []
+        
+        # 處理模擬模式
+        if hasattr(api, 'is_mock') or type(api).__name__ == 'MockShioajiClient':
+            return api.get_orders()
+            
+        try:
+            # 實務上 Shioaji 查詢委託需要一點處理
+            api.update_status()
+            trades = api.list_trades()
+            results = []
+            for t in trades:
+                results.append({
+                    "order_id": str(t.order.id),
+                    "symbol": t.contract.code,
+                    "action": str(t.order.action),
+                    "qty": t.order.quantity,
+                    "price": t.order.price,
+                    "status": str(t.status.status),
+                    "time": str(t.status.order_datetime) if hasattr(t.status, 'order_datetime') else "未知"
+                })
+            return results
+        except Exception as e:
+            print(f"Error fetching orders: {e}")
+            return []
 
 # 全域單例
 shioaji_service = ShioajiService()

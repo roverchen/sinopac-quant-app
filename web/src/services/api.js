@@ -74,6 +74,10 @@ export const tradeService = {
   async placeOrder(orderData) {
     const response = await api.post('/trade/order', orderData);
     return response.data;
+  },
+  async getOrders() {
+    const response = await api.get('/trade/orders');
+    return response.data;
   }
 };
 
