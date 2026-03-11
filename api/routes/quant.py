@@ -83,18 +83,26 @@ async def get_scan_progress():
     return ScanProgressResponse(**scan_status)
 
 @router.post("/analyze", response_model=AnalysisResponse)
-async def analyze_watchlist(request: StockAnalysisRequest):
+async def analyze_watchlist(request: StockAnalysisRequest, current_user: str = Depends(get_current_user)):
     """分析追蹤清單並返回結果。使用併發抓取優化。"""
     results = []
     
+    watchlist = request.watchlist
+    # 如果傳入空清單，嘗試從儲存空間讀取
+    if not watchlist:
+        watchlist = get_user_watchlist(current_user, request.market_type)
+    
+    if not watchlist:
+        return AnalysisResponse(results=[], timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+
     # 這裡未來可以優先從 data_pool 讀取以加速
-    data_pool = fetch_batch_data(request.watchlist, request.market_type)
+    data_pool = fetch_batch_data(watchlist, request.market_type)
     
     # 取得名稱對照表
     tw_symbols = fetch_tw_symbols()
     us_symbols = fetch_us_symbols()
     
-    for symbol in request.watchlist:
+    for symbol in watchlist:
         code = extract_stock_code(symbol)
         df = data_pool.get(symbol)
         
@@ -121,3 +129,27 @@ async def analyze_watchlist(request: StockAnalysisRequest):
         results=results,
         timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     )
+
+@router.get("/watchlist")
+async def get_watchlist_api(market_type: str = "TW", current_user: str = Depends(get_current_user)):
+    """取得使用者追蹤清單"""
+    watchlist = get_user_watchlist(current_user, market_type)
+    return {"watchlist": watchlist}
+
+@router.post("/watchlist")
+async def add_to_watchlist_api(symbol: str, market_type: str = "TW", current_user: str = Depends(get_current_user)):
+    """新增標的至追蹤清單"""
+    watchlist = get_user_watchlist(current_user, market_type)
+    if symbol not in watchlist:
+        watchlist.append(symbol)
+        save_user_watchlist(current_user, market_type, watchlist)
+    return {"status": "success", "watchlist": watchlist}
+
+@router.delete("/watchlist")
+async def remove_from_watchlist_api(symbol: str, market_type: str = "TW", current_user: str = Depends(get_current_user)):
+    """從追蹤清單移除標的"""
+    watchlist = get_user_watchlist(current_user, market_type)
+    if symbol in watchlist:
+        watchlist.remove(symbol)
+        save_user_watchlist(current_user, market_type, watchlist)
+    return {"status": "success", "watchlist": watchlist}

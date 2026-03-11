@@ -56,6 +56,18 @@ export const quantService = {
     const response = await api.get('/quant/scan/progress');
     return response.data;
   },
+  getWatchlist: async (marketType = 'TW') => {
+    const response = await api.get(`/quant/watchlist?market_type=${marketType}`);
+    return response.data;
+  },
+  addToWatchlist: async (symbol, marketType = 'TW') => {
+    const response = await api.post(`/quant/watchlist?symbol=${symbol}&market_type=${marketType}`);
+    return response.data;
+  },
+  removeFromWatchlist: async (symbol, marketType = 'TW') => {
+    const response = await api.delete(`/quant/watchlist?symbol=${symbol}&market_type=${market_type}`);
+    return response.data;
+  }
 };
 
 export const tradeService = {
