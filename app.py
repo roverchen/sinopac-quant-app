@@ -1971,17 +1971,6 @@ if "results" not in st.session_state:
         # 完全沒快取時，檢查是否自動同步
         if watchlist:
             should_sync = True
-    else:
-        # 完全沒快取時，才考慮是否自動啟動 (謹慎觸發)
-        if "last_suggestions" not in st.session_state:
-            # 只有在 watchlist 不為空時才執行
-            if watchlist:
-                should_sync = True
-            # 或者是有自動觸發標記
-            if st.session_state.get("trigger_daily_scan"):
-                should_sync = True
-                # 注意：不要在這裡歸零旗標，保留給下方的掃描邏輯判斷市場使用
-
 elif st.session_state.get("last_watchlist") != current_watchlist_key:
     # 只有當追蹤清單「內容改變」時，才自動觸發同步
     should_sync = True
