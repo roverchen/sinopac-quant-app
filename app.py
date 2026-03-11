@@ -480,6 +480,7 @@ def validate_market_tickers(df, market):
 
 def save_results_cache(df, is_big_scan=False, market=None, user_id="shared"):
     """將掃描結果存入磁碟，防止手機重新整理後消失"""
+    try:
         # 0. 嚴格驗證市場一致性，防止資料污染
         if not validate_market_tickers(df, market):
             print(f"[Critical] Refusing to save cache: Market mismatch for {market}")
