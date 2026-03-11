@@ -1762,7 +1762,7 @@ if st.session_state.active_page == "market":
     now_tp = get_now()
     sys_logs = load_trading_log("system")
     
-    # 確保自動執行追蹤器初始化
+    # 初始化自動執行追蹤器 (Session 層級)
     if "auto_last_run" not in st.session_state:
         st.session_state.auto_last_run = {}
 
@@ -1770,11 +1770,19 @@ if st.session_state.active_page == "market":
     if not st.session_state.get("is_big_scan"):
         for m_code, (h, m) in MARKET_SCHEDULE.items():
             if now_tp.hour >= h and (now_tp.hour > h or now_tp.minute >= m):
-                # 1. 檢查 Session 今日是否已嘗試自動執行過
-                if st.session_state.auto_last_run.get(m_code) == now_tp.date():
+                # 1. 檢查今日「共享快取」是否已成功生成 (代表當日任務已圓滿達成)
+                cached = load_results_cache(market=m_code)
+                if cached is not None:
                     continue
 
-                # 2. 檢查資料庫今日是否已執行成功
+                # 2. 檢查 Session 是否在 30 分鐘內已嘗試過 (防止頻率限制時無限循環跳轉)
+                last_attempt_time = st.session_state.auto_last_run.get(f"{m_code}_time")
+                if last_attempt_time:
+                    delta = (now_tp - last_attempt_time).total_seconds()
+                    if delta < 1800: # 30 分鐘冷卻時間
+                        continue
+
+                # 3. 檢查資料庫今日是否已執行成功 (雙重保險)
                 has_executed = False
                 today_prefix = now_tp.strftime("%Y-%m-%d")
                 for l in sys_logs:
@@ -1788,8 +1796,8 @@ if st.session_state.active_page == "market":
                             break
                 
                 if not has_executed:
-                    # 標記為今日已嘗試執行
-                    st.session_state.auto_last_run[m_code] = now_tp.date()
+                    # 標記本次嘗試時間
+                    st.session_state.auto_last_run[f"{m_code}_time"] = now_tp
                     
                     st.session_state.trigger_daily_scan = True
                     st.session_state.scan_market = m_code
