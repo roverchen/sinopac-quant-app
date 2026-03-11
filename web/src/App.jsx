@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { LayoutDashboard, ListFilter, Settings, ShieldCheck, TrendingUp, Cpu, LogOut } from 'lucide-react'
+import { LayoutDashboard, ListFilter, Settings, ShieldCheck, TrendingUp, Cpu, LogOut, Menu, X } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Watchlist from './components/Watchlist'
 import Login from './components/Login'
@@ -56,6 +56,7 @@ function App() {
   const [activeTab, setActiveTab] = useState('dashboard')
   const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('token'))
   const [user, setUser] = useState(null)
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -72,22 +73,48 @@ function App() {
 
   return (
     <div className="flex h-screen bg-slate-950 text-slate-100 overflow-hidden">
-      {/* Sidebar */}
-      <aside className="w-64 border-r border-slate-800 bg-slate-900/50 backdrop-blur-xl flex flex-col">
-        <div className="p-6 flex items-center gap-3">
-          <div className="p-2 bg-indigo-600 rounded-lg">
-            <Cpu className="w-6 h-6 text-white" />
+      {/* Mobile Menu Overlay */}
+      <AnimatePresence>
+        {isMobileMenuOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsMobileMenuOpen(false)}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden"
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Sidebar - Desktop & Mobile Drawer */}
+      <aside className={`fixed md:relative z-50 w-64 h-full border-r border-slate-800 bg-slate-900/95 md:bg-slate-900/50 backdrop-blur-xl flex flex-col transform transition-transform duration-300 ease-in-out ${
+        isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+      }`}>
+        <div className="p-6 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-indigo-600 rounded-lg">
+              <Cpu className="w-6 h-6 text-white" />
+            </div>
+            <h1 className="text-xl font-bold bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
+              Quant Pro
+            </h1>
           </div>
-          <h1 className="text-xl font-bold bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
-            Quant Pro
-          </h1>
+          <button 
+            className="md:hidden p-2 text-slate-400 hover:text-white"
+            onClick={() => setIsMobileMenuOpen(false)}
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         <nav className="flex-1 px-4 py-4 space-y-2">
           {navItems.map((item) => (
             <button
               key={item.id}
-              onClick={() => setActiveTab(item.id)}
+              onClick={() => {
+                setActiveTab(item.id)
+                setIsMobileMenuOpen(false)
+              }}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
                 activeTab === item.id
                   ? 'bg-indigo-600/10 text-indigo-400 shadow-[inset_0_0_0_1px_rgba(79,70,229,0.2)]'
@@ -125,29 +152,40 @@ function App() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto bg-[radial-gradient(circle_at_top_right,rgba(37,38,44,1),rgba(15,15,18,1))]">
-        <header className="h-20 px-8 flex items-center justify-between border-b border-slate-800/50 sticky top-0 bg-slate-950/50 backdrop-blur-md z-10">
-          <div className="flex items-center gap-2 text-slate-400 text-sm">
-            <span>首頁</span>
-            <span>/</span>
-            <span className="text-slate-100 font-medium font-inter">
+      <main className="flex-1 overflow-y-auto bg-[radial-gradient(circle_at_top_right,rgba(37,38,44,1),rgba(15,15,18,1))] relative w-full">
+        <header className="h-16 md:h-20 px-4 md:px-8 flex items-center justify-between border-b border-slate-800/50 sticky top-0 bg-slate-950/80 backdrop-blur-md z-30">
+          <div className="flex items-center gap-3">
+            <button 
+              className="md:hidden p-2 -ml-2 text-slate-400 hover:text-white"
+              onClick={() => setIsMobileMenuOpen(true)}
+            >
+              <Menu className="w-6 h-6" />
+            </button>
+            <div className="hidden md:flex items-center gap-2 text-slate-400 text-sm">
+              <span>首頁</span>
+              <span>/</span>
+              <span className="text-slate-100 font-medium font-inter">
+                {navItems.find(i => i.id === activeTab)?.label}
+              </span>
+            </div>
+            <div className="md:hidden text-slate-100 font-medium font-inter">
               {navItems.find(i => i.id === activeTab)?.label}
-            </span>
+            </div>
           </div>
           
-          <div className="flex items-center gap-4">
-            <button className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm transition-colors border border-slate-700">
+          <div className="flex items-center gap-3 md:gap-4">
+            <button className="hidden sm:block px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm transition-colors border border-slate-700">
               重啟掃描
             </button>
-            <div className="h-8 w-px bg-slate-800"></div>
-            <div className="flex items-center gap-2 text-emerald-400 text-sm font-medium">
-              <ShieldCheck className="w-4 h-4" />
+            <div className="hidden sm:block h-8 w-px bg-slate-800"></div>
+            <div className="flex items-center gap-1.5 md:gap-2 text-emerald-400 text-xs md:text-sm font-medium bg-emerald-500/10 px-3 py-1.5 rounded-full border border-emerald-500/20">
+              <ShieldCheck className="w-3.5 h-3.5 md:w-4 md:h-4" />
               <span>系統正常</span>
             </div>
           </div>
         </header>
 
-        <section className="p-8">
+        <section className="p-4 md:p-8">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}

@@ -55,8 +55,9 @@ const Watchlist = () => {
         </button>
       </div>
 
-      <div className="bg-slate-900/40 border border-slate-800 rounded-3xl overflow-hidden backdrop-blur-sm">
-        <table className="w-full text-left border-collapse">
+      <div className="bg-slate-900/40 border border-slate-800 rounded-3xl overflow-x-auto backdrop-blur-sm">
+        <div className="min-w-[800px]">
+          <table className="w-full text-left border-collapse">
           <thead>
             <tr className="border-b border-slate-800 bg-slate-800/20">
               <th className="px-6 py-4 text-sm font-semibold text-slate-400">標的</th>
@@ -125,6 +126,7 @@ const Watchlist = () => {
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );
