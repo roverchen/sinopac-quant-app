@@ -492,10 +492,7 @@ def load_results_cache(user_id="shared", market=None):
     # 2. 回退到個人專屬快取 (Session 恢復)
     return None
 
-@st.cache_data(show_spinner=False)
-def get_stock_name_map(_api):
-    # 此處保留對 sinopac_api 的轉發，以確保現有程式碼不報錯
-    return None
+# --- 結果清單工具 ---
 
 def get_stock_name_map(_api):
     """橫向串接 sinopac_api 的映射表功能"""
@@ -981,9 +978,6 @@ with st.sidebar.form("add_stock_form", clear_on_submit=True):
                         del st.session_state.last_suggestions
                     st.rerun()
 
-def get_mass_scan_list(api, market='TW'):
-    return sinopac_api.get_mass_scan_list(api, market)
-
 # 4. 🔒 交易憑證設定 (sidebar button → main area page)
 st.sidebar.divider()
 # 連線狀態摘要
@@ -1109,7 +1103,7 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
         # 2. 執行批次下載 (分段執行以提高成功率)
         try:
             all_dfs = {}
-            chunk_size = 15 # 大幅縮小 chunk 粒度，降低被偵測風險
+            chunk_size = 100 # 回歸高效批次下載
             
             for k in range(0, len(tickers), chunk_size):
                 if is_rate_limited: break
@@ -1848,6 +1842,8 @@ if (big_scan_tw_btn or big_scan_us_btn or big_scan_crypto_btn or scan_btn or sho
         st.session_state.scan_market = m_type
         scan_list = get_mass_scan_list(api, market=m_type)
         toast_msg = f"🚀 開始 {m_label} 大平原掃描 (共 {len(scan_list)} 檔)..."
+        # [重要] 開始新掃描前清除舊結果，防止 UI 顯示錯誤市場的數據
+        st.session_state.results = pd.DataFrame()
     else:
         st.session_state.is_big_scan = False
         st.session_state.scan_market = None
