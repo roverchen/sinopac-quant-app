@@ -23,22 +23,19 @@ class MockShioajiClient:
             order = Order()
         return MockTrade()
 
+# 全域變數以避免 Class Attribute 查找問題
+_shioaji_instances = {}
+_shioaji_lock = threading.Lock()
+
 class ShioajiService:
-    _instance_lock = threading.Lock()
-    _instances: Dict[str, any] = {}
-    
     @classmethod
     def get_api_client(cls, email: str):
         """
         為特定使用者取得或建立 Shioaji API 實例（Singleton per user）。
         """
-        with cls._instance_lock:
-            # 確保 _instances 存在於 cls
-            if not hasattr(cls, '_instances'):
-                cls._instances = {}
-                
-            if email in cls._instances:
-                return cls._instances[email]
+        with _shioaji_lock:
+            if email in _shioaji_instances:
+                return _shioaji_instances[email]
 
             creds = get_user_credentials(email)
             
@@ -46,7 +43,7 @@ class ShioajiService:
             if not creds or 'shioaji_api_key' not in creds:
                 print(f"No credentials for {email}, returning MockShioajiClient for simulation.")
                 mock_api = MockShioajiClient()
-                cls._instances[email] = mock_api
+                _shioaji_instances[email] = mock_api
                 return mock_api
 
             try:
@@ -56,12 +53,12 @@ class ShioajiService:
                     api_key=creds['shioaji_api_key'],
                     secret_key=creds['shioaji_secret_key']
                 )
-                cls._instances[email] = api
+                _shioaji_instances[email] = api
                 return api
             except Exception as e:
                 print(f"Shioaji login failed for {email}, falling back to MOCK: {e}")
                 mock_api = MockShioajiClient()
-                cls._instances[email] = mock_api
+                _shioaji_instances[email] = mock_api
                 return mock_api
 
     @classmethod
