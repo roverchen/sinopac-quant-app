@@ -7,6 +7,43 @@ import SettingsPage from './components/Settings'
 import Dashboard from './components/Dashboard'
 import StrategyScan from './components/StrategyScan'
 import { authService } from './services/api'
+import React from 'react'
+
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error("React Error Catch:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="h-full w-full flex flex-col items-center justify-center bg-slate-900 border border-rose-500/20 rounded-3xl p-8 text-center">
+          <ShieldCheck className="w-16 h-16 text-rose-500 mb-4 opacity-50" />
+          <h2 className="text-2xl font-bold text-white mb-2">畫面渲染失敗</h2>
+          <p className="text-slate-400 mb-6 font-mono text-sm max-w-md bg-slate-950 p-4 rounded-xl text-left overflow-auto border border-slate-800">
+            {this.state.error?.toString()}
+          </p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="px-6 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl transition-colors"
+          >
+            重新載入頁面
+          </button>
+        </div>
+      );
+    }
+    return this.props.children; 
+  }
+}
 
 const navItems = [
   { id: 'dashboard', label: '儀表板', icon: LayoutDashboard },
@@ -115,19 +152,22 @@ function App() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4 }}
+            className="h-full"
           >
-            {activeTab === 'dashboard' && <Dashboard />}
-            {activeTab === 'watchlist' && <Watchlist />}
-            {activeTab === 'strategy' && <StrategyScan />}
-            {activeTab === 'settings' && <SettingsPage />}
-            
-            {(['dashboard', 'watchlist', 'strategy', 'settings'].indexOf(activeTab) === -1) && (
-              <div className="mt-10 p-12 border-2 border-dashed border-slate-800 rounded-3xl flex flex-col items-center justify-center text-slate-500">
-                <Cpu className="w-12 h-12 mb-4 opacity-20" />
-                <p className="text-lg font-medium">正在構建 {navItems.find(i => i.id === activeTab)?.label} 模組...</p>
-                <p className="text-sm mt-2 font-inter">Quant Pro 架構遷移進行中</p>
-              </div>
-            )}
+            <ErrorBoundary>
+              {activeTab === 'dashboard' && <Dashboard />}
+              {activeTab === 'watchlist' && <Watchlist />}
+              {activeTab === 'strategy' && <StrategyScan />}
+              {activeTab === 'settings' && <SettingsPage />}
+              
+              {(['dashboard', 'watchlist', 'strategy', 'settings'].indexOf(activeTab) === -1) && (
+                <div className="mt-10 p-12 border-2 border-dashed border-slate-800 rounded-3xl flex flex-col items-center justify-center text-slate-500">
+                  <Cpu className="w-12 h-12 mb-4 opacity-20" />
+                  <p className="text-lg font-medium">正在構建 {navItems.find(i => i.id === activeTab)?.label} 模組...</p>
+                  <p className="text-sm mt-2 font-inter">Quant Pro 架構遷移進行中</p>
+                </div>
+              )}
+            </ErrorBoundary>
           </motion.div>
         </section>
       </main>
