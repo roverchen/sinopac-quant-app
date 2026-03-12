@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import re
+import requests
 from max_api import MaxExchangeAPI
 
 def extract_stock_code(raw_str):
@@ -128,9 +129,14 @@ def calculate_technical_indicators(df):
     df.columns = [c.lower() for c in df.columns]
     
     # 計算 MA
+    df['ma5'] = df['close'].rolling(window=5).mean()
     df['ma20'] = df['close'].rolling(window=20).mean()
     df['ma60'] = df['close'].rolling(window=60).mean()
+    df['ma100'] = df['close'].rolling(window=100).mean()
     df['ma240'] = df['close'].rolling(window=240).mean()
+    
+    # 計算成交量 MA
+    df['vol_ma5'] = df['volume'].rolling(window=5).mean()
     
     # 計算 MACD
     ema12 = df['close'].ewm(span=12).mean()
@@ -152,6 +158,38 @@ def calculate_technical_indicators(df):
     
     return df
 
+def check_revenue_momentum(code):
+    """
+    營收檢查：近三個月 YoY 趨勢。
+    """
+    if not code.isdigit(): return "N/A", True
+    try:
+        url = "https://api.finmindtrade.com/api/v4/data"
+        params = {
+            "dataset": "TaiwanStockMonthRevenue",
+            "data_id": code,
+            "start_date": (datetime.now() - timedelta(days=200)).strftime("%Y-%m-%d")
+        }
+        res = requests.get(url, params=params, timeout=5)
+        data = res.json().get('data', [])
+        if len(data) < 3: return "數據不足", True
+        
+        yoy_list = []
+        for d in data[-3:]:
+            yoy = d.get('revenue_month_year_comparison') or d.get('revenue_percentage_change_year') or 0
+            yoy_list.append(yoy)
+            
+        latest_yoy = yoy_list[-1]
+        is_declining = all(yoy_list[i] > yoy_list[i+1] for i in range(len(yoy_list)-1))
+        
+        # 衰退判定：連續三個月 YoY 遞減且最新一月為負
+        if is_declining and latest_yoy < 0:
+            return f"📉 衰退({latest_yoy:.1f}%)", False
+            
+        return f"✅ 正常({latest_yoy:.1f}%)", True
+    except:
+        return "無法取得", True
+
 def analyze_stock(df, code, name, defense_weight=0.5, market_type='TW'):
     """分析單一標的並返回結果 dict"""
     if df is None or len(df) < 10:
@@ -166,6 +204,7 @@ def analyze_stock(df, code, name, defense_weight=0.5, market_type='TW'):
     last_price = last_row['close']
     ma20_last = last_row['ma20']
     ma240_last = last_row['ma240']
+    ma100_last = last_row['ma100']
     year_high = last_row['year_high']
     year_low = last_row['year_low']
     atr = last_row['atr']
@@ -173,30 +212,58 @@ def analyze_stock(df, code, name, defense_weight=0.5, market_type='TW'):
     # 位階百分比
     level_percentile = (last_price - year_low) / (year_high - year_low) if year_high > year_low else 0.5
     
-    # 乖離率
-    defense_base = ma240_last if not np.isnan(ma240_last) else last_row['ma60']
+    # 乖離率 (README: 台股 240/60, Crypto 100)
+    if market_type == 'CRYPTO':
+        defense_base = ma100_last if not np.isnan(ma100_last) else last_row['ma60']
+    else:
+        defense_base = ma240_last if not np.isnan(ma240_last) else last_row['ma60']
+    
     dist_to_defense = (last_price - defense_base) / defense_base if defense_base > 0 else 0
     dist_to_ma20 = (last_price - ma20_last) / ma20_last if ma20_last > 0 else 0
     
-    # MACD 狀態
+    # MACD 狀態 (加入 0 軸濾鏡)
     macd = last_row['macd']
     signal = last_row['signal']
-    is_gold_cross = macd > signal
-    macd_status = "🔴 弱勢"
-    if macd > 0 and is_gold_cross: macd_status = "🚀 強勢金叉"
-    elif macd > 0 and not is_gold_cross: macd_status = "☁️ 高檔整理"
-    elif macd < 0 and is_gold_cross: macd_status = "🌓 低檔金叉"
+    hist = last_row['hist']
+    prev_hist = df['hist'].iloc[-2] if len(df) > 1 else hist
     
-    # 分數計算 (Value Defense vs Growth)
+    is_gold_cross = prev_hist <= 0 and hist > 0
+    is_above_zero = macd > 0 and signal > 0
+    
+    macd_status = "🔴 弱勢"
+    if is_above_zero:
+        macd_status = "🚀 強勢金叉" if is_gold_cross else "☁️ 強勢整理"
+    else:
+        macd_status = "🌓 低檔金叉" if is_gold_cross else "🔴 弱勢盤整"
+    
+    # 成交量動能 (README: 站在 5 日均線上 且 成交量 > 5 日均量 1.2 倍)
+    ma5 = last_row['ma5']
+    vol_ma5 = last_row['vol_ma5']
+    has_vol_momentum = (last_price > ma5) and (last_row['volume'] > vol_ma5 * 1.2)
+    
+    # 分數計算 (README 規則)
+    # A. 價值防禦
     value_score = (1 - level_percentile) * 50
     if -0.05 < dist_to_defense < 0.05: value_score += 30
+    if has_vol_momentum: value_score += 20
     
+    # B. 強勢拉回
     pullback_score = (1 - min(abs(dist_to_ma20), 0.1)/0.1) * 50
-    if is_gold_cross: pullback_score += 30
+    if is_gold_cross:
+        bonus = 50 if is_above_zero else 30
+        pullback_score += bonus
     
     final_score = (defense_weight * value_score) + ((1 - defense_weight) * pullback_score)
 
-    # --- 魯棒性修正: 處理 NaN / Inf 以防止 JSON 序列化失敗 (500 Error) ---
+    # 營收檢查 (僅台股且非海選模式 - 這裡我們簡化為如果是台股就查)
+    is_rev_ok = True
+    rev_msg = ""
+    if market_type == 'TW' and code.isdigit():
+        rev_msg, is_rev_ok = check_revenue_momentum(code)
+        if not is_rev_ok:
+            final_score *= 0.1 # 營收衰退打一折
+
+    # --- 魯棒性修正: 處理 NaN / Inf ---
     def sanitize(val):
         if val is None or (isinstance(val, (float, np.floating)) and np.isnan(val)):
             return 0.0
@@ -210,10 +277,29 @@ def analyze_stock(df, code, name, defense_weight=0.5, market_type='TW'):
     ma20_last = sanitize(ma20_last)
     atr = sanitize(atr)
     
-    # 建議建構 (簡化版)
-    stop_loss = ma20_last if ma20_last > 0 else last_price * 0.95
-    target = last_price * 1.2
-    suggestion = f"🛡價值 | 買:{last_price:.1f} | 標:{target:.1f} | 損:{sanitize(stop_loss):.1f}"
+    # 進出場建議 (README 規則)
+    weighted_value = defense_weight * value_score
+    weighted_growth = (1 - defense_weight) * pullback_score
+    
+    if weighted_growth >= weighted_value:
+        # 強勢回測劇本
+        suggestion_type = "📈強勢"
+        entry_price = ma20_last
+        atr_mult = 3.0 if market_type == 'CRYPTO' else 2.5
+        stop_loss = last_price - (atr_mult * atr)
+        rr_ratio = 4.0 if (market_type == 'CRYPTO' and last_row['volume'] > vol_ma5 * 2.0) else 3.0
+        target_price = last_price + (last_price - stop_loss) * rr_ratio
+    else:
+        # 價值防禦劇本
+        suggestion_type = "🛡價值"
+        entry_price = min(last_price, defense_base)
+        # README: 目標價 (停利)：防禦均線 或 買價的 +20%
+        target_price = max(defense_base, entry_price * 1.2)
+        stop_loss = year_low * 0.95
+        if has_vol_momentum: suggestion_type += "⚡"
+
+    suggestion = f"{suggestion_type} | 買:{entry_price:.1f} | 標:{target_price:.1f} | 損:{sanitize(stop_loss):.1f}"
+    if not is_rev_ok: suggestion = "⚠️營收衰退 | " + suggestion
     
     return {
         "代碼": code,
@@ -227,5 +313,8 @@ def analyze_stock(df, code, name, defense_weight=0.5, market_type='TW'):
         "綜合評分": round(final_score, 1),
         "ma_base": defense_base,
         "ma20": ma20_last,
-        "atr": atr
+        "atr": atr,
+        "entry_price": round(sanitize(entry_price), 2),
+        "stop_loss": round(sanitize(stop_loss), 2),
+        "target_price": round(sanitize(target_price), 2)
     }

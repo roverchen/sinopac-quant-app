@@ -20,6 +20,9 @@ class AnalysisResult(BaseModel):
     ma_base: Optional[float] = None
     ma20: Optional[float] = None
     atr: Optional[float] = None
+    entry_price: Optional[float] = None
+    stop_loss: Optional[float] = None
+    target_price: Optional[float] = None
 
 class AnalysisResponse(BaseModel):
     results: List[AnalysisResult]
