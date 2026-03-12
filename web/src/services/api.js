@@ -93,4 +93,15 @@ export const tradeService = {
   }
 };
 
+export const diagService = {
+  async getLogs() {
+    const response = await api.get('/diag/logs');
+    return response.data;
+  },
+  async clearLogs() {
+    const response = await api.post('/diag/clear');
+    return response.data;
+  }
+};
+
 export default api;

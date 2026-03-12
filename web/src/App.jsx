@@ -8,6 +8,7 @@ import SettingsPage from './components/Settings'
 import Dashboard from './components/Dashboard'
 import StrategyScan from './components/StrategyScan'
 import TradingControl from './components/TradingControl'
+import SystemHealthModal from './components/SystemHealthModal'
 import { authService } from './services/api'
 import React from 'react'
 
@@ -60,6 +61,7 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('token'))
   const [user, setUser] = useState(null)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [isDiagModalOpen, setIsDiagModalOpen] = useState(false)
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -152,10 +154,10 @@ function App() {
             登出系統
           </button>
           
-          <div className="flex flex-col items-center gap-1 py-2 border-t border-slate-800/50 mt-2">
-            <span className="text-[10px] text-slate-500 font-mono uppercase tracking-widest">System Build</span>
-            <span className="text-xs text-indigo-400 font-bold font-mono px-3 py-1 bg-indigo-500/10 rounded-full border border-indigo-500/20">
-              v2.0.5
+          <div className="flex flex-col items-center gap-1 py-3 border-t border-slate-800/50 mt-2 bg-slate-900/50 rounded-2xl">
+            <span className="text-[10px] text-slate-500 font-mono uppercase tracking-widest opacity-60">System Build</span>
+            <span className="text-xs text-indigo-400 font-bold font-mono px-4 py-1.5 bg-indigo-500/10 rounded-full border border-indigo-500/30">
+              v2.0.6
             </span>
           </div>
         </div>
@@ -185,10 +187,13 @@ function App() {
           
           <div className="flex items-center gap-3 md:gap-4">
             <div className="hidden sm:block h-8 w-px bg-slate-800"></div>
-            <div className="flex items-center gap-1.5 md:gap-2 text-emerald-400 text-xs md:text-sm font-medium bg-emerald-500/10 px-3 py-1.5 rounded-full border border-emerald-500/20">
-              <ShieldCheck className="w-3.5 h-3.5 md:w-4 md:h-4" />
+            <button 
+              onClick={() => setIsDiagModalOpen(true)}
+              className="flex items-center gap-1.5 md:gap-2 text-emerald-400 text-xs md:text-sm font-medium bg-emerald-500/10 px-3 py-1.5 rounded-full border border-emerald-500/20 hover:bg-emerald-500/20 transition-all cursor-pointer group"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 md:w-4 md:h-4 group-hover:scale-110 transition-transform" />
               <span>系統正常</span>
-            </div>
+            </button>
           </div>
         </header>
 
@@ -216,6 +221,11 @@ function App() {
             </ErrorBoundary>
           </motion.div>
         </section>
+
+        <SystemHealthModal 
+          isOpen={isDiagModalOpen} 
+          onClose={() => setIsDiagModalOpen(false)} 
+        />
       </main>
     </div>
   )
