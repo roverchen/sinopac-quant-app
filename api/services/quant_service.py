@@ -76,6 +76,7 @@ def get_yahoo_ticker(code, market_type='TW'):
     """將代碼轉換為 Yahoo Finance 的 Ticker 格式"""
     if not code: return None
     if market_type == 'TW' and code.isdigit():
+        return code + (".TW" if int(code) < 10000 else ".TWO")
     if market_type == 'CRYPTO':
         # 處理 MAX 風格代碼 (如 btctwd -> BTC-TWD)
         c = code.lower()
