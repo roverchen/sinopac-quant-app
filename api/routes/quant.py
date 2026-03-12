@@ -291,21 +291,27 @@ async def get_symbol_history(symbol: str, market_type: str = "TW"):
     from fastapi import HTTPException
     
     ticker_str = get_yahoo_ticker(symbol, market_type)
-    df = fetch_stock_data(symbol, ticker_str, period="3mo") # 預設顯示 3 個月
+    print(f"[History] Fetching {symbol} ({market_type}) using ticker {ticker_str}")
     
-    if df is None or df.empty:
-        raise HTTPException(status_code=404, detail=f"No historical data found for {symbol}")
-    
-    # 格式化為 Recharts 友善格式
-    history = []
-    for index, row in df.iterrows():
-        # yfinance columns are Open, High, Low, Close, Volume
-        history.append({
-            "date": index.strftime("%m/%d"),
-            "open": round(float(row['Open']), 2),
-            "high": round(float(row['High']), 2),
-            "low": round(float(row['Low']), 2),
-            "close": round(float(row['Close']), 2),
-            "volume": int(row['Volume'])
-        })
-    return history
+    try:
+        df = fetch_stock_data(symbol, ticker_str, period="3mo")
+        if df is None or df.empty:
+            print(f"[History] No data returned for {ticker_str}")
+            raise HTTPException(status_code=404, detail=f"No historical data found for {symbol}")
+        
+        # 格式化為 Recharts 友善格式
+        history = []
+        for index, row in df.iterrows():
+            history.append({
+                "date": index.strftime("%m/%d"),
+                "open": round(float(row['Open']), 2),
+                "high": round(float(row['High']), 2),
+                "low": round(float(row['Low']), 2),
+                "close": round(float(row['Close']), 2),
+                "volume": int(row['Volume'])
+            })
+        print(f"[History] Returning {len(history)} data points for {symbol}")
+        return history
+    except Exception as e:
+        print(f"[History] Error fetching {symbol}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

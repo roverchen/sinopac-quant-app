@@ -393,13 +393,6 @@ const Watchlist = () => {
                   </button>
                 </div>
 
-                {/* K-Line Chart Section */}
-                <div className="bg-slate-950/50 rounded-2xl p-2 border border-slate-800/50">
-                   <div className="flex items-center justify-between px-2 pt-1">
-                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">3個月走勢參考</span>
-                   </div>
-                   <StockChart data={history} loading={isChartLoading} />
-                </div>
 
                 <div className="flex justify-between items-end bg-slate-800/20 p-4 rounded-2xl border border-slate-800/50">
                   <div className="space-y-1">
@@ -445,6 +438,17 @@ const Watchlist = () => {
                   >
                     實盤交易
                   </button>
+                </div>
+
+                {/* K-Line Chart Section (Moved to Bottom) */}
+                <div className="bg-slate-950/50 rounded-2xl p-4 border border-slate-800/50">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">3個月走勢參考</span>
+                    {!isChartLoading && history.length > 0 && (
+                      <span className="text-[10px] text-slate-600 font-inter">資料點: {history.length}</span>
+                    )}
+                  </div>
+                  <StockChart data={history} loading={isChartLoading} />
                 </div>
 
                 <div className="flex items-center justify-between pt-4 border-t border-slate-800">
