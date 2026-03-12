@@ -10,7 +10,6 @@ const TradingControl = () => {
   const [selectedPosition, setSelectedPosition] = useState(null);
   const [sellForm, setSellForm] = useState({ price: 0, qty: 0 });
 
-  const [viewAccount, setViewAccount] = useState('personal'); // 'personal' or 'system_auto'
   const [pending, setPending] = useState([]);
   const [summary, setSummary] = useState(null);
 
@@ -19,7 +18,7 @@ const TradingControl = () => {
     refreshAll();
     const interval = setInterval(refreshAll, 60000);
     return () => clearInterval(interval);
-  }, [viewAccount]);
+  }, []);
 
   const refreshAll = () => {
     fetchAccount();
@@ -39,8 +38,7 @@ const TradingControl = () => {
   const fetchAccount = async () => {
     setLoading(true);
     try {
-      const userId = viewAccount === 'system_auto' ? 'system_auto' : null;
-      const resp = await tradeService.getAccount(userId);
+      const resp = await tradeService.getAccount();
       setAccount(resp);
     } catch (err) {
       console.error(err);
@@ -51,8 +49,7 @@ const TradingControl = () => {
 
   const fetchPending = async () => {
     try {
-      const userId = viewAccount === 'system_auto' ? 'system_auto' : null;
-      const resp = await tradeService.getPending(userId);
+      const resp = await tradeService.getPending();
       setPending(resp.pending || []);
     } catch (err) {
       console.error(err);
@@ -61,8 +58,7 @@ const TradingControl = () => {
 
   const fetchSummary = async () => {
     try {
-      const userId = viewAccount === 'system_auto' ? 'system_auto' : null;
-      const resp = await tradeService.getSummary(userId);
+      const resp = await tradeService.getSummary();
       setSummary(resp);
     } catch (err) {
       console.error(err);
@@ -135,99 +131,38 @@ const TradingControl = () => {
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">
-      {/* Trading Status Dashboard */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        <div className={`lg:col-span-3 p-8 rounded-[2.5rem] border-2 transition-all ${
-          status.auto_trade_enabled 
-            ? 'bg-emerald-500/5 border-emerald-500/20 shadow-2xl shadow-emerald-500/10' 
-            : 'bg-slate-900/40 border-slate-800'
-        }`}>
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-8">
-            <div className="flex items-center gap-6">
-              <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all ${
-                status.auto_trade_enabled ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/40' : 'bg-slate-800 text-slate-500'
-              }`}>
-                <Shield className="w-8 h-8" />
-              </div>
-              <div>
-                <div className="flex items-center gap-3">
-                  <h2 className="text-2xl font-bold text-white tracking-tight">自動交易系統</h2>
-                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest ${
-                    status.mode === 'Simulation' ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' : 'bg-rose-500/10 text-rose-500 border border-rose-500/30'
-                  }`}>
-                    {status.mode === 'Simulation' ? '模擬下單' : '實盤交易'}
-                  </span>
-                </div>
-                <p className="text-slate-400 mt-1 text-sm font-medium">
-                  {status.auto_trade_enabled ? '運作中：系統正根據海選結果自動執行策略' : '已停止：目前僅供手動監控與分析'}
-                </p>
-              </div>
-            </div>
-
-            <button
-              onClick={toggleAutoTrade}
-              disabled={loading}
-              className={`flex items-center gap-3 px-8 py-4 rounded-2xl font-black text-sm transition-all transform active:scale-95 ${
-                status.auto_trade_enabled 
-                  ? 'bg-slate-800 text-rose-500 hover:bg-slate-700' 
-                  : 'bg-indigo-600 text-white hover:bg-indigo-500 shadow-xl shadow-indigo-600/30'
-              }`}
-            >
-              {loading ? (
-                <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-              ) : status.auto_trade_enabled ? (
-                <><Pause className="w-5 h-5 fill-current" /> 停止交易</>
-              ) : (
-                <><Play className="w-5 h-5 fill-current" /> 啟動系統</>
-              )}
-            </button>
+      {/* Performance Summary Header */}
+      <div className="p-8 bg-slate-900/40 border border-slate-800 rounded-[2.5rem] flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="flex items-center gap-6">
+          <div className="w-16 h-16 rounded-2xl bg-indigo-600/10 flex items-center justify-center text-indigo-400">
+            <TrendingUp className="w-8 h-8" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-white tracking-tight">個人投資績效</h2>
+            <p className="text-slate-400 mt-1 text-sm font-medium">總結所有模擬與實盤交易的盈虧情況</p>
           </div>
         </div>
-
-        <div className="p-8 bg-slate-900/40 border border-slate-800 rounded-[2.5rem] flex flex-col justify-center">
-            <div className="flex items-center gap-3 mb-2">
-              <Wallet className="w-5 h-5 text-indigo-400" />
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">
-                {viewAccount === 'personal' ? '個人帳戶市值' : '機器人帳戶市值'}
-              </span>
+        
+        {summary && (
+          <div className="flex gap-8">
+            <div className="text-right">
+              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">模擬累計損益</p>
+              <p className={`text-2xl font-black font-inter ${summary.mock.total >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                ${summary.mock.total.toLocaleString()}
+              </p>
             </div>
-            <p className="text-3xl font-black text-white font-inter">
-              ${account.balance.toLocaleString()}
-            </p>
-            {summary && (
-              <div className={`text-sm font-bold mt-1 ${
-                (viewAccount === 'personal' ? summary.mock.total : summary.mock.total) >= 0 ? 'text-emerald-400' : 'text-rose-400'
-              }`}>
-                P/L: ${(viewAccount === 'personal' ? summary.mock.total : summary.mock.total).toLocaleString()}
-                <span className="ml-1 text-[10px] opacity-60">
-                  ({viewAccount === 'personal' ? '個人模擬' : '機器人全域'})
-                </span>
-              </div>
-            )}
-        </div>
+            <div className="text-right">
+              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">實盤累計損益</p>
+              <p className={`text-2xl font-black font-inter ${summary.live.total >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                ${summary.live.total.toLocaleString()}
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Account Selector & Pending Orders Hook */}
-      <div className="flex items-center justify-between gap-4 bg-slate-900/40 p-2 rounded-[2rem] border border-slate-800/50">
-        <div className="flex p-1.5 bg-slate-950/50 rounded-2xl gap-2">
-          <button 
-            onClick={() => setViewAccount('personal')}
-            className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
-              viewAccount === 'personal' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'
-            }`}
-          >
-            個人帳戶
-          </button>
-          <button 
-            onClick={() => setViewAccount('system_auto')}
-            className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
-              viewAccount === 'system_auto' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'
-            }`}
-          >
-            系統自動 (Robot)
-          </button>
-        </div>
-        
+      {/* Pending Orders Notification Hook */}
+      <div className="flex items-center justify-between gap-4">
         {pending.length > 0 && (
           <div className="flex items-center gap-2 px-6 py-2 bg-indigo-500/10 border border-indigo-500/30 rounded-2xl">
             <Clock className="w-4 h-4 text-indigo-400 animate-pulse" />
@@ -303,7 +238,7 @@ const TradingControl = () => {
             </div>
             <button 
                 onClick={handleManualOrder}
-                disabled={loading || viewAccount === 'system_auto'}
+                disabled={loading}
                 className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-indigo-400 rounded-xl text-xs font-black transition-all border border-indigo-500/20 flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed"
             >
                 <Send className="w-3.5 h-3.5" />
@@ -329,8 +264,8 @@ const TradingControl = () => {
                 account.positions.map((pos) => (
                   <tr 
                     key={pos.symbol} 
-                    onClick={() => viewAccount === 'personal' && openSellModal(pos)}
-                    className={`hover:bg-slate-800/30 transition-colors group ${viewAccount === 'personal' ? 'cursor-pointer' : 'cursor-default'}`}
+                    onClick={() => openSellModal(pos)}
+                    className="hover:bg-slate-800/30 transition-colors group cursor-pointer"
                   >
                     <td className="px-8 py-6">
                        <span className="text-lg font-black text-white group-hover:text-indigo-400 transition-colors font-inter">{pos.symbol}</span>

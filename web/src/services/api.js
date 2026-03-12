@@ -110,6 +110,10 @@ export const tradeService = {
   async getSummary(userId) {
     const response = await api.get(`/trade/summary${userId ? `?user_id=${userId}` : ''}`);
     return response.data;
+  },
+  async getBalance() {
+    const response = await api.get('/trade/balance');
+    return response.data;
   }
 };
 

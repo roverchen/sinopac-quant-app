@@ -131,3 +131,43 @@ async def get_orders(current_user: str = Depends(get_current_user)):
     """取得委託紀錄"""
     orders = ShioajiService.get_orders(current_user)
     return {"orders": orders}
+@router.get("/balance")
+async def get_combined_balance(current_user: str = Depends(get_current_user)):
+    """取得綜合帳戶餘額 (永豐 + MAX)"""
+    from api.services.storage_service import get_user_credentials
+    from max_api import MaxExchangeAPI
+    
+    # 永豐餘額
+    shioaji_bal = 1000000.0 # 預設模擬本金
+    try:
+        api = ShioajiService.get_api_client(current_user)
+        if api and not hasattr(api, 'is_mock'):
+            accs = api.list_accounts()
+            if accs:
+                # 實務上需要查詢交割銀行餘額，這裡先用模擬
+                shioaji_bal = 1000000.0
+    except:
+        pass
+        
+    # MAX 餘額
+    max_bal = {"total_twd": 0.0, "details": {}}
+    try:
+        creds = get_user_credentials(current_user)
+        if creds.get("max_api_key") and creds.get("max_api_secret"):
+            max_api = MaxExchangeAPI(creds["max_api_key"], creds["max_api_secret"])
+            balances = max_api.get_account_balance()
+            if isinstance(balances, dict) and "error" not in balances:
+                twd = balances.get('twd', {}).get('balance', 0.0)
+                usdt = balances.get('usdt', {}).get('balance', 0.0)
+                max_bal = {
+                    "twd": round(twd, 2),
+                    "usdt": round(usdt, 2),
+                    "total_twd_estimate": round(twd + (usdt * 32), 2) # 簡化匯率
+                }
+    except:
+        pass
+        
+    return {
+        "sinopac_twd": shioaji_bal,
+        "max": max_bal
+    }

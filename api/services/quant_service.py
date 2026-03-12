@@ -20,8 +20,8 @@ def fetch_tw_symbols():
     import pandas as pd
     try:
         symbols = {}
-        # 模式描述: 2=上市, 4=上櫃, 5=興櫃 (興櫃暫不抓取以維護穩健性)
-        for mode in ["2", "4"]:
+        # 模式描述: 2=上市, 4=上櫃, 5=興櫃
+        for mode in ["2", "4", "5"]:
             url = f"https://isin.twse.com.tw/isin/C_public.jsp?strMode={mode}"
             response = requests.get(url, verify=False, timeout=15)
             response.encoding = 'big5'
