@@ -1,6 +1,8 @@
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { ArrowUpRight, ArrowDownRight, Activity, Zap, Target, BarChart3 } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, Activity, Zap, Target, BarChart3, TrendingUp, Wallet } from 'lucide-react';
+import { tradeService } from '../services/api';
 
 const mockChartData = [
   { name: 'Mon', value: 4000 },
@@ -12,33 +14,68 @@ const mockChartData = [
   { name: 'Sun', value: 6490 },
 ];
 
-const StatCard = ({ label, value, change, color, icon: Icon }) => (
-  <div className="p-6 bg-slate-900/40 border border-slate-800 rounded-3xl hover:border-slate-700 transition-all group">
+const StatCard = ({ label, value, change, color, icon: Icon, subValue }) => (
+  <div className="p-6 bg-slate-900/40 border border-slate-800 rounded-3xl hover:border-slate-700 transition-all group relative overflow-hidden">
     <div className="flex items-start justify-between mb-4">
       <div className={`p-3 rounded-2xl bg-${color}-500/10 text-${color}-400`}>
         <Icon className="w-6 h-6" />
       </div>
-      <span className={`flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full ${
-        change.startsWith('+') ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'
-      }`}>
-        {change.startsWith('+') ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
-        {change}
-      </span>
+      {change !== undefined && (
+        <span className={`flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full ${
+          Number(change) >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'
+        }`}>
+          {Number(change) >= 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+          {Math.abs(Number(change))}%
+        </span>
+      )}
     </div>
     <p className="text-sm text-slate-500 font-medium mb-1">{label}</p>
     <h3 className="text-3xl font-bold font-inter text-white">{value}</h3>
+    {subValue && <p className="text-xs text-slate-500 mt-2 font-mono">{subValue}</p>}
   </div>
 );
 
 const Dashboard = () => {
+  const [summary, setSummary] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchSummary();
+  }, []);
+
+  const fetchSummary = async () => {
+    try {
+      const data = await tradeService.getSummary();
+      setSummary(data);
+    } catch (err) {
+      console.error("Failed to fetch summary:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-8">
-      {/* Top Stats */}
+      {/* Performance Summary */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard label="追蹤中標的" value="42" change="+12%" color="indigo" icon={Activity} />
-        <StatCard label="今日海選量" value="1,935" change="+0.5%" color="emerald" icon={Zap} />
-        <StatCard label="高評分機會" value="12" change="-5%" color="amber" icon={Target} />
-        <StatCard label="策略勝率" value="78.2%" change="+2.4%" color="rose" icon={BarChart3} />
+        <StatCard 
+          label="模擬總收益 (Mock)" 
+          value={`$${summary?.mock?.total?.toLocaleString() || '0'}`} 
+          change={summary?.mock?.return_rate} 
+          color="indigo" 
+          icon={TrendingUp}
+          subValue={`實現: $${summary?.mock?.realized?.toLocaleString() || 0}`}
+        />
+        <StatCard 
+          label="實盤總收益 (Live)" 
+          value={`$${summary?.live?.total?.toLocaleString() || '0'}`} 
+          change={summary?.live?.total !== 0 ? 0 : undefined} 
+          color="rose" 
+          icon={Wallet}
+          subValue={`實現: $${summary?.live?.realized?.toLocaleString() || 0}`}
+        />
+        <StatCard label="今日海選量" value="1,935" change="+0.5" color="emerald" icon={Zap} />
+        <StatCard label="策略勝率" value="78.2%" change="+2.4" color="amber" icon={BarChart3} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

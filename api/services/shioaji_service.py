@@ -37,9 +37,11 @@ class MockShioajiClient:
         
         # 更新持倉
         if self.user_id:
-            from api.services.storage_service import get_user_mock_positions, save_user_mock_positions
+            from api.services.storage_service import get_user_mock_positions, save_user_mock_positions, get_user_trade_history, save_user_trade_history
             positions = get_user_mock_positions(self.user_id)
-            # 找到現有持倉或新增
+            history = get_user_trade_history(self.user_id)
+            
+            realized_pnl = 0.0
             found = False
             for p in positions:
                 if p['symbol'] == symbol:
@@ -49,6 +51,8 @@ class MockShioajiClient:
                         p['qty'] += qty
                         p['buy_price'] = total_cost / p['qty']
                     else: # 賣出
+                        # 計算實現損益
+                        realized_pnl = (price - p['buy_price']) * qty
                         p['qty'] -= qty
                     found = True
                     break
@@ -64,9 +68,22 @@ class MockShioajiClient:
                     "is_simulation": True
                 })
             
+            # 記錄到歷史交易
+            history.insert(0, {
+                "order_id": order_id,
+                "symbol": symbol,
+                "action": action,
+                "qty": qty,
+                "price": price,
+                "realized_pnl": round(realized_pnl, 2) if (action == "Sell" or action == "Action.Sell") else 0.0,
+                "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "is_simulation": True
+            })
+            
             # 移除數量為 0 的持倉
             positions = [p for p in positions if p['qty'] > 0]
             save_user_mock_positions(self.user_id, positions)
+            save_user_trade_history(self.user_id, history)
 
         class MockTrade: 
             class Order: id = order_id

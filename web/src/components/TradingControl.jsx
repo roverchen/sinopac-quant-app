@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Shield, Play, Pause, Wallet, TrendingUp, Send, Smartphone, Clock } from 'lucide-react';
+import { Shield, Play, Pause, Wallet, TrendingUp, Send, Smartphone, Clock, X, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { tradeService } from '../services/api';
 
@@ -7,11 +7,12 @@ const TradingControl = () => {
   const [status, setStatus] = useState({ auto_trade_enabled: false, mode: 'Simulation' });
   const [account, setAccount] = useState({ balance: 0, positions: [], status: 'loading' });
   const [loading, setLoading] = useState(false);
+  const [selectedPosition, setSelectedPosition] = useState(null);
+  const [sellForm, setSellForm] = useState({ price: 0, qty: 0 });
 
   useEffect(() => {
     fetchStatus();
     fetchAccount();
-    // 每一分鐘自動更新一次價格與損益
     const interval = setInterval(fetchAccount, 60000);
     return () => clearInterval(interval);
   }, []);
@@ -66,6 +67,36 @@ const TradingControl = () => {
       fetchAccount();
     } catch (err) {
       alert("下單失敗: " + (err.response?.data?.detail || "未知錯誤"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openSellModal = (pos) => {
+    setSelectedPosition(pos);
+    setSellForm({ price: pos.current_price || pos.buy_price, qty: pos.qty });
+  };
+
+  const handleSellSubmit = async () => {
+    if (sellForm.qty <= 0 || sellForm.qty > selectedPosition.qty) {
+      alert("數量不正確");
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      await tradeService.placeOrder({
+        symbol: selectedPosition.symbol,
+        qty: Number(sellForm.qty),
+        price: Number(sellForm.price),
+        action: "Sell",
+        is_simulation: selectedPosition.is_simulation
+      });
+      alert("賣出委託已送出");
+      setSelectedPosition(null);
+      fetchAccount();
+    } catch (err) {
+      alert("交易失敗: " + (err.response?.data?.detail || "未知錯誤"));
     } finally {
       setLoading(false);
     }
@@ -142,7 +173,7 @@ const TradingControl = () => {
             </div>
             <div>
               <h3 className="text-xl font-bold text-white">當前持倉 (Positions)</h3>
-              <p className="text-slate-500 text-xs mt-1">即時同步庫存數據與未實現損益試算</p>
+              <p className="text-slate-500 text-xs mt-1">點擊項目執行平倉/賣出委託</p>
             </div>
           </div>
           
@@ -176,9 +207,13 @@ const TradingControl = () => {
             <tbody className="divide-y divide-slate-800/50">
               {account.positions?.length > 0 ? (
                 account.positions.map((pos) => (
-                  <tr key={pos.symbol} className="hover:bg-slate-800/30 transition-colors group">
+                  <tr 
+                    key={pos.symbol} 
+                    onClick={() => openSellModal(pos)}
+                    className="hover:bg-slate-800/30 transition-colors group cursor-pointer"
+                  >
                     <td className="px-8 py-6">
-                       <span className="text-lg font-black text-white font-inter">{pos.symbol}</span>
+                       <span className="text-lg font-black text-white group-hover:text-indigo-400 transition-colors font-inter">{pos.symbol}</span>
                     </td>
                     <td className="px-8 py-6">
                        <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-tighter ${
@@ -220,6 +255,126 @@ const TradingControl = () => {
           </table>
         </div>
       </div>
+
+      {/* Sell Modal */}
+      <AnimatePresence>
+        {selectedPosition && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedPosition(null)}
+              className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"
+            />
+            
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              className="relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-[2.5rem] shadow-2xl overflow-hidden"
+            >
+              <div className="p-8 border-b border-slate-800 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-rose-500/10 rounded-2xl">
+                    <Send className="w-6 h-6 text-rose-500 rotate-180" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-white">賣出委託 (Sell)</h3>
+                    <p className="text-slate-500 text-xs mt-1">標的：{selectedPosition.symbol}</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setSelectedPosition(null)}
+                  className="p-2 hover:bg-slate-800 rounded-xl text-slate-500 transition-colors"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="p-8 space-y-6">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-4 bg-slate-800/50 rounded-2xl border border-slate-700">
+                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">現有庫存</p>
+                    <p className="text-xl font-bold text-white font-inter">{selectedPosition.qty.toLocaleString()}</p>
+                  </div>
+                  <div className="p-4 bg-slate-800/50 rounded-2xl border border-slate-700">
+                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">買入均價</p>
+                    <p className="text-xl font-bold text-white font-inter">${selectedPosition.buy_price.toLocaleString()}</p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 mb-2 block">委託單價</label>
+                    <div className="relative">
+                      <span className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500 font-bold">$</span>
+                      <input 
+                        type="number"
+                        value={sellForm.price}
+                        onChange={(e) => setSellForm({...sellForm, price: e.target.value})}
+                        className="w-full bg-slate-800 border-2 border-slate-700 focus:border-indigo-500/50 rounded-2xl py-4 pl-10 pr-6 text-white font-bold font-inter transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between ml-1 mb-2">
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">賣出數量</label>
+                      <button 
+                        onClick={() => setSellForm({...sellForm, qty: selectedPosition.qty})}
+                        className="text-[10px] font-black text-indigo-400 uppercase tracking-widest hover:text-indigo-300"
+                      >
+                        全部平倉
+                      </button>
+                    </div>
+                    <input 
+                      type="number"
+                      value={sellForm.qty}
+                      onChange={(e) => setSellForm({...sellForm, qty: e.target.value})}
+                      className="w-full bg-slate-800 border-2 border-slate-700 focus:border-indigo-500/50 rounded-2xl py-4 px-6 text-white font-bold font-inter transition-all"
+                      max={selectedPosition.qty}
+                    />
+                  </div>
+                </div>
+
+                {sellForm.price && (
+                  <div className={`p-4 rounded-2xl border flex items-center gap-3 ${
+                    (sellForm.price - selectedPosition.buy_price) >= 0 
+                      ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-400' 
+                      : 'bg-rose-500/5 border-rose-500/20 text-rose-400'
+                  }`}>
+                    <TrendingUp className="w-5 h-5" />
+                    <div className="text-sm font-bold">
+                      預估實現損益: 
+                      <span className="ml-2 font-inter">
+                        ${((sellForm.price - selectedPosition.buy_price) * sellForm.qty).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="p-8 pt-0">
+                <button
+                  onClick={handleSellSubmit}
+                  disabled={loading}
+                  className="w-full bg-rose-600 hover:bg-rose-500 text-white font-black py-5 rounded-2xl transition-all transform active:scale-95 shadow-xl shadow-rose-600/20 disabled:opacity-50 flex items-center justify-center gap-3"
+                >
+                  {loading ? (
+                    <div className="w-6 h-6 border-3 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      確認賣出委託
+                      <Smartphone className="w-5 h-5" />
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

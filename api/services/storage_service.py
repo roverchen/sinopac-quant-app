@@ -184,6 +184,46 @@ def get_user_mock_positions(user_id):
         }
     ]
 
+def save_user_trade_history(user_id, history):
+    """保存使用者交易紀錄"""
+    db = get_db()
+    if db:
+        try:
+            db.collection("users").document(user_id).set({"trade_history": history}, merge=True)
+            return True
+        except Exception as e:
+            print(f"Firestore save trade_history error: {e}")
+            
+    # 本地備援
+    try:
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        path = os.path.join(CACHE_DIR, f"trade_history_{user_id}.json")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(history, f, ensure_ascii=False)
+    except Exception as e:
+        print(f"[Storage] Local trade_history save failed: {e}")
+    return True
+
+def get_user_trade_history(user_id):
+    """取得使用者交易紀錄"""
+    db = get_db()
+    if db:
+        try:
+            doc = db.collection("users").document(user_id).get()
+            if doc.exists:
+                return doc.to_dict().get("trade_history", [])
+        except Exception as e:
+            print(f"Firestore load trade_history error: {e}")
+    # 本地備援
+    path = os.path.join(CACHE_DIR, f"trade_history_{user_id}.json")
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            try:
+                return json.load(f)
+            except:
+                return []
+    return []
+
 def save_data_pool(market, data):
     """將海選數據池保存到 GCS (或本地 .pkl)"""
     # 這裡的 data 通常是包含 'dfs' 的大型 dict

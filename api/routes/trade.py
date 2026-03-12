@@ -47,6 +47,54 @@ async def get_account_summary(current_user: str = Depends(get_current_user)):
         "positions": positions
     }
 
+@router.get("/history")
+async def get_trade_history(current_user: str = Depends(get_current_user)):
+    """取得交易歷史紀錄"""
+    from api.services.storage_service import get_user_trade_history
+    history = get_user_trade_history(current_user)
+    return {"history": history}
+
+@router.get("/summary")
+async def get_performance_summary(current_user: str = Depends(get_current_user)):
+    """取得投資績效總計 (P/L)"""
+    from api.services.storage_service import get_user_trade_history
+    positions = ShioajiService.get_positions(current_user)
+    history = get_user_trade_history(current_user)
+    
+    realized_mock = sum(item.get('realized_pnl', 0) for item in history if item.get('is_simulation'))
+    realized_live = sum(item.get('realized_pnl', 0) for item in history if not item.get('is_simulation'))
+    
+    unrealized_mock = 0.0
+    unrealized_live = 0.0
+    
+    for pos in positions:
+        # P/L 試算是在 get_positions 中注入的
+        # pos['pnl_percent'] 是百分比，我們需要絕對值
+        current = pos.get('current_price', 0)
+        buy = pos.get('buy_price', 0)
+        qty = pos.get('qty', 0)
+        if current and buy and qty:
+            pnl = (current - buy) * qty
+            if pos.get('is_simulation'):
+                unrealized_mock += pnl
+            else:
+                unrealized_live += pnl
+                
+    return {
+        "mock": {
+            "realized": round(realized_mock, 2),
+            "unrealized": round(unrealized_mock, 2),
+            "total": round(realized_mock + unrealized_mock, 2),
+            "return_rate": round((realized_mock + unrealized_mock) / 1000000 * 100, 2) if realized_mock + unrealized_mock != 0 else 0
+        },
+        "live": {
+            "realized": round(realized_live, 2),
+            "unrealized": round(unrealized_live, 2),
+            "total": round(realized_live + unrealized_live, 2),
+            "return_rate": 0 # 實盤回報率需根據實際本金計算
+        }
+    }
+
 @router.post("/order")
 async def place_manual_order(order: OrderRequest, current_user: str = Depends(get_current_user)):
     """手動下單介面"""

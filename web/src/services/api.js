@@ -98,6 +98,14 @@ export const tradeService = {
   async getOrders() {
     const response = await api.get('/trade/orders');
     return response.data;
+  },
+  async getHistory() {
+    const response = await api.get('/trade/history');
+    return response.data;
+  },
+  async getSummary() {
+    const response = await api.get('/trade/summary');
+    return response.data;
   }
 };
 
