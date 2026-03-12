@@ -122,10 +122,11 @@ async def analyze_watchlist(request: StockAnalysisRequest, current_user: str = D
     """分析追蹤清單並返回結果。使用併發抓取優化。"""
     results = []
     
-    watchlist = request.watchlist
-            return AnalysisResponse(results=all_results, timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-        else:
-            watchlist = get_user_watchlist(current_user, request.market_type)
+    if not request.watchlist:
+        from api.services.storage_service import get_user_watchlist
+        watchlist = get_user_watchlist(current_user, request.market_type)
+    else:
+        watchlist = request.watchlist
     
     if not watchlist:
         return AnalysisResponse(results=[], timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
