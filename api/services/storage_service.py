@@ -134,6 +134,56 @@ def get_all_user_watchlists(user_id):
         "CRYPTO": get_user_watchlist(user_id, "CRYPTO")
     }
 
+def save_user_mock_positions(user_id, positions):
+    """保存使用者模擬持倉"""
+    db = get_db()
+    if db:
+        try:
+            db.collection("users").document(user_id).set({"mock_positions": positions}, merge=True)
+            return True
+        except Exception as e:
+            print(f"Firestore save mock_positions error: {e}")
+            
+    # 本地備援
+    try:
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        path = os.path.join(CACHE_DIR, f"mock_positions_{user_id}.json")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(positions, f, ensure_ascii=False)
+    except Exception as e:
+        print(f"[Storage] Local mock_positions save failed: {e}")
+    return True
+
+def get_user_mock_positions(user_id):
+    """取得使用者模擬持倉"""
+    db = get_db()
+    if db:
+        try:
+            doc = db.collection("users").document(user_id).get()
+            if doc.exists:
+                return doc.to_dict().get("mock_positions", [])
+        except Exception as e:
+            print(f"Firestore load mock_positions error: {e}")
+    # 本地備援
+    path = os.path.join(CACHE_DIR, f"mock_positions_{user_id}.json")
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            try:
+                return json.load(f)
+            except:
+                return []
+    
+    # 預設範例持倉 (首次使用者)
+    return [
+        {
+            "symbol": "2330",
+            "qty": 1000,
+            "buy_price": 1025.0,
+            "market": "TW",
+            "is_simulation": True
+        }
+    ]
+
 def save_data_pool(market, data):
     """將海選數據池保存到 GCS (或本地 .pkl)"""
     # 這裡的 data 通常是包含 'dfs' 的大型 dict

@@ -7,8 +7,9 @@ from api.services.storage_service import get_user_credentials
 
 class MockShioajiClient:
     """模擬 Shioaji API 用於無憑證測試"""
-    def __init__(self):
+    def __init__(self, user_id=None):
         self.is_mock = True
+        self.user_id = user_id
         self.Contracts = self
         self.Stocks = self
         self.TSE = self
@@ -34,6 +35,39 @@ class MockShioajiClient:
         }
         self._mock_orders.insert(0, new_order)
         
+        # 更新持倉
+        if self.user_id:
+            from api.services.storage_service import get_user_mock_positions, save_user_mock_positions
+            positions = get_user_mock_positions(self.user_id)
+            # 找到現有持倉或新增
+            found = False
+            for p in positions:
+                if p['symbol'] == symbol:
+                    # 簡單邏輯：如果是買入，增加數量，平均買價
+                    if action == "Buy" or action == "Action.Buy":
+                        total_cost = (p['qty'] * p['buy_price']) + (qty * price)
+                        p['qty'] += qty
+                        p['buy_price'] = total_cost / p['qty']
+                    else: # 賣出
+                        p['qty'] -= qty
+                    found = True
+                    break
+            
+            if not found and (action == "Buy" or action == "Action.Buy"):
+                # 判斷市場 (簡單邏輯)
+                market = "TW" if symbol.isdigit() else "US"
+                positions.append({
+                    "symbol": symbol,
+                    "qty": qty,
+                    "buy_price": price,
+                    "market": market,
+                    "is_simulation": True
+                })
+            
+            # 移除數量為 0 的持倉
+            positions = [p for p in positions if p['qty'] > 0]
+            save_user_mock_positions(self.user_id, positions)
+
         class MockTrade: 
             class Order: id = order_id
             order = Order()
@@ -48,23 +82,11 @@ class MockShioajiClient:
         return self._mock_orders
 
     def get_positions(self):
-        """模擬持倉資料"""
-        return [
-            {
-                "symbol": "2330",
-                "qty": 1000,
-                "buy_price": 1025.0,
-                "market": "TW",
-                "is_simulation": True
-            },
-            {
-                "symbol": "NVDA",
-                "qty": 10,
-                "buy_price": 135.5,
-                "market": "US",
-                "is_simulation": True
-            }
-        ]
+        """從儲存空間讀取模擬持倉"""
+        if self.user_id:
+            from api.services.storage_service import get_user_mock_positions
+            return get_user_mock_positions(self.user_id)
+        return []
 
 # 全域變數以避免 Class Attribute 查找問題
 _shioaji_instances = {}
@@ -85,7 +107,7 @@ class ShioajiService:
             # 如果沒有憑證，直接返回 MockClient 進入模擬模式
             if not creds or 'shioaji_api_key' not in creds:
                 print(f"No credentials for {email}, returning MockShioajiClient for simulation.")
-                mock_api = MockShioajiClient()
+                mock_api = MockShioajiClient(user_id=email)
                 _shioaji_instances[email] = mock_api
                 return mock_api
 
@@ -100,7 +122,7 @@ class ShioajiService:
                 return api
             except Exception as e:
                 print(f"Shioaji login failed for {email}, falling back to MOCK: {e}")
-                mock_api = MockShioajiClient()
+                mock_api = MockShioajiClient(user_id=email)
                 _shioaji_instances[email] = mock_api
                 return mock_api
 
@@ -112,7 +134,7 @@ class ShioajiService:
         # 如果使用者在前端明確選擇「模擬下單」，則強制走 Mock 邏輯
         if is_simulation is True:
             print(f"DEBUG: [v1.0.3] Forced Simulation Mode for {email}")
-            return MockShioajiClient().place_order(None, None, symbol=symbol, qty=qty, price=price, action=str(action) if action else "Buy")
+            return MockShioajiClient(user_id=email).place_order(None, None, symbol=symbol, qty=qty, price=price, action=str(action) if action else "Buy")
 
         api = cls.get_api_client(email)
         
@@ -125,7 +147,7 @@ class ShioajiService:
         
         if is_mock:
             print(f"DEBUG: [v1.0.3] Auto Mock Triggered for {email}")
-            target_api = api if api else MockShioajiClient()
+            target_api = api if (api and hasattr(api, 'is_mock')) else MockShioajiClient(user_id=email)
             return target_api.place_order(None, None, symbol=symbol, qty=qty, price=price, action=str(action) if action else "Buy")
 
         from shioaji.constant import Action, StockPriceType, OrderType
