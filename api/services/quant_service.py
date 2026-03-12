@@ -1,7 +1,7 @@
-import re
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
+from max_api import MaxExchangeAPI
 
 def extract_stock_code(raw_str):
     """提取股票代碼，處理 '名稱(代碼)', '代碼', 'ETH-USD' 等格式"""
@@ -56,13 +56,36 @@ def fetch_us_symbols():
         print(f"Error fetching US symbols: {e}")
         return {"AAPL": "Apple", "MSFT": "Microsoft", "NVDA": "Nvidia"}
 
+def fetch_crypto_symbols():
+    """從 MAX API 獲取官方清冊"""
+    try:
+        # MAX 不需要金鑰即可讀取公開市場清單
+        api = MaxExchangeAPI("", "")
+        markets = api.get_markets()
+        symbols = {}
+        for m in markets:
+            # 只取 TWD 與 USDT 交易對
+            if m['id'].endswith('twd') or m['id'].endswith('usdt'):
+                symbols[m['id']] = f"{m['name']} ({m['base_unit'].upper()}/{m['quote_unit'].upper()})"
+        return symbols
+    except Exception as e:
+        print(f"Error fetching Crypto symbols: {e}")
+        return {"btctwd": "BTC/TWD", "ethtwd": "ETH/TWD"}
+
 def get_yahoo_ticker(code, market_type='TW'):
     """將代碼轉換為 Yahoo Finance 的 Ticker 格式"""
     if not code: return None
     if market_type == 'TW' and code.isdigit():
-        return code + (".TW" if int(code) < 10000 else ".TWO")
-    if market_type == 'CRYPTO' and "-USD" not in code:
-        return code + "-USD"
+    if market_type == 'CRYPTO':
+        # 處理 MAX 風格代碼 (如 btctwd -> BTC-TWD)
+        c = code.lower()
+        if c.endswith('twd'):
+            return f"{c[:-3].upper()}-TWD"
+        if c.endswith('usdt'):
+            return f"{c[:-4].upper()}-USDT"
+        if "-USD" not in code.upper():
+            return code.upper() + "-USD"
+        return code.upper()
     return code
 
 def fetch_stock_data(code, ticker_str, period="1y"):

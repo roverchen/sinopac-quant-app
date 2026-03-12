@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 from api.routes.auth import get_current_user
 from api.models.schemas import StockAnalysisRequest, AnalysisResponse, AnalysisResult, ScanRequest, ScanProgressResponse
-from api.services.quant_service import extract_stock_code, analyze_stock, fetch_tw_symbols, fetch_us_symbols
+from api.services.quant_service import extract_stock_code, analyze_stock, fetch_tw_symbols, fetch_us_symbols, fetch_crypto_symbols
 from api.services.data_fetcher import fetch_batch_data
 from api.services.storage_service import save_data_pool, get_user_watchlist, save_user_watchlist
 from datetime import datetime
@@ -25,7 +25,12 @@ async def run_market_scan(market_type: str, defense_weight: float):
         scan_status["progress"] = 5
         scan_status["message"] = f"正在獲取 {market_type} 代碼清單..."
         
-        symbols_map = fetch_tw_symbols() if market_type == "TW" else fetch_us_symbols()
+        if market_type == "TW":
+            symbols_map = fetch_tw_symbols()
+        elif market_type == "US":
+            symbols_map = fetch_us_symbols()
+        else:
+            symbols_map = fetch_crypto_symbols()
         symbols = list(symbols_map.keys())
         total = len(symbols)
         
@@ -102,6 +107,7 @@ async def analyze_watchlist(request: StockAnalysisRequest, current_user: str = D
     # 取得名稱對照表
     tw_symbols = fetch_tw_symbols()
     us_symbols = fetch_us_symbols()
+    crypto_symbols = fetch_crypto_symbols()
     
     for symbol in watchlist:
         code = extract_stock_code(symbol)
@@ -112,6 +118,8 @@ async def analyze_watchlist(request: StockAnalysisRequest, current_user: str = D
             name = tw_symbols.get(code)
             if not name:
                 name = us_symbols.get(code)
+            if not name:
+                name = crypto_symbols.get(code.lower())
             if not name:
                 if "BTC" in code: name = "Bitcoin"
                 elif "ETH" in code: name = "Ethereum"
