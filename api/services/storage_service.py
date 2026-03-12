@@ -111,6 +111,14 @@ def get_user_watchlist(user_id, market):
             return json.load(f)
     return ["2330", "2317", "0050"] if market == "TW" else ["AAPL", "MSFT", "NVDA"]
 
+def get_all_user_watchlists(user_id):
+    """取得所有市場的追蹤清單"""
+    return {
+        "TW": get_user_watchlist(user_id, "TW"),
+        "US": get_user_watchlist(user_id, "US"),
+        "CRYPTO": get_user_watchlist(user_id, "CRYPTO")
+    }
+
 def save_data_pool(market, data):
     """將海選數據池保存到 GCS (或本地 .pkl)"""
     # 這裡的 data 通常是包含 'dfs' 的大型 dict

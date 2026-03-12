@@ -7,7 +7,7 @@ const Watchlist = () => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
-  const [marketType, setMarketType] = useState('TW');
+  const [marketType, setMarketType] = useState('ALL');
   const [selectedStock, setSelectedStock] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [qty, setQty] = useState(1);
@@ -49,9 +49,11 @@ const Watchlist = () => {
   const handleRowClick = (stock) => {
     setSelectedStock(stock);
     // 設置預設股數：台股 1000, 美股 10, 加密貨幣 0.1
-    if (marketType === 'TW') setQty(1000);
-    else if (marketType === 'US') setQty(10);
-    else setQty(0.1);
+    const m = stock.市場 || marketType;
+    if (m === 'TW') setQty(1000);
+    else if (m === 'US') setQty(10);
+    else if (m === 'CRYPTO') setQty(0.1);
+    else setQty(1);
     setIsModalOpen(true);
   };
 
@@ -78,7 +80,7 @@ const Watchlist = () => {
   const handleDelete = async () => {
     if (!window.confirm(`確定要將 ${selectedStock.代碼} 從追蹤清單移除嗎？`)) return;
     try {
-      await quantService.removeFromWatchlist(selectedStock.代碼, marketType);
+      await quantService.removeFromWatchlist(selectedStock.代碼, selectedStock.市場 || marketType);
       setIsModalOpen(false);
       fetchData();
     } catch (err) {
@@ -91,7 +93,7 @@ const Watchlist = () => {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <div className="bg-slate-900/80 p-1 rounded-xl border border-slate-800 flex">
-            {['TW', 'US', 'CRYPTO'].map((m) => (
+            {['ALL', 'TW', 'US', 'CRYPTO'].map((m) => (
               <button
                 key={m}
                 onClick={() => setMarketType(m)}
@@ -99,7 +101,7 @@ const Watchlist = () => {
                   marketType === m ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                {m === 'TW' ? '台股' : m === 'US' ? '美股' : '加密貨幣'}
+                {m === 'ALL' ? '追蹤清單' : m === 'TW' ? '台股' : m === 'US' ? '美股' : '加密貨幣'}
               </button>
             ))}
           </div>
@@ -132,8 +134,9 @@ const Watchlist = () => {
             <thead>
               <tr className="border-b border-slate-800 bg-slate-800/20">
                 <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">標的</th>
+                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">市場</th>
                 <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">最新價格</th>
-                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">一年位階</th>
+                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-center">一年位階</th>
                 <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">MACD 狀態</th>
                 <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-center">綜合評分</th>
                 <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">操作建議</th>
@@ -152,11 +155,20 @@ const Watchlist = () => {
                   <td className="px-6 py-5">
                     <div className="flex flex-col">
                       <span className="font-bold text-slate-100 font-inter text-base">{item.代碼}</span>
-                      <span className="text-xs text-slate-500 font-medium">{item.名稱}</span>
+                      <span className="text-xs text-slate-500 font-medium truncate max-w-[100px]">{item.名稱}</span>
                     </div>
                   </td>
+                  <td className="px-6 py-5">
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
+                      item.市場 === 'TW' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+                      item.市場 === 'US' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
+                      'bg-amber-500/10 text-amber-500 border-amber-500/20'
+                    }`}>
+                      {item.市場}
+                    </span>
+                  </td>
                   <td className="px-6 py-5 font-inter text-indigo-400 font-bold text-lg">
-                    {item.最新價格.toLocaleString()}
+                    {item.最新價格.toLocaleString(undefined, { minimumFractionDigits: item.市場 === 'CRYPTO' ? 2 : 0 })}
                   </td>
                   <td className="px-6 py-5">
                     <div className="flex items-center gap-3">

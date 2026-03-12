@@ -9,6 +9,7 @@ class StockAnalysisRequest(BaseModel):
 class AnalysisResult(BaseModel):
     代碼: str
     名稱: str
+    市場: Optional[str] = None
     最新價格: float
     操作建議: str
     一年位階: str

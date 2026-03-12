@@ -157,7 +157,7 @@ function App() {
           <div className="flex flex-col items-center gap-1 py-3 border-t border-slate-800/50 mt-2 bg-slate-900/50 rounded-2xl">
             <span className="text-[10px] text-slate-500 font-mono uppercase tracking-widest opacity-60">System Build</span>
             <span className="text-xs text-indigo-400 font-bold font-mono px-4 py-1.5 bg-indigo-500/10 rounded-full border border-indigo-500/30">
-              v2.0.6
+              v2.0.7
             </span>
           </div>
         </div>

@@ -3,7 +3,7 @@ from api.routes.auth import get_current_user
 from api.models.schemas import StockAnalysisRequest, AnalysisResponse, AnalysisResult, ScanRequest, ScanProgressResponse
 from api.services.quant_service import extract_stock_code, analyze_stock, fetch_tw_symbols, fetch_us_symbols, fetch_crypto_symbols
 from api.services.data_fetcher import fetch_batch_data
-from api.services.storage_service import save_data_pool, get_user_watchlist, save_user_watchlist
+from api.services.storage_service import save_data_pool, get_user_watchlist, save_user_watchlist, get_all_user_watchlists
 from datetime import datetime
 import asyncio
 
@@ -96,7 +96,47 @@ async def analyze_watchlist(request: StockAnalysisRequest, current_user: str = D
     watchlist = request.watchlist
     # 如果傳入空清單，嘗試從儲存空間讀取
     if not watchlist:
-        watchlist = get_user_watchlist(current_user, request.market_type)
+        if request.market_type == "ALL":
+            all_lists = get_all_user_watchlists(current_user)
+            # 建立 (symbol, market) 的映射清單
+            combined_watchlist = []
+            for m, symbols in all_lists.items():
+                for s in symbols:
+                    combined_watchlist.append((s, m))
+            
+            # 批次抓取數據 (這裡需要調整 fetch_batch_data 以獲取所有數據)
+            all_results = []
+            for m in ["TW", "US", "CRYPTO"]:
+                market_symbols = all_lists.get(m, [])
+                if not market_symbols: continue
+                data_pool = fetch_batch_data(market_symbols, m)
+                
+                # 名稱對應表
+                tw_symbols = fetch_tw_symbols() if m == "TW" else {}
+                us_symbols = fetch_us_symbols() if m == "US" else {}
+                crypto_symbols = fetch_crypto_symbols() if m == "CRYPTO" else {}
+                
+                for symbol in market_symbols:
+                    code = extract_stock_code(symbol)
+                    df = data_pool.get(symbol)
+                    name = "未知"
+                    if m == "TW": name = tw_symbols.get(code, "未知")
+                    elif m == "US": name = us_symbols.get(code, "未知")
+                    elif m == "CRYPTO": name = crypto_symbols.get(code.lower(), "未知")
+                    
+                    if df is not None:
+                        analysis = analyze_stock(df, code, name, request.defense_weight, m)
+                        analysis["市場"] = m
+                        all_results.append(AnalysisResult(**analysis))
+                    else:
+                        all_results.append(AnalysisResult(
+                            代碼=code, 名稱="無數據", 市場=m, 最新價格=0, 操作建議="❌ 無法取得數據",
+                            一年位階="-", 年線乖離="-", MA20乖離="-", MACD狀態="-", 綜合評分=-1,
+                            _ma_base=0, _ma20=0, _atr=0
+                        ))
+            return AnalysisResponse(results=all_results, timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        else:
+            watchlist = get_user_watchlist(current_user, request.market_type)
     
     if not watchlist:
         return AnalysisResponse(results=[], timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
@@ -114,18 +154,30 @@ async def analyze_watchlist(request: StockAnalysisRequest, current_user: str = D
         df = data_pool.get(symbol)
         
         if df is not None:
-            # 自動從對照表中補齊名稱
-            name = tw_symbols.get(code)
-            if not name:
+            # 自動從對照表中補齊名稱 (優先符合當前市場)
+            name = None
+            if request.market_type == "TW":
+                name = tw_symbols.get(code)
+            elif request.market_type == "US":
                 name = us_symbols.get(code)
-            if not name:
+            elif request.market_type == "CRYPTO":
                 name = crypto_symbols.get(code.lower())
+            
+            # 如果當前市場未找到，則嘗試其他市場
+            if not name:
+                if request.market_type != "TW": name = tw_symbols.get(code)
+            if not name:
+                if request.market_type != "US": name = us_symbols.get(code)
+            if not name:
+                if request.market_type != "CRYPTO": name = crypto_symbols.get(code.lower())
+            
             if not name:
                 if "BTC" in code: name = "Bitcoin"
                 elif "ETH" in code: name = "Ethereum"
                 else: name = "未知"
                 
             analysis = analyze_stock(df, code, name, request.defense_weight, request.market_type)
+            analysis["市場"] = request.market_type # 確保市場類型正確
             results.append(AnalysisResult(**analysis))
         else:
             results.append(AnalysisResult(
@@ -142,6 +194,8 @@ async def analyze_watchlist(request: StockAnalysisRequest, current_user: str = D
 @router.get("/watchlist")
 async def get_watchlist_api(market_type: str = "TW", current_user: str = Depends(get_current_user)):
     """取得使用者追蹤清單"""
+    if market_type == "ALL":
+        return get_all_user_watchlists(current_user)
     watchlist = get_user_watchlist(current_user, market_type)
     return {"watchlist": watchlist}
 
