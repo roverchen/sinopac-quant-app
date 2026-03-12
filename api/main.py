@@ -14,7 +14,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 app = FastAPI(
     title="Sinopac Quant Pro API",
     description="Professional backend for quantitative stock analysis and trading.",
-    version="1.1.9" 
+    version="1.2.0" 
 )
 
 @app.on_event("startup")
@@ -41,7 +41,7 @@ app.add_middleware(
 @app.get("/health")
 @app.get("/api/health")
 async def health():
-    return {"status": "healthy", "version": "1.1.9"}
+    return {"status": "healthy", "version": "1.2.0"}
 
 # --- 2. API Routes ---
 app.include_router(quant.router, prefix="/api")
@@ -70,4 +70,4 @@ if os.path.exists(static_path):
     app.mount("/", StaticFiles(directory=static_path, html=True), name="static")
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8080) # Consistent with Cloud Run default
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8080)))
