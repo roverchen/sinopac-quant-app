@@ -47,6 +47,25 @@ class MockShioajiClient:
             ]
         return self._mock_orders
 
+    def get_positions(self):
+        """模擬持倉資料"""
+        return [
+            {
+                "symbol": "2330",
+                "qty": 1000,
+                "buy_price": 1025.0,
+                "market": "TW",
+                "is_simulation": True
+            },
+            {
+                "symbol": "NVDA",
+                "qty": 10,
+                "buy_price": 135.5,
+                "market": "US",
+                "is_simulation": True
+            }
+        ]
+
 # 全域變數以避免 Class Attribute 查找問題
 _shioaji_instances = {}
 _shioaji_lock = threading.Lock()
@@ -202,6 +221,53 @@ class ShioajiService:
         except Exception as e:
             print(f"Error fetching orders: {e}")
             return []
+
+    @classmethod
+    def get_positions(cls, email: str):
+        """
+        取得當前持倉。
+        """
+        api = cls.get_api_client(email)
+        if not api: return []
+        
+        # 處理模擬模式
+        if hasattr(api, 'is_mock') or type(api).__name__ == 'MockShioajiClient':
+            positions = api.get_positions()
+        else:
+            try:
+                # 實務上 Shioaji 查詢庫存
+                pos_list = api.list_positions(api.list_accounts()[0])
+                positions = []
+                for p in pos_list:
+                    positions.append({
+                        "symbol": p.code,
+                        "qty": p.quantity,
+                        "buy_price": p.price,
+                        "market": "TW", # 預設台股，可擴展
+                        "is_simulation": False
+                    })
+            except Exception as e:
+                print(f"Error fetching real positions: {e}")
+                positions = []
+
+        # 注入目前價格與損益試算
+        from api.services.quant_service import get_yahoo_ticker, fetch_stock_data
+        for p in positions:
+            try:
+                ticker = get_yahoo_ticker(p['symbol'], p['market'])
+                df = fetch_stock_data(p['symbol'], ticker, period="1d")
+                if df is not None and not df.empty:
+                    current_price = round(float(df['Close'].iloc[-1]), 2)
+                    p['current_price'] = current_price
+                    p['pnl_percent'] = round(((current_price - p['buy_price']) / p['buy_price']) * 100, 2)
+                else:
+                    p['current_price'] = p['buy_price']
+                    p['pnl_percent'] = 0.0
+            except:
+                p['current_price'] = p['buy_price']
+                p['pnl_percent'] = 0.0
+                
+        return positions
 
 # 全域單例
 shioaji_service = ShioajiService()

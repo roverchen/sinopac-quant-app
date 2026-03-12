@@ -39,11 +39,12 @@ async def get_account_summary(current_user: str = Depends(get_current_user)):
     if not info:
         return {"status": "disconnected", "message": "API Key 未設定或連線失敗"}
     
-    # 這裡可以進階回傳真正的餘額與持倉
+    positions = ShioajiService.get_positions(current_user)
+    
     return {
         "status": "connected",
-        "balance": 1000000, # 暫時假資料
-        "positions": []
+        "balance": 1000000, # 可進一步串接餘額查詢
+        "positions": positions
     }
 
 @router.post("/order")

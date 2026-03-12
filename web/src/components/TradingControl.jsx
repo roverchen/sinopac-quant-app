@@ -1,28 +1,20 @@
 import { useState, useEffect } from 'react';
-import { Shield, Play, Pause, Landmark, Wallet, TrendingUp, History, Send } from 'lucide-react';
+import { Shield, Play, Pause, Wallet, TrendingUp, Send, Smartphone, Clock } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { tradeService } from '../services/api';
 
 const TradingControl = () => {
   const [status, setStatus] = useState({ auto_trade_enabled: false, mode: 'Simulation' });
   const [account, setAccount] = useState({ balance: 0, positions: [], status: 'loading' });
-  const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     fetchStatus();
     fetchAccount();
-    fetchOrders();
+    // 每一分鐘自動更新一次價格與損益
+    const interval = setInterval(fetchAccount, 60000);
+    return () => clearInterval(interval);
   }, []);
-
-  const fetchOrders = async () => {
-    try {
-      const resp = await tradeService.getOrders();
-      setOrders(resp.orders || []);
-    } catch (err) {
-      console.error(err);
-    }
-  };
 
   const fetchStatus = async () => {
     try {
@@ -34,22 +26,23 @@ const TradingControl = () => {
   };
 
   const fetchAccount = async () => {
+    setLoading(true);
     try {
       const resp = await tradeService.getAccount();
       setAccount(resp);
     } catch (err) {
       console.error(err);
+    } finally {
+      setLoading(false);
     }
   };
 
   const toggleAutoTrade = async () => {
     setLoading(true);
     try {
-      const resp = await tradeService.toggleAutoTrade(!status.auto_trade_enabled);
+      await tradeService.toggleAutoTrade(!status.auto_trade_enabled);
       await fetchStatus();
-      alert(resp.message || "設定已更新");
     } catch (err) {
-      console.error(err);
       alert("切換失敗，請檢查網路連線");
     } finally {
       setLoading(false);
@@ -65,198 +58,166 @@ const TradingControl = () => {
       const resp = await tradeService.placeOrder({
         symbol,
         qty: 1,
-        price: 0, // 市價或現價處理邏輯在後端
-        action: "Buy"
+        price: 0, 
+        action: "Buy",
+        is_simulation: status.mode === 'Simulation'
       });
       alert(`下單成功！單號: ${resp.trade_id}`);
       fetchAccount();
-      fetchOrders();
     } catch (err) {
-      console.error(err);
       alert("下單失敗: " + (err.response?.data?.detail || "未知錯誤"));
     } finally {
       setLoading(false);
     }
   };
 
-  const showPlaceholderAlert = (feature) => {
-    alert(`${feature} 功能開發中，敬請期待！`);
-  };
-
   return (
     <div className="max-w-6xl mx-auto space-y-8">
-      {/* Robot Status Card */}
-      <div className={`p-8 rounded-[3rem] border-2 transition-all ${
-        status.auto_trade_enabled 
-          ? 'bg-emerald-500/5 border-emerald-500/20 shadow-2xl shadow-emerald-500/10' 
-          : 'bg-slate-900/40 border-slate-800'
-      }`}>
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-8">
-          <div className="flex items-center gap-6">
-            <div className={`w-20 h-20 rounded-3xl flex items-center justify-center transition-all ${
-              status.auto_trade_enabled ? 'bg-emerald-500 text-white animate-pulse' : 'bg-slate-800 text-slate-500'
-            }`}>
-              <Shield className="w-10 h-10" />
-            </div>
-            <div>
-              <div className="flex items-center gap-3">
-                <h2 className="text-3xl font-bold text-white font-inter">自動交易機器人</h2>
-                <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
-                  status.mode === 'Simulation' ? 'bg-amber-500/10 text-amber-500' : 'bg-rose-500/10 text-rose-500'
-                }`}>
-                  {status.mode === 'Simulation' ? '模擬模式' : '實盤模式'}
-                </span>
+      {/* Trading Status Dashboard */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div className={`lg:col-span-3 p-8 rounded-[2.5rem] border-2 transition-all ${
+          status.auto_trade_enabled 
+            ? 'bg-emerald-500/5 border-emerald-500/20 shadow-2xl shadow-emerald-500/10' 
+            : 'bg-slate-900/40 border-slate-800'
+        }`}>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-8">
+            <div className="flex items-center gap-6">
+              <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all ${
+                status.auto_trade_enabled ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/40' : 'bg-slate-800 text-slate-500'
+              }`}>
+                <Shield className="w-8 h-8" />
               </div>
-              <p className="text-slate-400 mt-2 font-medium">
-                {status.auto_trade_enabled 
-                  ? '系統已啟動：正在監測市場信號並執行自動套利。' 
-                  : '系統已停止：自動交易功能已禁用，目前僅執行分析。'}
-              </p>
-            </div>
-          </div>
-
-          <button
-            onClick={toggleAutoTrade}
-            disabled={loading}
-            className={`flex items-center gap-4 px-10 py-5 rounded-[2rem] font-black text-lg transition-all transform active:scale-95 ${
-              status.auto_trade_enabled 
-                ? 'bg-slate-800 text-rose-500 hover:bg-slate-700' 
-                : 'bg-indigo-600 text-white hover:bg-indigo-500 shadow-xl shadow-indigo-600/30'
-            }`}
-          >
-            {loading ? (
-              <div className="w-6 h-6 border-2 border-current border-t-transparent rounded-full animate-spin" />
-            ) : status.auto_trade_enabled ? (
-              <>
-                <Pause className="w-6 h-6 fill-current" />
-                停止運行
-              </>
-            ) : (
-              <>
-                <Play className="w-6 h-6 fill-current" />
-                啟動機器人
-              </>
-            )}
-          </button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Account Info */}
-        <div className="lg:col-span-1 space-y-8">
-          <div className="p-8 bg-slate-900/40 border border-slate-800 rounded-[2.5rem] space-y-6">
-            <div className="flex items-center gap-3">
-              <Wallet className="w-6 h-6 text-indigo-400" />
-              <h3 className="text-xl font-bold text-white">資產概況</h3>
-            </div>
-            
-            <div className="space-y-4">
-              <div className="p-6 bg-slate-800/50 rounded-2xl border border-slate-700">
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">可用餘額</p>
-                <p className="text-3xl font-black text-white font-inter">
-                  ${account.balance.toLocaleString()}
+              <div>
+                <div className="flex items-center gap-3">
+                  <h2 className="text-2xl font-bold text-white tracking-tight">自動交易系統</h2>
+                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest ${
+                    status.mode === 'Simulation' ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' : 'bg-rose-500/10 text-rose-500 border border-rose-500/30'
+                  }`}>
+                    {status.mode === 'Simulation' ? '模擬下單' : '實盤交易'}
+                  </span>
+                </div>
+                <p className="text-slate-400 mt-1 text-sm font-medium">
+                  {status.auto_trade_enabled ? '運作中：系統正根據海選結果自動執行策略' : '已停止：目前僅供手動監控與分析'}
                 </p>
               </div>
-              
-              <div className="p-6 bg-slate-800/50 rounded-2xl border border-slate-700">
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">帳戶狀態</p>
-                <div className="flex items-center gap-2 mt-1">
-                  <div className={`w-2 h-2 rounded-full ${account.status === 'connected' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                  <p className="font-bold text-white">
-                    {account.status === 'connected' ? '連線正常' : '連線失敗'}
-                  </p>
-                </div>
-              </div>
             </div>
-            
-            <button 
-              onClick={() => showPlaceholderAlert('資金明細')}
-              className="w-full py-4 bg-slate-800 hover:bg-slate-700 rounded-2xl text-slate-300 font-bold transition-all flex items-center justify-center gap-3"
+
+            <button
+              onClick={toggleAutoTrade}
+              disabled={loading}
+              className={`flex items-center gap-3 px-8 py-4 rounded-2xl font-black text-sm transition-all transform active:scale-95 ${
+                status.auto_trade_enabled 
+                  ? 'bg-slate-800 text-rose-500 hover:bg-slate-700' 
+                  : 'bg-indigo-600 text-white hover:bg-indigo-500 shadow-xl shadow-indigo-600/30'
+              }`}
             >
-              <Landmark className="w-5 h-5" />
-              資金明細
+              {loading ? (
+                <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+              ) : status.auto_trade_enabled ? (
+                <><Pause className="w-5 h-5 fill-current" /> 停止交易</>
+              ) : (
+                <><Play className="w-5 h-5 fill-current" /> 啟動系統</>
+              )}
             </button>
           </div>
         </div>
 
-        {/* Positions & Activity */}
-        <div className="lg:col-span-2 space-y-8">
-          <div className="p-8 bg-slate-900/40 border border-slate-800 rounded-[2.5rem] h-full flex flex-col">
-            <div className="flex items-center justify-between mb-8">
-              <div className="flex items-center gap-3">
-                <TrendingUp className="w-6 h-6 text-emerald-400" />
-                <h3 className="text-xl font-bold text-white">當前持倉</h3>
-              </div>
-              <button 
-                onClick={() => showPlaceholderAlert('交易歷史')}
-                className="text-indigo-400 text-sm font-bold hover:text-indigo-300 transition-all flex items-center gap-2"
-              >
-                <History className="w-4 h-4" />
-                交易歷史
-              </button>
+        <div className="p-8 bg-slate-900/40 border border-slate-800 rounded-[2.5rem] flex flex-col justify-center">
+            <div className="flex items-center gap-3 mb-2">
+              <Wallet className="w-5 h-5 text-indigo-400" />
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">帳戶餘額</span>
             </div>
+            <p className="text-3xl font-black text-white font-inter">
+              ${account.balance.toLocaleString()}
+            </p>
+        </div>
+      </div>
 
-            {orders.length === 0 ? (
-              <div className="flex-1 flex flex-col items-center justify-center py-12 text-center">
-                <div className="w-20 h-20 bg-slate-800/50 rounded-full flex items-center justify-center mb-4 border border-slate-700">
-                  <TrendingUp className="w-10 h-10 text-slate-600" />
-                </div>
-                <h4 className="text-lg font-bold text-slate-400">尚無持倉/委託部位</h4>
-                <p className="text-slate-500 text-sm mt-2 max-w-xs">
-                  機器人啟動後，若篩選到符合條件的優質標的將自動在此顯示。
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-4 flex-1 overflow-y-auto pr-2 custom-scrollbar">
-                {orders.map((order) => (
-                  <div key={order.order_id} className="p-5 bg-slate-800/40 border border-slate-700 rounded-2xl flex items-center justify-between hover:bg-slate-800/60 transition-all">
-                    <div className="flex items-center gap-4">
-                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold ${
-                        order.action === "Buy" ? "bg-emerald-500/10 text-emerald-500" : "bg-rose-500/10 text-rose-500"
-                      }`}>
-                        {order.action === "Buy" ? "買" : "賣"}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <p className="font-bold text-white text-lg">{order.symbol}</p>
-                          <span className="text-xs px-2 py-0.5 bg-slate-700 text-slate-400 rounded-md uppercase font-mono">{order.order_id}</span>
-                        </div>
-                        <p className="text-sm text-slate-500 font-medium">
-                          {order.qty} 股 · ${order.price} · {order.time}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                        order.status === "Filled" ? "bg-emerald-500/20 text-emerald-500" : "bg-amber-500/20 text-amber-500"
-                      }`}>
-                        {order.status === "Filled" ? "已成交" : "委託中"}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            
-            <div className="mt-auto pt-8 border-t border-slate-800">
-              <div className="flex items-center justify-between p-6 bg-indigo-600/5 border border-indigo-500/20 rounded-2xl">
-                <div className="flex items-center gap-4">
-                  <Send className="w-6 h-6 text-indigo-400" />
-                  <div>
-                    <p className="font-bold text-indigo-300">手動緊急下單</p>
-                    <p className="text-xs text-slate-500">直接對接 Shioaji API 執行即時委託</p>
-                  </div>
-                </div>
-                <button 
-                  onClick={handleManualOrder}
-                  disabled={loading}
-                  className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-black transition-all disabled:opacity-50"
-                >
-                  立即執行
-                </button>
-              </div>
+      {/* Current Positions - Main Focus */}
+      <div className="bg-slate-900/40 border border-slate-800 rounded-[3rem] overflow-hidden backdrop-blur-sm">
+        <div className="p-8 border-b border-slate-800 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-emerald-500/10 rounded-2xl">
+              <TrendingUp className="w-6 h-6 text-emerald-400" />
+            </div>
+            <div>
+              <h3 className="text-xl font-bold text-white">當前持倉 (Positions)</h3>
+              <p className="text-slate-500 text-xs mt-1">即時同步庫存數據與未實現損益試算</p>
             </div>
           </div>
+          
+          <div className="flex items-center gap-4">
+            <div className="hidden md:flex items-center gap-2 px-4 py-2 bg-slate-800/50 rounded-xl border border-slate-700">
+               <Clock className="w-3.5 h-3.5 text-slate-500" />
+               <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">自動更新週期: 60s</span>
+            </div>
+            <button 
+                onClick={handleManualOrder}
+                className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-indigo-400 rounded-xl text-xs font-black transition-all border border-indigo-500/20 flex items-center gap-2"
+            >
+                <Send className="w-3.5 h-3.5" />
+                緊急手動下單
+            </button>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-slate-800/20 border-b border-slate-800">
+                <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">標的代碼</th>
+                <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">類型</th>
+                <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">持有數量</th>
+                <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">買入均價</th>
+                <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">目前市價</th>
+                <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">損益試算 (P/L)</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/50">
+              {account.positions?.length > 0 ? (
+                account.positions.map((pos) => (
+                  <tr key={pos.symbol} className="hover:bg-slate-800/30 transition-colors group">
+                    <td className="px-8 py-6">
+                       <span className="text-lg font-black text-white font-inter">{pos.symbol}</span>
+                    </td>
+                    <td className="px-8 py-6">
+                       <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-tighter ${
+                         pos.is_simulation ? 'bg-amber-500/10 text-amber-500' : 'bg-rose-500/10 text-rose-500'
+                       }`}>
+                         {pos.is_simulation ? '模擬' : '實盤'}
+                       </span>
+                    </td>
+                    <td className="px-8 py-6 text-right font-inter font-bold text-slate-300">
+                      {pos.qty.toLocaleString()}
+                    </td>
+                    <td className="px-8 py-6 text-right font-inter font-bold text-slate-400">
+                      ${pos.buy_price.toLocaleString()}
+                    </td>
+                    <td className="px-8 py-6 text-right font-inter font-bold text-indigo-400">
+                      ${pos.current_price?.toLocaleString() || '-'}
+                    </td>
+                    <td className="px-8 py-6 text-right">
+                       <div className={`inline-flex items-center gap-1 font-inter font-black text-lg ${
+                         pos.pnl_percent >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                       }`}>
+                         {pos.pnl_percent >= 0 ? '+' : ''}{pos.pnl_percent}%
+                       </div>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="6" className="px-8 py-24 text-center">
+                    <div className="flex flex-col items-center opacity-20">
+                      <TrendingUp className="w-16 h-16 mb-4" />
+                      <p className="text-xl font-black uppercase tracking-widest">目前無持倉部位</p>
+                      <p className="text-sm font-medium mt-1">自動交易系統啟動後將在此顯示您的投資組合</p>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
