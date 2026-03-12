@@ -30,7 +30,7 @@ app.add_middleware(
 @app.get("/health")
 @app.get("/api/health")
 async def health():
-    return {"status": "healthy", "version": "1.1.0"}
+    return {"status": "healthy", "version": "1.1.1"}
 
 # --- 2. API Routes ---
 app.include_router(quant.router, prefix="/api")
