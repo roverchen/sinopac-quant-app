@@ -58,11 +58,13 @@ class ShioajiService:
             if email in _shioaji_instances:
                 return _shioaji_instances[email]
 
+            print(f"[ShioajiService] Attempting live login for {email}...")
             creds = get_user_credentials(email)
+            print(f"[ShioajiService] Credentials found for {email}: {list(creds.keys())}")
 
             # 如果沒有憑證，直接返回 MockClient 進入模擬模式
-            if not creds or 'shioaji_api_key' not in creds:
-                print(f"No credentials for {email}, returning MockShioajiClient for simulation.")
+            if not creds or 'shioaji_api_key' not in creds or not creds['shioaji_api_key']:
+                print(f"[ShioajiService] Missing API keys for {email}, using MockShioajiClient.")
                 mock_api = MockShioajiClient(user_id=email)
                 _shioaji_instances[email] = mock_api
                 return mock_api
@@ -70,14 +72,18 @@ class ShioajiService:
             try:
                 import shioaji as sj
                 api = sj.Shioaji()
+                print(f"[ShioajiService] Logging in with API Key: {creds['shioaji_api_key'][:5]}...")
                 api.login(
                     api_key=creds['shioaji_api_key'],
                     secret_key=creds['shioaji_secret_key']
                 )
+                print(f"[ShioajiService] Login SUCCESS for {email}")
                 _shioaji_instances[email] = api
                 return api
             except Exception as e:
-                print(f"Shioaji login failed for {email}, falling back to MOCK: {e}")
+                print(f"[ShioajiService] Login FAILED for {email}: {e}")
+                import traceback
+                traceback.print_exc()
                 mock_api = MockShioajiClient(user_id=email)
                 _shioaji_instances[email] = mock_api
                 return mock_api
@@ -100,6 +106,11 @@ class ShioajiService:
         elif hasattr(api, 'is_mock'): is_mock = True
         elif type(api).__name__ == 'MockShioajiClient': is_mock = True
         elif "MockShioajiClient" in str(type(api)): is_mock = True
+
+        # 如果使用者明確要求「實盤交易」(is_simulation=False)，但我們拿到的卻是 Mock API
+        # 則不應該默默轉模擬，而是要報錯讓使用者知道 API Key 有問題
+        if is_simulation == False and is_mock:
+            raise Exception(f"[ShioajiService] 實盤交易失敗：無法連線至永豐 API。請檢查您的 API Key 與 Secret 是否正確。")
 
         if is_mock:
             print(f"DEBUG: [v1.0.3] Auto Mock Triggered for {email}")

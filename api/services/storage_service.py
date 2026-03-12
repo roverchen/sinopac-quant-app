@@ -1,6 +1,8 @@
 import os
 import json
 import pickle
+import time
+from typing import Dict, List, Optional
 from google.cloud import storage, firestore
 from api.config import PROJECT_ID, CACHE_DIR, SYNC_DIR
 
@@ -53,7 +55,7 @@ def update_user_credentials(user_id, creds):
     return True
 
 def get_user_credentials(user_id):
-    """加載憑證：優先從 Firestore 讀取。增加強健性檢查避免 TypeError。"""
+    """加載憑證：優先從 Firestore 讀取。"""
     db = get_db()
     creds = {}
     if db:
@@ -64,7 +66,6 @@ def get_user_credentials(user_id):
         except Exception as e:
             print(f"Firestore load error: {e}")
 
-    # 如果 Firestore 沒抓到，嘗試本地
     if not isinstance(creds, dict):
         creds = {}
 
@@ -79,7 +80,6 @@ def get_user_credentials(user_id):
 
     return creds if isinstance(creds, dict) else {}
 
-#保留舊名稱別名以相容舊路由
 load_credentials = get_user_credentials
 save_credentials = update_user_credentials
 
@@ -93,9 +93,7 @@ def save_user_watchlist(user_id, market, watchlist):
         except Exception as e:
             print(f"Firestore save watchlist error: {e}")
 
-    # 本地備援
     try:
-        os.makedirs(CACHE_DIR, exist_ok=True)
         path = os.path.join(CACHE_DIR, f"watchlist_{market}_{user_id}.json")
         with open(path, "w", encoding="utf-8") as f:
             json.dump(watchlist, f, ensure_ascii=False)
@@ -113,21 +111,17 @@ def get_user_watchlist(user_id, market):
                 return doc.to_dict().get(f"watchlist_{market}", [])
         except Exception as e:
             print(f"Firestore load watchlist error: {e}")
-    # 本地備援
+    
     path = os.path.join(CACHE_DIR, f"watchlist_{market}_{user_id}.json")
     if os.path.exists(path):
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
 
-    # Defaults
-    if market == "TW":
-        return ["2330", "2317", "0050"]
-    if market == "CRYPTO":
-        return ["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "DOGE-USD"]
+    if market == "TW": return ["2330", "2317", "0050"]
+    if market == "CRYPTO": return ["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "DOGE-USD"]
     return ["AAPL", "MSFT", "NVDA"]
 
 def get_all_user_watchlists(user_id):
-    """取得所有市場的追蹤清單"""
     return {
         "TW": get_user_watchlist(user_id, "TW"),
         "US": get_user_watchlist(user_id, "US"),
@@ -135,7 +129,6 @@ def get_all_user_watchlists(user_id):
     }
 
 def save_user_mock_positions(user_id, positions):
-    """保存使用者模擬持倉"""
     db = get_db()
     if db:
         try:
@@ -144,9 +137,7 @@ def save_user_mock_positions(user_id, positions):
         except Exception as e:
             print(f"Firestore save mock_positions error: {e}")
 
-    # 本地備援
     try:
-        os.makedirs(CACHE_DIR, exist_ok=True)
         path = os.path.join(CACHE_DIR, f"mock_positions_{user_id}.json")
         with open(path, "w", encoding="utf-8") as f:
             json.dump(positions, f, ensure_ascii=False)
@@ -155,7 +146,6 @@ def save_user_mock_positions(user_id, positions):
     return True
 
 def get_user_mock_positions(user_id):
-    """取得使用者模擬持倉"""
     db = get_db()
     if db:
         try:
@@ -164,28 +154,37 @@ def get_user_mock_positions(user_id):
                 return doc.to_dict().get("mock_positions", [])
         except Exception as e:
             print(f"Firestore load mock_positions error: {e}")
-    # 本地備援
+    
     path = os.path.join(CACHE_DIR, f"mock_positions_{user_id}.json")
     if os.path.exists(path):
         with open(path, "r", encoding="utf-8") as f:
-            try:
-                return json.load(f)
-            except:
-                return []
+            try: return json.load(f)
+            except: return []
+    return [{"symbol": "2330", "qty": 1000, "buy_price": 1025.0, "market": "TW", "is_simulation": True}]
 
-    # 預設範例持倉 (首次使用者)
-    return [
-        {
-            "symbol": "2330",
-            "qty": 1000,
-            "buy_price": 1025.0,
-            "market": "TW",
-            "is_simulation": True
-        }
-    ]
+def get_all_users_with_pending() -> List[str]:
+    """Retrieve a list of all user IDs that have pending orders."""
+    users = []
+    # Local scan
+    if os.path.exists(CACHE_DIR):
+        for filename in os.listdir(CACHE_DIR):
+            if filename.startswith("pending_orders_") and filename.endswith(".json"):
+                user_id = filename.replace("pending_orders_", "").replace(".json", "")
+                if user_id:
+                    users.append(user_id)
+    # Firestore scan (optional, if we want to be thorough)
+    db = get_db()
+    if db:
+        try:
+            # This is slow but thorough for small datasets
+            docs = db.collection("users").stream()
+            for doc in docs:
+                if doc.to_dict().get("pending_orders"):
+                    users.append(doc.id)
+        except: pass
+    return list(set(users))
 
 def save_user_pending_orders(user_id, orders):
-    """保存使用者待成交訂單"""
     db = get_db()
     if db:
         try:
@@ -194,18 +193,15 @@ def save_user_pending_orders(user_id, orders):
         except Exception as e:
             print(f"Firestore save pending_orders error: {e}")
 
-    # 本地備援
     try:
-        os.makedirs(CACHE_DIR, exist_ok=True)
         path = os.path.join(CACHE_DIR, f"pending_orders_{user_id}.json")
         with open(path, "w", encoding="utf-8") as f:
-            json.dump(orders, f, ensure_ascii=False)
+            json.dump(orders, f, ensure_ascii=False, indent=2)
     except Exception as e:
         print(f"[Storage] Local pending_orders save failed: {e}")
     return True
 
 def get_user_pending_orders(user_id):
-    """取得使用者待成交訂單"""
     db = get_db()
     if db:
         try:
@@ -214,18 +210,15 @@ def get_user_pending_orders(user_id):
                 return doc.to_dict().get("pending_orders", [])
         except Exception as e:
             print(f"Firestore load pending_orders error: {e}")
-    # 本地備援
+    
     path = os.path.join(CACHE_DIR, f"pending_orders_{user_id}.json")
     if os.path.exists(path):
         with open(path, "r", encoding="utf-8") as f:
-            try:
-                return json.load(f)
-            except:
-                return []
+            try: return json.load(f)
+            except: return []
     return []
 
 def save_user_trade_history(user_id, history):
-    """保存使用者交易紀錄"""
     db = get_db()
     if db:
         try:
@@ -234,18 +227,15 @@ def save_user_trade_history(user_id, history):
         except Exception as e:
             print(f"Firestore save trade_history error: {e}")
 
-    # 本地備援
     try:
-        os.makedirs(CACHE_DIR, exist_ok=True)
         path = os.path.join(CACHE_DIR, f"trade_history_{user_id}.json")
         with open(path, "w", encoding="utf-8") as f:
-            json.dump(history, f, ensure_ascii=False)
+            json.dump(history, f, ensure_ascii=False, indent=2)
     except Exception as e:
         print(f"[Storage] Local trade_history save failed: {e}")
     return True
 
 def get_user_trade_history(user_id):
-    """取得使用者交易紀錄"""
     db = get_db()
     if db:
         try:
@@ -254,19 +244,15 @@ def get_user_trade_history(user_id):
                 return doc.to_dict().get("trade_history", [])
         except Exception as e:
             print(f"Firestore load trade_history error: {e}")
-    # 本地備援
+            
     path = os.path.join(CACHE_DIR, f"trade_history_{user_id}.json")
     if os.path.exists(path):
         with open(path, "r", encoding="utf-8") as f:
-            try:
-                return json.load(f)
-            except:
-                return []
+            try: return json.load(f)
+            except: return []
     return []
 
 def save_data_pool(market, data):
-    """將海選數據池保存到 GCS (或本地 .pkl)"""
-    # 這裡的 data 通常是包含 'dfs' 的大型 dict
     gcs = get_gcs()
     if gcs:
         try:
@@ -278,9 +264,7 @@ def save_data_pool(market, data):
         except Exception as e:
             print(f"GCS save error: {e}")
 
-    # 本地備援
     try:
-        os.makedirs(CACHE_DIR, exist_ok=True)
         path = os.path.join(CACHE_DIR, f"shared_results_{market}.pkl")
         with open(path, "wb") as f:
             pickle.dump(data, f)
@@ -289,7 +273,6 @@ def save_data_pool(market, data):
     return True
 
 def load_data_pool(market):
-    """從 GCS 加載海選數據池"""
     gcs = get_gcs()
     if gcs:
         try:
@@ -301,7 +284,6 @@ def load_data_pool(market):
         except Exception as e:
             print(f"GCS load error: {e}")
 
-    # 本地備援
     path = os.path.join(CACHE_DIR, f"shared_results_{market}.pkl")
     if os.path.exists(path):
         with open(path, "rb") as f:

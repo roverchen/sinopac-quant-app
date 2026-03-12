@@ -23,6 +23,7 @@ const Watchlist = () => {
   const [selectedStock, setSelectedStock] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [qty, setQty] = useState(1);
+  const [price, setPrice] = useState(0);
   const [orderLoading, setOrderLoading] = useState(false);
   
   // Pagination State
@@ -157,6 +158,8 @@ const Watchlist = () => {
     else if (m === 'US') setQty(10);
     else if (m === 'CRYPTO') setQty(0.1);
     else setQty(1);
+    
+    setPrice(stock.最新價格); // 初始化委託價格
     setIsModalOpen(true);
     
     // 異步抓取歷史資料
@@ -196,7 +199,7 @@ const Watchlist = () => {
       const resp = await tradeService.placeOrder({
         symbol: selectedStock.代碼,
         qty: parseFloat(qty),
-        price: selectedStock.最新價格,
+        price: parseFloat(price),
         action: "Buy",
         is_simulation: isSimulation
       });
@@ -457,16 +460,29 @@ const Watchlist = () => {
                   </div>
                 </div>
 
-                <div className="bg-slate-800/30 p-4 rounded-2xl border border-slate-800/50">
-                  <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">下單數量</label>
-                  <div className="flex items-center gap-4">
-                    <input 
-                      type="number" 
-                      value={qty}
-                      onChange={(e) => setQty(e.target.value)}
-                      className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white font-inter font-bold focus:ring-2 focus:ring-indigo-500/50 outline-none"
-                    />
-                    <span className="text-slate-400 font-bold">{selectedStock.市場 === 'TW' ? '股' : selectedStock.市場 === 'US' ? '股' : '單位'}</span>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-slate-800/30 p-4 rounded-2xl border border-slate-800/50">
+                    <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">委託數量</label>
+                    <div className="flex items-center gap-4">
+                      <input 
+                        type="number" 
+                        value={qty}
+                        onChange={(e) => setQty(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white font-inter font-bold focus:ring-2 focus:ring-indigo-500/50 outline-none"
+                      />
+                    </div>
+                  </div>
+                  <div className="bg-slate-800/30 p-4 rounded-2xl border border-slate-800/50">
+                    <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">委託價格</label>
+                    <div className="flex items-center gap-4">
+                      <input 
+                        type="number" 
+                        step="0.01"
+                        value={price}
+                        onChange={(e) => setPrice(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white font-inter font-bold focus:ring-2 focus:ring-indigo-500/50 outline-none"
+                      />
+                    </div>
                   </div>
                 </div>
 

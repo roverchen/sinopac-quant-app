@@ -39,9 +39,15 @@ class MatchingEngine:
             time.sleep(self.interval)
 
     def _process_all_users(self):
-        # In a real app, we'd iterate through all users in Firestore.
-        # For this prototype, we'll focus on 'default_user' and 'system_auto'.
-        for user_id in ['default_user', 'system_auto']:
+        # Dynamically find all users who have pending orders to check
+        from api.services.storage_service import get_all_users_with_pending
+        active_users = get_all_users_with_pending()
+        
+        # Ensure system_auto is always checked if not in list
+        if 'system_auto' not in active_users:
+            active_users.append('system_auto')
+            
+        for user_id in active_users:
             self._check_pending_orders(user_id)
 
     def _check_pending_orders(self, user_id):
@@ -56,15 +62,29 @@ class MatchingEngine:
         symbols = list(set([o['symbol'] for o in pending]))
         tickers = {s: get_yahoo_ticker(s, next(o['market'] for o in pending if o['symbol'] == s)) for s in symbols}
 
-        # Fetch current prices
+        # Fetch current prices for simulation orders
         prices = {}
-        for s, t in tickers.items():
-            try:
-                data = yf.download(t, period="1d", interval="1m", progress=False)
-                if not data.empty:
-                    prices[s] = data['Close'].iloc[-1]
-            except:
-                continue
+        has_sim = any(o.get('is_simulation', True) for o in pending)
+        if has_sim:
+            for s, t in tickers.items():
+                try:
+                    data = yf.download(t, period="1d", interval="1m", progress=False)
+                    if not data.empty:
+                        prices[s] = data['Close'].iloc[-1]
+                except:
+                    continue
+
+        # Get API client for live order status checking
+        api = None
+        has_live = any(not o.get('is_simulation', True) for o in pending)
+        if has_live:
+            from api.services.shioaji_service import ShioajiService
+            api = ShioajiService.get_api_client(user_id)
+            if api and not hasattr(api, 'is_mock'):
+                try:
+                    api.update_status()
+                except:
+                    pass
 
         for order in pending:
             symbol = order['symbol']
@@ -76,18 +96,35 @@ class MatchingEngine:
                 new_pending.append(order)
                 continue
 
-            # Match Logic
             is_matched = False
-            if action == 'Buy':
-                if current_price <= limit_price:
-                    is_matched = True
-            elif action == 'Sell':
-                if current_price >= limit_price:
-                    is_matched = True
+            is_simulation = order.get('is_simulation', True)
+
+            if is_simulation:
+                # Simulation Logic: Match based on price
+                if current_price is not None:
+                    if action == 'Buy' and current_price <= limit_price:
+                        is_matched = True
+                    elif action == 'Sell' and current_price >= limit_price:
+                        is_matched = True
+            else:
+                # Live Logic: Poll broker API status
+                if api and not hasattr(api, 'is_mock'):
+                    try:
+                        trades = api.list_trades()
+                        trade_id = str(order.get('trade_id'))
+                        match = next((t for t in trades if str(t.order.id) == trade_id), None)
+                        if match and str(match.status.status) == "Filled":
+                            is_matched = True
+                            # For live, we use the actual fill price from the API if possible
+                            if hasattr(match.status, 'filled_avg_price') and match.status.filled_avg_price:
+                                current_price = float(match.status.filled_avg_price)
+                            print(f"[TradeEngine] LIVE Order FILLED for {user_id}: {symbol}")
+                    except Exception as e:
+                        print(f"[TradeEngine] Live poll error for {user_id}: {e}")
 
             if is_matched:
                 print(f"[TradeEngine] Order MATCHED for {user_id}: {action} {symbol} @ {current_price} (Limit: {limit_price})")
-                self._execute_fill(user_id, order, current_price)
+                self._execute_fill(user_id, order, current_price or limit_price)
             else:
                 new_pending.append(order)
 
@@ -105,6 +142,8 @@ class MatchingEngine:
         action = order['action']
         market = order['market']
 
+        is_simulation = order.get('is_simulation', True)
+
         if action == 'Buy':
             # Add to positions
             existing = next((p for p in positions if p['symbol'] == symbol), None)
@@ -120,7 +159,7 @@ class MatchingEngine:
                     "qty": qty,
                     "buy_price": fill_price,
                     "market": market,
-                    "is_simulation": True
+                    "is_simulation": is_simulation
                 })
 
             # Record history
@@ -132,6 +171,7 @@ class MatchingEngine:
                 "price": fill_price,
                 "market": market,
                 "status": "Filled",
+                "is_simulation": is_simulation,
                 "timestamp": datetime.now().isoformat()
             })
 
@@ -155,6 +195,7 @@ class MatchingEngine:
                 "price": fill_price,
                 "market": market,
                 "status": "Filled",
+                "is_simulation": is_simulation,
                 "realized_pl": realized_pl,
                 "timestamp": datetime.now().isoformat()
             })
