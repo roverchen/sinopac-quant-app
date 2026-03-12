@@ -10,12 +10,22 @@ const TradingControl = () => {
   const [selectedPosition, setSelectedPosition] = useState(null);
   const [sellForm, setSellForm] = useState({ price: 0, qty: 0 });
 
+  const [viewAccount, setViewAccount] = useState('personal'); // 'personal' or 'system_auto'
+  const [pending, setPending] = useState([]);
+  const [summary, setSummary] = useState(null);
+
   useEffect(() => {
     fetchStatus();
-    fetchAccount();
-    const interval = setInterval(fetchAccount, 60000);
+    refreshAll();
+    const interval = setInterval(refreshAll, 60000);
     return () => clearInterval(interval);
-  }, []);
+  }, [viewAccount]);
+
+  const refreshAll = () => {
+    fetchAccount();
+    fetchPending();
+    fetchSummary();
+  };
 
   const fetchStatus = async () => {
     try {
@@ -29,12 +39,33 @@ const TradingControl = () => {
   const fetchAccount = async () => {
     setLoading(true);
     try {
-      const resp = await tradeService.getAccount();
+      const userId = viewAccount === 'system_auto' ? 'system_auto' : null;
+      const resp = await tradeService.getAccount(userId);
       setAccount(resp);
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchPending = async () => {
+    try {
+      const userId = viewAccount === 'system_auto' ? 'system_auto' : null;
+      const resp = await tradeService.getPending(userId);
+      setPending(resp.pending || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const fetchSummary = async () => {
+    try {
+      const userId = viewAccount === 'system_auto' ? 'system_auto' : null;
+      const resp = await tradeService.getSummary(userId);
+      setSummary(resp);
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -156,13 +187,101 @@ const TradingControl = () => {
         <div className="p-8 bg-slate-900/40 border border-slate-800 rounded-[2.5rem] flex flex-col justify-center">
             <div className="flex items-center gap-3 mb-2">
               <Wallet className="w-5 h-5 text-indigo-400" />
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">帳戶餘額</span>
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+                {viewAccount === 'personal' ? '個人帳戶市值' : '機器人帳戶市值'}
+              </span>
             </div>
             <p className="text-3xl font-black text-white font-inter">
               ${account.balance.toLocaleString()}
             </p>
+            {summary && (
+              <div className={`text-sm font-bold mt-1 ${
+                (viewAccount === 'personal' ? summary.mock.total : summary.mock.total) >= 0 ? 'text-emerald-400' : 'text-rose-400'
+              }`}>
+                P/L: ${(viewAccount === 'personal' ? summary.mock.total : summary.mock.total).toLocaleString()}
+                <span className="ml-1 text-[10px] opacity-60">
+                  ({viewAccount === 'personal' ? '個人模擬' : '機器人全域'})
+                </span>
+              </div>
+            )}
         </div>
       </div>
+
+      {/* Account Selector & Pending Orders Hook */}
+      <div className="flex items-center justify-between gap-4 bg-slate-900/40 p-2 rounded-[2rem] border border-slate-800/50">
+        <div className="flex p-1.5 bg-slate-950/50 rounded-2xl gap-2">
+          <button 
+            onClick={() => setViewAccount('personal')}
+            className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+              viewAccount === 'personal' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'
+            }`}
+          >
+            個人帳戶
+          </button>
+          <button 
+            onClick={() => setViewAccount('system_auto')}
+            className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+              viewAccount === 'system_auto' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'
+            }`}
+          >
+            系統自動 (Robot)
+          </button>
+        </div>
+        
+        {pending.length > 0 && (
+          <div className="flex items-center gap-2 px-6 py-2 bg-indigo-500/10 border border-indigo-500/30 rounded-2xl">
+            <Clock className="w-4 h-4 text-indigo-400 animate-pulse" />
+            <span className="text-xs font-bold text-indigo-400 uppercase tracking-widest">
+              {pending.length} 筆掛單執行中
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Pending Orders Table (If any) */}
+      {pending.length > 0 && (
+        <div className="bg-slate-900/20 border border-indigo-500/10 rounded-[2.5rem] overflow-hidden">
+          <div className="px-8 py-5 border-b border-indigo-500/10 flex items-center gap-3">
+             <Clock className="w-5 h-5 text-indigo-500" />
+             <h3 className="text-sm font-black text-indigo-400 uppercase tracking-widest">待成交委託 (Pending Orders)</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-indigo-500/5">
+                  <th className="px-8 py-4 text-[9px] font-black text-slate-500 uppercase tracking-widest">標的</th>
+                  <th className="px-8 py-4 text-[9px] font-black text-slate-500 uppercase tracking-widest">方向</th>
+                  <th className="px-8 py-4 text-[9px] font-black text-slate-500 uppercase tracking-widest text-right">數量</th>
+                  <th className="px-8 py-4 text-[9px] font-black text-slate-500 uppercase tracking-widest text-right">委託價</th>
+                  <th className="px-8 py-4 text-[9px] font-black text-slate-500 uppercase tracking-widest text-right text-indigo-500">當前狀態</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-indigo-500/10">
+                {pending.map((p, idx) => (
+                  <tr key={idx} className="bg-indigo-500/5">
+                    <td className="px-8 py-4 font-inter font-bold text-white">{p.symbol}</td>
+                    <td className="px-8 py-4">
+                      <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
+                        p.action === 'Buy' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'
+                      }`}>
+                        {p.action === 'Buy' ? '買入' : '賣出'}
+                      </span>
+                    </td>
+                    <td className="px-8 py-4 text-right font-inter text-xs text-slate-300">{p.qty}</td>
+                    <td className="px-8 py-4 text-right font-inter text-xs text-slate-300">${p.price}</td>
+                    <td className="px-8 py-4 text-right">
+                       <div className="flex items-center justify-end gap-2 text-indigo-400">
+                          <span className="text-[10px] font-bold uppercase tracking-widest animate-pulse">撮合中</span>
+                          <Clock className="w-3 h-3" />
+                       </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Current Positions - Main Focus */}
       <div className="bg-slate-900/40 border border-slate-800 rounded-[3rem] overflow-hidden backdrop-blur-sm">
@@ -184,7 +303,8 @@ const TradingControl = () => {
             </div>
             <button 
                 onClick={handleManualOrder}
-                className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-indigo-400 rounded-xl text-xs font-black transition-all border border-indigo-500/20 flex items-center gap-2"
+                disabled={loading || viewAccount === 'system_auto'}
+                className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-indigo-400 rounded-xl text-xs font-black transition-all border border-indigo-500/20 flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed"
             >
                 <Send className="w-3.5 h-3.5" />
                 緊急手動下單
@@ -209,8 +329,8 @@ const TradingControl = () => {
                 account.positions.map((pos) => (
                   <tr 
                     key={pos.symbol} 
-                    onClick={() => openSellModal(pos)}
-                    className="hover:bg-slate-800/30 transition-colors group cursor-pointer"
+                    onClick={() => viewAccount === 'personal' && openSellModal(pos)}
+                    className={`hover:bg-slate-800/30 transition-colors group ${viewAccount === 'personal' ? 'cursor-pointer' : 'cursor-default'}`}
                   >
                     <td className="px-8 py-6">
                        <span className="text-lg font-black text-white group-hover:text-indigo-400 transition-colors font-inter">{pos.symbol}</span>

@@ -123,59 +123,6 @@ async def analyze_watchlist(request: StockAnalysisRequest, current_user: str = D
     results = []
     
     watchlist = request.watchlist
-    # 如果傳入空清單，嘗試從儲存空間讀取
-    if not watchlist:
-        if request.market_type == "ALL":
-            all_lists = get_all_user_watchlists(current_user)
-            # 建立 (symbol, market) 的映射清單
-            combined_watchlist = []
-            for m, symbols in all_lists.items():
-                for s in symbols:
-                    combined_watchlist.append((s, m))
-            
-            # 批次抓取數據 (這裡需要調整 fetch_batch_data 以獲取所有數據)
-            all_results = []
-            for m in ["TW", "US", "CRYPTO"]:
-                market_symbols = all_lists.get(m, [])
-                if not market_symbols: continue
-                
-                # 名稱對應表 - 減少 API 呼叫次數
-                tw_symbols = fetch_tw_symbols() if m == "TW" else {}
-                us_symbols = fetch_us_symbols() if m == "US" else {}
-                crypto_symbols = fetch_crypto_symbols() if m == "CRYPTO" else {}
-                
-                # 嘗試從快取/持久化數據池讀取以加速
-                pool = get_cached_pool(m) or {}
-                pool_results = {r.代碼: r for r in pool.get("results", [])}
-                
-                data_map_needed = []
-                for s in market_symbols:
-                    code = extract_stock_code(s)
-                    if code in pool_results:
-                        all_results.append(pool_results[code])
-                    else:
-                        data_map_needed.append(s)
-                
-                if data_map_needed:
-                    data_pool = fetch_batch_data(data_map_needed, m)
-                    for symbol in data_map_needed:
-                        code = extract_stock_code(symbol)
-                        df = data_pool.get(symbol)
-                        name = "未知"
-                        if m == "TW": name = tw_symbols.get(code, "未知")
-                        elif m == "US": name = us_symbols.get(code, "未知")
-                        elif m == "CRYPTO": name = crypto_symbols.get(code.lower(), "未知")
-                        
-                        if df is not None:
-                            analysis_dict = analyze_stock(df, code, name, request.defense_weight, m)
-                            analysis_dict["市場"] = m
-                            all_results.append(AnalysisResult(**analysis_dict))
-                        else:
-                            all_results.append(AnalysisResult(
-                                代碼=code, 名稱="無數據", 市場=m, 最新價格=0, 操作建議="❌ 無法取得數據",
-                                一年位階="-", 年線乖離="-", MA20乖離="-", MACD狀態="-", 綜合評分=-1,
-                                ma_base=0, ma20=0, atr=0
-                            ))
             return AnalysisResponse(results=all_results, timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         else:
             watchlist = get_user_watchlist(current_user, request.market_type)
@@ -183,50 +130,53 @@ async def analyze_watchlist(request: StockAnalysisRequest, current_user: str = D
     if not watchlist:
         return AnalysisResponse(results=[], timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
-    # 這裡未來可以優先從 data_pool 讀取以加速
-    data_pool = fetch_batch_data(watchlist, request.market_type)
+    # 這裡優先從 data_pool 讀取以加速 (如有最近掃描)
+    pool = get_cached_pool(request.market_type) or {}
+    pool_results = {r.代碼: r for r in pool.get("results", [])}
+    dfs = pool.get("dfs", {})
     
-    # 取得名稱對照表
-    tw_symbols = fetch_tw_symbols()
-    us_symbols = fetch_us_symbols()
-    crypto_symbols = fetch_crypto_symbols()
+    results = []
+    data_map_needed = []
     
-    for symbol in watchlist:
-        code = extract_stock_code(symbol)
-        df = data_pool.get(symbol)
-        
-        if df is not None:
-            # --- 命名稱邏輯優化: 避免跨市場誤報 ---
-            name = None
-            if request.market_type == "TW":
-                name = tw_symbols.get(code)
-            elif request.market_type == "US":
-                name = us_symbols.get(code)
-            elif request.market_type == "CRYPTO":
-                name = crypto_symbols.get(code.lower())
-            
-            # 只有在找不到名稱時，且代碼特徵明顯時才進行跨市場搜尋 (例如包含美元對)
-            if not name:
-                if "USD" in code.upper() or "-" in code:
-                    name = crypto_symbols.get(code.lower())
-                elif code.isdigit():
-                    name = tw_symbols.get(code)
-            
-            if not name:
-                if "BTC" in code.upper(): name = "Bitcoin"
-                elif "ETH" in code.upper(): name = "Ethereum"
-                elif "SOL" in code.upper(): name = "Solana"
-                else: name = "未知"
-                
-            analysis = analyze_stock(df, code, name, request.defense_weight, request.market_type)
-            analysis["市場"] = request.market_type # 確保市場類型正確
+    for s in watchlist:
+        code = extract_stock_code(s)
+        if code in pool_results and request.defense_weight == 0.5: # 預設權重直接用快取
+            results.append(pool_results[code])
+        elif code in dfs: # 有數據但權重不同，重刷
+            name = pool_results[code].名稱 if code in pool_results else "未知"
+            analysis = analyze_stock(dfs[code], code, name, request.defense_weight, request.market_type)
             results.append(AnalysisResult(**analysis))
         else:
-            results.append(AnalysisResult(
-                代碼=code, 名稱="無數據", 最新價格=0, 操作建議="❌ 無法取得數據",
-                一年位階="-", 年線乖離="-", MA20乖離="-", MACD狀態="-", 綜合評分=-1,
-                ma_base=0, ma20=0, atr=0
-            ))
+            data_map_needed.append(s)
+            
+    if data_map_needed:
+        data_pool = fetch_batch_data(data_map_needed, request.market_type)
+        # 取得名稱對照表
+        tw_symbols = fetch_tw_symbols() if request.market_type == "TW" else {}
+        us_symbols = fetch_us_symbols() if request.market_type == "US" else {}
+        crypto_symbols = fetch_crypto_symbols() if request.market_type == "CRYPTO" else {}
+        
+        for symbol in data_map_needed:
+            code = extract_stock_code(symbol)
+            df = data_pool.get(symbol)
+            if df is not None:
+                # 命名稱邏輯
+                name = "未知"
+                if request.market_type == "TW": name = tw_symbols.get(code, "未知")
+                elif request.market_type == "US": name = us_symbols.get(code, "未知")
+                elif request.market_type == "CRYPTO": name = crypto_symbols.get(code.lower(), "未知")
+                
+                analysis = analyze_stock(df, code, name, request.defense_weight, request.market_type)
+                results.append(AnalysisResult(**analysis))
+            else:
+                results.append(AnalysisResult(
+                    代碼=code, 名稱="無數據", 最新價格=0, 操作建議="❌ 無法取得數據",
+                    一年位階="-", 年線乖離="-", MA20乖離="-", MACD狀態="-", 綜合評分=-1,
+                    ma_base=0, ma20=0, atr=0
+                ))
+                
+    # 確保依評分排序
+    results = sorted(results, key=lambda x: x.綜合評分, reverse=True)
             
     return AnalysisResponse(
         results=results,
@@ -268,7 +218,11 @@ async def get_market_results(
             else:
                 new_results.append(r)
         all_results = new_results
-    # 確保每個結果都有市場欄位且依評分降序
+        
+    # 確保依評分排序 (Fix slider ranking bug)
+    all_results = sorted(all_results, key=lambda x: getattr(x, '綜合評分', -1), reverse=True)
+
+    # 確保每個結果都有市場欄位
     for r in all_results:
         if hasattr(r, '市場') and not r.市場:
             r.市場 = market_type

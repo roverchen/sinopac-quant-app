@@ -14,8 +14,19 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 app = FastAPI(
     title="Sinopac Quant Pro API",
     description="Professional backend for quantitative stock analysis and trading.",
-    version="1.1.8" 
+    version="1.1.9" 
 )
+
+@app.on_event("startup")
+async def startup_event():
+    # 啟動掛單撮合引擎
+    from api.services.trade_engine import engine
+    engine.start()
+    
+    # 啟動自動交易機器人
+    from api.services.auto_trade_service import robot
+    robot.start()
+    print("[Main] Background services started.")
 
 # 配置 CORS
 app.add_middleware(
@@ -30,7 +41,7 @@ app.add_middleware(
 @app.get("/health")
 @app.get("/api/health")
 async def health():
-    return {"status": "healthy", "version": "1.1.8"}
+    return {"status": "healthy", "version": "1.1.9"}
 
 # --- 2. API Routes ---
 app.include_router(quant.router, prefix="/api")

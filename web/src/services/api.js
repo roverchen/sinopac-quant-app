@@ -87,8 +87,8 @@ export const tradeService = {
     const response = await api.post(`/trade/toggle?enabled=${enabled}`);
     return response.data;
   },
-  async getAccount() {
-    const response = await api.get('/trade/account');
+  async getAccount(userId) {
+    const response = await api.get(`/trade/account${userId ? `?user_id=${userId}` : ''}`);
     return response.data;
   },
   async placeOrder(orderData) {
@@ -99,12 +99,16 @@ export const tradeService = {
     const response = await api.get('/trade/orders');
     return response.data;
   },
-  async getHistory() {
-    const response = await api.get('/trade/history');
+  async getPending(userId) {
+    const response = await api.get(`/trade/pending${userId ? `?user_id=${userId}` : ''}`);
     return response.data;
   },
-  async getSummary() {
-    const response = await api.get('/trade/summary');
+  async getHistory(userId) {
+    const response = await api.get(`/trade/history${userId ? `?user_id=${userId}` : ''}`);
+    return response.data;
+  },
+  async getSummary(userId) {
+    const response = await api.get(`/trade/summary${userId ? `?user_id=${userId}` : ''}`);
     return response.data;
   }
 };

@@ -22,69 +22,8 @@ class MockShioajiClient:
         return [MockAcc()]
     
     def place_order(self, contract, order, symbol="2330", qty=1, price=500.0, action="Buy"):
-        # 建立一個較完整的模擬訂單物件
+        # 模擬模式下，訂單進入「掛單」狀態
         order_id = f"MOCK-{random.randint(1000,9999)}"
-        new_order = {
-            "order_id": order_id,
-            "symbol": symbol,
-            "action": action,
-            "qty": qty,
-            "price": price,
-            "status": "Filled",
-            "time": datetime.now().strftime("%H:%M:%S")
-        }
-        self._mock_orders.insert(0, new_order)
-        
-        # 更新持倉
-        if self.user_id:
-            from api.services.storage_service import get_user_mock_positions, save_user_mock_positions, get_user_trade_history, save_user_trade_history
-            positions = get_user_mock_positions(self.user_id)
-            history = get_user_trade_history(self.user_id)
-            
-            realized_pnl = 0.0
-            found = False
-            for p in positions:
-                if p['symbol'] == symbol:
-                    # 簡單邏輯：如果是買入，增加數量，平均買價
-                    if action == "Buy" or action == "Action.Buy":
-                        total_cost = (p['qty'] * p['buy_price']) + (qty * price)
-                        p['qty'] += qty
-                        p['buy_price'] = total_cost / p['qty']
-                    else: # 賣出
-                        # 計算實現損益
-                        realized_pnl = (price - p['buy_price']) * qty
-                        p['qty'] -= qty
-                    found = True
-                    break
-            
-            if not found and (action == "Buy" or action == "Action.Buy"):
-                # 判斷市場 (簡單邏輯)
-                market = "TW" if symbol.isdigit() else "US"
-                positions.append({
-                    "symbol": symbol,
-                    "qty": qty,
-                    "buy_price": price,
-                    "market": market,
-                    "is_simulation": True
-                })
-            
-            # 記錄到歷史交易
-            history.insert(0, {
-                "order_id": order_id,
-                "symbol": symbol,
-                "action": action,
-                "qty": qty,
-                "price": price,
-                "realized_pnl": round(realized_pnl, 2) if (action == "Sell" or action == "Action.Sell") else 0.0,
-                "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "is_simulation": True
-            })
-            
-            # 移除數量為 0 的持倉
-            positions = [p for p in positions if p['qty'] > 0]
-            save_user_mock_positions(self.user_id, positions)
-            save_user_trade_history(self.user_id, history)
-
         class MockTrade: 
             class Order: id = order_id
             order = Order()
@@ -164,8 +103,34 @@ class ShioajiService:
         
         if is_mock:
             print(f"DEBUG: [v1.0.3] Auto Mock Triggered for {email}")
-            target_api = api if (api and hasattr(api, 'is_mock')) else MockShioajiClient(user_id=email)
-            return target_api.place_order(None, None, symbol=symbol, qty=qty, price=price, action=str(action) if action else "Buy")
+            # 模擬模式下，所有下單進入掛單佇列，由 TradeEngine 進行價格撮合
+            from api.services.storage_service import get_user_pending_orders, save_user_pending_orders
+            pending = get_user_pending_orders(email)
+            order_id = f"MOCK-{random.randint(1000,9999)}"
+            
+            # 判斷市場
+            market = "TW"
+            if symbol.isdigit() and len(symbol) >= 4: market = "TW"
+            elif any(c.isalpha() for c in symbol): 
+                if "-" in symbol or "USD" in symbol: market = "CRYPTO"
+                else: market = "US"
+
+            pending.append({
+                "trade_id": order_id,
+                "symbol": symbol,
+                "action": "Buy" if "Buy" in str(action) else "Sell",
+                "qty": qty,
+                "price": price,
+                "market": market,
+                "is_simulation": True,
+                "timestamp": datetime.now().isoformat()
+            })
+            save_user_pending_orders(email, pending)
+            
+            class MockTrade: 
+                class Order: id = order_id
+                order = Order()
+            return MockTrade()
 
         from shioaji.constant import Action, StockPriceType, OrderType
         from shioaji import Order
@@ -197,6 +162,22 @@ class ShioajiService:
         )
 
         trade = api.place_order(contract, order)
+        
+        # 進入掛單追蹤系統
+        from api.services.storage_service import get_user_pending_orders, save_user_pending_orders
+        pending = get_user_pending_orders(email)
+        pending.append({
+            "trade_id": str(trade.order.id),
+            "symbol": symbol,
+            "action": "Buy" if action == Action.Buy else "Sell",
+            "qty": qty,
+            "price": price,
+            "market": "TW",
+            "is_simulation": False,
+            "timestamp": datetime.now().isoformat()
+        })
+        save_user_pending_orders(email, pending)
+        
         return trade
 
     @classmethod

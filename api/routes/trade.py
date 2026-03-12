@@ -33,36 +33,48 @@ async def toggle_auto_trade(enabled: bool, current_user: str = Depends(get_curre
     return {"message": f"Auto-trade {'enabled' if enabled else 'disabled'}"}
 
 @router.get("/account")
-async def get_account_summary(current_user: str = Depends(get_current_user)):
+async def get_account_summary(user_id: Optional[str] = None, current_user: str = Depends(get_current_user)):
     """取得庫存與資金概況"""
-    info = ShioajiService.get_account_info(current_user)
+    target_user = user_id if user_id else current_user
+    info = ShioajiService.get_account_info(target_user)
     if not info:
         return {"status": "disconnected", "message": "API Key 未設定或連線失敗"}
     
-    positions = ShioajiService.get_positions(current_user)
+    positions = ShioajiService.get_positions(target_user)
     
     return {
         "status": "connected",
-        "balance": 1000000, # 可進一步串接餘額查詢
+        "balance": 1000000,
         "positions": positions
     }
 
+@router.get("/pending")
+async def get_pending_orders(user_id: Optional[str] = None, current_user: str = Depends(get_current_user)):
+    """取得待成交訂單"""
+    from api.services.storage_service import get_user_pending_orders
+    target_user = user_id if user_id else current_user
+    pending = get_user_pending_orders(target_user)
+    return {"pending": pending}
+
 @router.get("/history")
-async def get_trade_history(current_user: str = Depends(get_current_user)):
+async def get_trade_history(user_id: Optional[str] = None, current_user: str = Depends(get_current_user)):
     """取得交易歷史紀錄"""
     from api.services.storage_service import get_user_trade_history
-    history = get_user_trade_history(current_user)
+    target_user = user_id if user_id else current_user
+    history = get_user_trade_history(target_user)
     return {"history": history}
 
 @router.get("/summary")
-async def get_performance_summary(current_user: str = Depends(get_current_user)):
+async def get_performance_summary(user_id: Optional[str] = None, current_user: str = Depends(get_current_user)):
     """取得投資績效總計 (P/L)"""
     from api.services.storage_service import get_user_trade_history
-    positions = ShioajiService.get_positions(current_user)
-    history = get_user_trade_history(current_user)
+    target_user = user_id if user_id else current_user
+    positions = ShioajiService.get_positions(target_user)
+    history = get_user_trade_history(target_user)
     
-    realized_mock = sum(item.get('realized_pnl', 0) for item in history if item.get('is_simulation'))
-    realized_live = sum(item.get('realized_pnl', 0) for item in history if not item.get('is_simulation'))
+    # 系統機器人歷史皆視為模擬
+    realized_mock = sum(item.get('realized_pnl', 0) for item in history if item.get('is_simulation') or target_user == "system_auto")
+    realized_live = sum(item.get('realized_pnl', 0) for item in history if not item.get('is_simulation') and target_user != "system_auto")
     
     unrealized_mock = 0.0
     unrealized_live = 0.0
