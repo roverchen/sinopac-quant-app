@@ -9,7 +9,7 @@ const TradingControl = () => {
   const [loading, setLoading] = useState(false);
   const [selectedPosition, setSelectedPosition] = useState(null);
   const [sellForm, setSellForm] = useState({ price: 0, qty: 0 });
-
+  const [viewAccount, setViewAccount] = useState('personal'); // 'personal' or 'system_auto'
   const [pending, setPending] = useState([]);
   const [summary, setSummary] = useState(null);
 
@@ -18,7 +18,7 @@ const TradingControl = () => {
     refreshAll();
     const interval = setInterval(refreshAll, 60000);
     return () => clearInterval(interval);
-  }, []);
+  }, [viewAccount]);
 
   const refreshAll = () => {
     fetchAccount();
@@ -38,7 +38,8 @@ const TradingControl = () => {
   const fetchAccount = async () => {
     setLoading(true);
     try {
-      const resp = await tradeService.getAccount();
+      const userId = viewAccount === 'system_auto' ? 'system_auto' : null;
+      const resp = await tradeService.getAccount(userId);
       setAccount(resp);
     } catch (err) {
       console.error(err);
@@ -49,7 +50,8 @@ const TradingControl = () => {
 
   const fetchPending = async () => {
     try {
-      const resp = await tradeService.getPending();
+      const userId = viewAccount === 'system_auto' ? 'system_auto' : null;
+      const resp = await tradeService.getPending(userId);
       setPending(resp.pending || []);
     } catch (err) {
       console.error(err);
@@ -58,7 +60,8 @@ const TradingControl = () => {
 
   const fetchSummary = async () => {
     try {
-      const resp = await tradeService.getSummary();
+      const userId = viewAccount === 'system_auto' ? 'system_auto' : null;
+      const resp = await tradeService.getSummary(userId);
       setSummary(resp);
     } catch (err) {
       console.error(err);
@@ -137,22 +140,41 @@ const TradingControl = () => {
           <div className="w-16 h-16 rounded-2xl bg-indigo-600/10 flex items-center justify-center text-indigo-400">
             <TrendingUp className="w-8 h-8" />
           </div>
-          <div>
-            <h2 className="text-2xl font-bold text-white tracking-tight">個人投資績效</h2>
-            <p className="text-slate-400 mt-1 text-sm font-medium">總結所有模擬與實盤交易的盈虧情況</p>
+          <div className="flex flex-col">
+            <h2 className="text-2xl font-bold text-white tracking-tight">
+              {viewAccount === 'personal' ? '個人投資績效' : '系統自動績效'}
+            </h2>
+            <div className="flex gap-2 mt-1">
+              <button 
+                onClick={() => setViewAccount('personal')}
+                className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded transition-all ${
+                  viewAccount === 'personal' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-slate-300'
+                }`}
+              >
+                個人
+              </button>
+              <button 
+                onClick={() => setViewAccount('system_auto')}
+                className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded transition-all ${
+                  viewAccount === 'system_auto' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-slate-300'
+                }`}
+              >
+                自動
+              </button>
+            </div>
           </div>
         </div>
         
         {summary && (
           <div className="flex gap-8">
             <div className="text-right">
-              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">模擬累計損益</p>
+              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">累計模擬損益</p>
               <p className={`text-2xl font-black font-inter ${summary.mock.total >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                 ${summary.mock.total.toLocaleString()}
               </p>
             </div>
             <div className="text-right">
-              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">實盤累計損益</p>
+              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">累計實盤損益</p>
               <p className={`text-2xl font-black font-inter ${summary.live.total >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                 ${summary.live.total.toLocaleString()}
               </p>

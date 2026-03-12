@@ -23,8 +23,9 @@ async def startup_event():
     from api.services.trade_engine import engine
     engine.start()
     
-    # from api.services.auto_trade_service import robot
-    # robot.start()
+    # 啟動自動交易機器人
+    from api.services.auto_trade_service import robot
+    robot.start()
     print("[Main] Background services started.")
 
 # 配置 CORS
