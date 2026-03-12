@@ -50,7 +50,7 @@ class ErrorBoundary extends React.Component {
 const navItems = [
   { id: 'dashboard', label: '儀表板', icon: LayoutDashboard },
   { id: 'watchlist', label: '追蹤清單', icon: ListFilter },
-  { id: 'trading', label: '交易掌控', icon: ShieldCheck },
+  { id: 'trading', label: '交易紀錄', icon: ShieldCheck },
   { id: 'settings', label: '系統設定', icon: Settings },
 ]
 
@@ -137,7 +137,6 @@ function App() {
             </div>
             <div className="flex-1 overflow-hidden">
               <p className="text-sm font-semibold truncate text-white">{user?.user_id || 'User'}</p>
-              <p className="text-xs text-slate-400 truncate">Pro Account</p>
             </div>
           </div>
           

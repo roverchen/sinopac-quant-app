@@ -18,8 +18,25 @@ scan_status = {
     "top_results": []
 }
 
+# 全域結果快取 (避免每次 reload 都從 GCS 重抓)
+results_cache = {
+    "TW": None,
+    "US": None,
+    "CRYPTO": None
+}
+
+def get_cached_pool(market_type: str):
+    """取得快取的數據池，如不存在則從持久層讀取"""
+    global results_cache
+    if results_cache.get(market_type) is None:
+        print(f"[Cache] Loading {market_type} data pool from storage...")
+        pool = load_data_pool(market_type)
+        if pool:
+            results_cache[market_type] = pool
+    return results_cache.get(market_type)
+
 async def run_market_scan(market_type: str, defense_weight: float):
-    global scan_status
+    global scan_status, results_cache
     try:
         scan_status["status"] = "running"
         scan_status["progress"] = 5
@@ -70,7 +87,11 @@ async def run_market_scan(market_type: str, defense_weight: float):
         results = sorted(results, key=lambda x: x.綜合評分, reverse=True)
         
         scan_status["message"] = "分析完成，正在保存數據池..."
-        save_data_pool(market_type, {"results": results, "dfs": all_dfs, "timestamp": datetime.now().isoformat()})
+        data_pool = {"results": results, "dfs": all_dfs, "timestamp": datetime.now().isoformat()}
+        save_data_pool(market_type, data_pool)
+        
+        # 更新內存快取
+        results_cache[market_type] = data_pool
         
         scan_status["top_results"] = results[:10]
         scan_status["status"] = "completed"
@@ -123,8 +144,8 @@ async def analyze_watchlist(request: StockAnalysisRequest, current_user: str = D
                 us_symbols = fetch_us_symbols() if m == "US" else {}
                 crypto_symbols = fetch_crypto_symbols() if m == "CRYPTO" else {}
                 
-                # 嘗試從 data_pool 讀取以加速 (如有最近掃描)
-                pool = load_data_pool(m) or {}
+                # 嘗試從快取/持久化數據池讀取以加速
+                pool = get_cached_pool(m) or {}
                 pool_results = {r.代碼: r for r in pool.get("results", [])}
                 
                 data_map_needed = []
@@ -219,8 +240,8 @@ async def get_market_results(
     page_size: int = 20,
     query: str = ""
 ):
-    """獲取全市場海選結果 (從持久層讀取並分頁)。"""
-    pool = load_data_pool(market_type)
+    """獲取全市場海選結果 (從快取或持久層讀取並分頁)。"""
+    pool = get_cached_pool(market_type)
     if not pool:
         return PaginatedAnalysisResponse(
             results=[], total=0, page=page, page_size=page_size,
