@@ -14,8 +14,8 @@ MAX_API_KEY = os.getenv("MAX_API_KEY")
 MAX_API_SECRET = os.getenv("MAX_API_SECRET")
 
 # App Config
-CACHE_DIR = "cache"
-SYNC_DIR = "sync"
+CACHE_DIR = "/tmp/cache"
+SYNC_DIR = "/tmp/sync"
 
 # JWT Secret
 JWT_SECRET = os.getenv("JWT_SECRET", "super-secret-quant-pro")

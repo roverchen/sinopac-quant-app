@@ -2,7 +2,11 @@ import os
 import json
 import pickle
 from google.cloud import storage, firestore
-from api.config import PROJECT_ID, CACHE_DIR
+from api.config import PROJECT_ID, CACHE_DIR, SYNC_DIR
+
+# Ensure directories exist
+os.makedirs(CACHE_DIR, exist_ok=True)
+os.makedirs(SYNC_DIR, exist_ok=True)
 
 # 延遲初始化 Firestore 用戶端
 _db = None
@@ -39,10 +43,13 @@ def update_user_credentials(user_id, creds):
             print(f"Firestore save error: {e}")
     
     # 本地備援
-    os.makedirs(CACHE_DIR, exist_ok=True)
-    path = os.path.join(CACHE_DIR, f"creds_{user_id}.json")
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(creds, f, ensure_ascii=False)
+    try:
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        path = os.path.join(CACHE_DIR, f"creds_{user_id}.json")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(creds, f, ensure_ascii=False)
+    except Exception as e:
+        print(f"[Storage] Local credentials save failed: {e}")
     return True
 
 def get_user_credentials(user_id):
@@ -87,10 +94,13 @@ def save_user_watchlist(user_id, market, watchlist):
             print(f"Firestore save watchlist error: {e}")
             
     # 本地備援
-    os.makedirs(CACHE_DIR, exist_ok=True)
-    path = os.path.join(CACHE_DIR, f"watchlist_{market}_{user_id}.json")
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(watchlist, f, ensure_ascii=False)
+    try:
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        path = os.path.join(CACHE_DIR, f"watchlist_{market}_{user_id}.json")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(watchlist, f, ensure_ascii=False)
+    except Exception as e:
+        print(f"[Storage] Local watchlist save failed: {e}")
     return True
 
 def get_user_watchlist(user_id, market):
@@ -134,10 +144,13 @@ def save_data_pool(market, data):
             print(f"GCS save error: {e}")
             
     # 本地備援
-    os.makedirs(CACHE_DIR, exist_ok=True)
-    path = os.path.join(CACHE_DIR, f"shared_results_{market}.pkl")
-    with open(path, "wb") as f:
-        pickle.dump(data, f)
+    try:
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        path = os.path.join(CACHE_DIR, f"shared_results_{market}.pkl")
+        with open(path, "wb") as f:
+            pickle.dump(data, f)
+    except Exception as e:
+        print(f"[Storage] Local data pool save failed: {e}")
     return True
 
 def load_data_pool(market):
