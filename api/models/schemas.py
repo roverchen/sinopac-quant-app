@@ -17,12 +17,19 @@ class AnalysisResult(BaseModel):
     MA20乖離: str
     MACD狀態: str
     綜合評分: float
-    _ma_base: Optional[float]
-    _ma20: Optional[float]
-    _atr: Optional[float]
+    ma_base: Optional[float] = None
+    ma20: Optional[float] = None
+    atr: Optional[float] = None
 
 class AnalysisResponse(BaseModel):
     results: List[AnalysisResult]
+    timestamp: str
+
+class PaginatedAnalysisResponse(BaseModel):
+    results: List[AnalysisResult]
+    total: int
+    page: int
+    page_size: int
     timestamp: str
 
 class AuthRequest(BaseModel):

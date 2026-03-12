@@ -1,10 +1,12 @@
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
+import re
 from max_api import MaxExchangeAPI
 
 def extract_stock_code(raw_str):
     """提取股票代碼，處理 '名稱(代碼)', '代碼', 'ETH-USD' 等格式"""
+    import re
     if not raw_str: return ""
     raw_str = str(raw_str).strip()
     match = re.search(r'\((.*?)\)', raw_str)
@@ -57,20 +59,32 @@ def fetch_us_symbols():
         return {"AAPL": "Apple", "MSFT": "Microsoft", "NVDA": "Nvidia"}
 
 def fetch_crypto_symbols():
-    """從 MAX API 獲取官方清冊"""
+    """獲取主要加密貨幣與 MAX 有關的交易對"""
+    symbols = {
+        "BTC-USD": "Bitcoin",
+        "ETH-USD": "Ethereum",
+        "SOL-USD": "Solana",
+        "BNB-USD": "Binance Coin",
+        "DOGE-USD": "Dogecoin",
+        "XRP-USD": "XRP",
+        "ADA-USD": "Cardano",
+        "MATIC-USD": "Polygon",
+        "DOT-USD": "Polkadot",
+        "LINK-USD": "Chainlink"
+    }
     try:
-        # MAX 不需要金鑰即可讀取公開市場清單
+        # 嘗試從 MAX API 增加交易對 (非同步獲取)
         api = MaxExchangeAPI("", "")
         markets = api.get_markets()
-        symbols = {}
         for m in markets:
-            # 只取 TWD 與 USDT 交易對
             if m['id'].endswith('twd') or m['id'].endswith('usdt'):
-                symbols[m['id']] = f"{m['name']} ({m['base_unit'].upper()}/{m['quote_unit'].upper()})"
+                key = m['id']
+                if key.upper() not in symbols:
+                    symbols[key] = f"{m['name']} ({m['base_unit'].upper()}/{m['quote_unit'].upper()})"
         return symbols
     except Exception as e:
-        print(f"Error fetching Crypto symbols: {e}")
-        return {"btctwd": "BTC/TWD", "ethtwd": "ETH/TWD"}
+        print(f"Error fetching Crypto symbols from MAX: {e}")
+        return symbols
 
 def get_yahoo_ticker(code, market_type='TW'):
     """將代碼轉換為 Yahoo Finance 的 Ticker 格式"""
@@ -78,16 +92,15 @@ def get_yahoo_ticker(code, market_type='TW'):
     if market_type == 'TW' and code.isdigit():
         return code + (".TW" if int(code) < 10000 else ".TWO")
     if market_type == 'CRYPTO':
-        # 處理 MAX 風格代碼 (如 btctwd -> BTC-TWD)
-        c = code.lower()
-        if c.endswith('twd'):
-            return f"{c[:-3].upper()}-TWD"
-        if c.endswith('usdt'):
-            # Yahoo Finance uses -USD for both USD and USDT pairs mostly
-            return f"{c[:-4].upper()}-USD"
-        if "-USD" not in code.upper():
-            return code.upper() + "-USD"
-        return code.upper()
+        # 處理格式
+        c = code.upper()
+        if c.endswith('TWD'):
+            return f"{c[:-3]}-TWD"
+        if c.endswith('USDT'):
+            return f"{c[:-4]}-USD"
+        if "-" not in c:
+            return f"{c}-USD"
+        return c
     return code
 
 def fetch_stock_data(code, ticker_str, period="1y"):
@@ -181,23 +194,37 @@ def analyze_stock(df, code, name, defense_weight=0.5, market_type='TW'):
     if is_gold_cross: pullback_score += 30
     
     final_score = (defense_weight * value_score) + ((1 - defense_weight) * pullback_score)
+
+    # --- 魯棒性修正: 處理 NaN / Inf 以防止 JSON 序列化失敗 (500 Error) ---
+    def sanitize(val):
+        if val is None or (isinstance(val, (float, np.floating)) and np.isnan(val)):
+            return 0.0
+        if isinstance(val, (float, np.floating)) and np.isinf(val):
+            return 999.9 if val > 0 else -999.9
+        return float(val) if isinstance(val, (int, float, np.integer, np.floating)) else val
+
+    last_price = sanitize(last_price)
+    final_score = sanitize(final_score)
+    defense_base = sanitize(defense_base)
+    ma20_last = sanitize(ma20_last)
+    atr = sanitize(atr)
     
     # 建議建構 (簡化版)
-    stop_loss = ma20_last if not np.isnan(ma20_last) else last_price * 0.95
+    stop_loss = ma20_last if ma20_last > 0 else last_price * 0.95
     target = last_price * 1.2
-    suggestion = f"🛡價值 | 買:{last_price:.1f} | 標:{target:.1f} | 損:{stop_loss:.1f}"
+    suggestion = f"🛡價值 | 買:{last_price:.1f} | 標:{target:.1f} | 損:{sanitize(stop_loss):.1f}"
     
     return {
         "代碼": code,
         "名稱": name,
         "最新價格": round(last_price, 2),
         "操作建議": suggestion,
-        "一年位階": f"{level_percentile*100:.1f}%",
-        "年線乖離": f"{dist_to_defense*100:.1f}%",
-        "MA20乖離": f"{dist_to_ma20*100:.1f}%",
+        "一年位階": f"{sanitize(level_percentile)*100:.1f}%",
+        "年線乖離": f"{sanitize(dist_to_defense)*100:.1f}%",
+        "MA20乖離": f"{sanitize(dist_to_ma20)*100:.1f}%",
         "MACD狀態": macd_status,
         "綜合評分": round(final_score, 1),
-        "_ma_base": defense_base,
-        "_ma20": ma20_last,
-        "_atr": atr
+        "ma_base": defense_base,
+        "ma20": ma20_last,
+        "atr": atr
     }

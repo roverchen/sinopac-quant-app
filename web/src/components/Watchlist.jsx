@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { quantService } from '../services/api';
-import { RefreshCw, Search, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { RefreshCw, Search, TrendingUp, TrendingDown, Minus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const Watchlist = () => {
@@ -13,33 +13,71 @@ const Watchlist = () => {
   const [qty, setQty] = useState(1);
   const [orderLoading, setOrderLoading] = useState(false);
   
-  const fetchData = async () => {
+  // Pagination State
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [pageSize] = useState(20);
+
+  // Scan Progress State
+  const [scanProgress, setScanProgress] = useState(null);
+  
+  const fetchData = async (forceScan = false) => {
     setLoading(true);
     try {
-      // 1. 先取得使用者儲存的追蹤清單代碼
-      const watchlistResp = await quantService.getWatchlist(marketType);
-      const symbols = watchlistResp.watchlist || [];
-      
-      if (symbols.length === 0) {
-        setData([]);
-        return;
+      if (marketType === 'ALL') {
+        const resp = await quantService.analyze([], 0.5, 'ALL');
+        const sortedData = (resp.results || []).sort((a, b) => b.綜合評分 - a.綜合評分);
+        setData(sortedData);
+        setTotal(sortedData.length);
+      } else {
+        if (forceScan) {
+          await quantService.startScan(marketType, 0.5);
+          startPollingProgress();
+          return;
+        }
+        const resp = await quantService.getResults(marketType, page, pageSize);
+        if ((!resp.results || resp.results.length === 0) && page === 1) {
+          // 如果首頁沒資料，自動啟動掃描 (或提示)
+          console.log('No results found, suggests scan');
+        }
+        setData(resp.results || []);
+        setTotal(resp.total || 0);
       }
-
-      // 2. 分析這些代碼
-      const resp = await quantService.analyze(symbols, 0.5, marketType);
-      // 3. 按照綜合評分由大到小排序
-      const sortedData = (resp.results || []).sort((a, b) => b.綜合評分 - a.綜合評分);
-      setData(sortedData);
     } catch (err) {
       console.error('Fetch error:', err);
+      setData([]);
     } finally {
-      setLoading(false);
+      if (!forceScan) setLoading(false);
     }
   };
 
+  const startPollingProgress = () => {
+    const interval = setInterval(async () => {
+      try {
+        const prog = await quantService.getScanProgress();
+        setScanProgress(prog);
+        if (prog.status === 'completed' || prog.status === 'error') {
+          clearInterval(interval);
+          setScanProgress(null);
+          // 掃描完畢，重新抓取資料
+          setPage(1);
+          fetchData();
+        }
+      } catch (err) {
+        clearInterval(interval);
+        setScanProgress(null);
+      }
+    }, 2000);
+  };
+
+  useEffect(() => {
+    // 切換市場時重置頁碼
+    setPage(1);
+  }, [marketType]);
+
   useEffect(() => {
     fetchData();
-  }, [marketType]);
+  }, [marketType, page]);
 
   const filteredData = data.filter(item => 
     item.代碼.toLowerCase().includes(search.toLowerCase()) ||
@@ -48,7 +86,6 @@ const Watchlist = () => {
 
   const handleRowClick = (stock) => {
     setSelectedStock(stock);
-    // 設置預設股數：台股 1000, 美股 10, 加密貨幣 0.1
     const m = stock.市場 || marketType;
     if (m === 'TW') setQty(1000);
     else if (m === 'US') setQty(10);
@@ -88,6 +125,8 @@ const Watchlist = () => {
     }
   };
 
+  const totalPages = Math.ceil(total / pageSize);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -119,14 +158,34 @@ const Watchlist = () => {
         </div>
         
         <button 
-          onClick={fetchData}
-          disabled={loading}
+          onClick={() => fetchData(marketType !== 'ALL')}
+          disabled={loading || !!scanProgress}
           className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 rounded-xl text-sm font-bold transition-all shadow-lg shadow-indigo-600/20"
         >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          刷新分析
+          <RefreshCw className={`w-4 h-4 ${loading || !!scanProgress ? 'animate-spin' : ''}`} />
+          {marketType === 'ALL' ? '刷新分析' : '啟動海選掃描'}
         </button>
       </div>
+
+      {scanProgress && (
+        <motion.div 
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-indigo-600/10 border border-indigo-500/20 rounded-2xl p-4 mb-6"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-bold text-indigo-400">{scanProgress.message}</span>
+            <span className="text-sm font-black text-indigo-400">{scanProgress.progress}%</span>
+          </div>
+          <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+            <motion.div 
+              className="h-full bg-indigo-500"
+              initial={{ width: 0 }}
+              animate={{ width: `${scanProgress.progress}%` }}
+            />
+          </div>
+        </motion.div>
+      )}
 
       <div className="bg-slate-900/40 border border-slate-800 rounded-3xl overflow-hidden backdrop-blur-sm">
         <div className="overflow-x-auto">
@@ -145,17 +204,17 @@ const Watchlist = () => {
             <tbody className="divide-y divide-slate-800/50">
               {filteredData.map((item, idx) => (
                 <motion.tr 
-                  key={item.代碼}
+                  key={`${item.代碼}-${item.市場}`}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: idx * 0.03 }}
+                  transition={{ delay: idx * 0.02 }}
                   onClick={() => handleRowClick(item)}
                   className="hover:bg-indigo-500/5 cursor-pointer transition-colors group"
                 >
                   <td className="px-6 py-5">
                     <div className="flex flex-col">
                       <span className="font-bold text-slate-100 font-inter text-base">{item.代碼}</span>
-                      <span className="text-xs text-slate-500 font-medium truncate max-w-[100px]">{item.名稱}</span>
+                      <span className="text-xs text-slate-500 font-medium truncate max-w-[120px]">{item.名稱}</span>
                     </div>
                   </td>
                   <td className="px-6 py-5">
@@ -168,17 +227,17 @@ const Watchlist = () => {
                     </span>
                   </td>
                   <td className="px-6 py-5 font-inter text-indigo-400 font-bold text-lg">
-                    {item.最新價格.toLocaleString(undefined, { minimumFractionDigits: item.市場 === 'CRYPTO' ? 2 : 0 })}
+                    {item.最新價格.toLocaleString(undefined, { minimumFractionDigits: item.市場 === 'CRYPTO' ? 2 : (item.最新價格 < 10 ? 2 : 1) })}
                   </td>
                   <td className="px-6 py-5">
-                    <div className="flex items-center gap-3">
-                      <div className="w-24 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                    <div className="flex items-center gap-3 justify-center">
+                      <div className="w-20 h-1.5 bg-slate-800 rounded-full overflow-hidden">
                         <div 
                           className="h-full bg-gradient-to-r from-indigo-500 to-purple-500"
                           style={{ width: item.一年位階 }}
                         ></div>
                       </div>
-                      <span className="text-xs text-slate-500 font-inter">{item.一年位階}</span>
+                      <span className="text-xs text-slate-500 font-inter w-10">{item.一年位階}</span>
                     </div>
                   </td>
                   <td className="px-6 py-5">
@@ -204,11 +263,11 @@ const Watchlist = () => {
               ))}
               {!loading && filteredData.length === 0 && (
                 <tr>
-                  <td colSpan="6" className="px-6 py-24 text-center">
+                  <td colSpan="7" className="px-6 py-24 text-center">
                     <div className="flex flex-col items-center opacity-30">
                       <Minus className="w-12 h-12 mb-3 text-slate-400" />
-                      <p className="text-slate-400 font-bold text-lg">尚無追蹤數據</p>
-                      <p className="text-slate-500 text-sm">請切換市場或添加標的後重新刷新。</p>
+                      <p className="text-slate-400 font-bold text-lg">尚無數據</p>
+                      <p className="text-slate-500 text-sm">請確認是否已完成海選掃描或已添加追蹤標的。</p>
                     </div>
                   </td>
                 </tr>
@@ -216,6 +275,32 @@ const Watchlist = () => {
             </tbody>
           </table>
         </div>
+        
+        {/* Pagination Controls */}
+        {marketType !== 'ALL' && totalPages > 1 && (
+          <div className="px-6 py-4 bg-slate-800/10 border-t border-slate-800 flex items-center justify-between">
+            <div className="text-xs text-slate-500 font-medium">
+              顯示第 {(page - 1) * pageSize + 1} 至 {Math.min(page * pageSize, total)} 筆，共 {total} 筆
+            </div>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1 || loading}
+                className="p-2 hover:bg-slate-800 rounded-lg disabled:opacity-30 transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="text-xs font-bold text-slate-300 px-2">頁次 {page} / {totalPages}</span>
+              <button 
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages || loading}
+                className="p-2 hover:bg-slate-800 rounded-lg disabled:opacity-30 transition-colors"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 買入對話框 Modal */}
@@ -233,8 +318,10 @@ const Watchlist = () => {
                   <p className="text-slate-400 font-mono text-sm">{selectedStock.代碼}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-3xl font-black text-indigo-400 font-inter">${selectedStock.最新價格.toLocaleString()}</p>
-                  <p className="text-xs text-slate-500">最新收盤價</p>
+                  <p className="text-3xl font-black text-indigo-400 font-inter font-bold">
+                    ${selectedStock.最新價格.toLocaleString(undefined, { minimumFractionDigits: selectedStock.市場 === 'CRYPTO' ? 2 : 1 })}
+                  </p>
+                  <p className="text-xs text-slate-500">最新價格</p>
                 </div>
               </div>
 
@@ -247,9 +334,8 @@ const Watchlist = () => {
                     onChange={(e) => setQty(e.target.value)}
                     className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white font-inter font-bold focus:ring-2 focus:ring-indigo-500/50 outline-none"
                   />
-                  <span className="text-slate-400 font-bold">{marketType === 'TW' ? '股' : marketType === 'US' ? '股' : '單位'}</span>
+                  <span className="text-slate-400 font-bold">{selectedStock.市場 === 'TW' ? '股' : selectedStock.市場 === 'US' ? '股' : '單位'}</span>
                 </div>
-                <p className="text-[10px] text-indigo-400 mt-2 font-medium">✨ 已根據市場慣例自動填入預設數量</p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">

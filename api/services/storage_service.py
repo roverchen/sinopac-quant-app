@@ -113,13 +113,18 @@ def get_user_watchlist(user_id, market):
                 return doc.to_dict().get(f"watchlist_{market}", [])
         except Exception as e:
             print(f"Firestore load watchlist error: {e}")
-            
     # 本地備援
     path = os.path.join(CACHE_DIR, f"watchlist_{market}_{user_id}.json")
     if os.path.exists(path):
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
-    return ["2330", "2317", "0050"] if market == "TW" else ["AAPL", "MSFT", "NVDA"]
+    
+    # Defaults
+    if market == "TW":
+        return ["2330", "2317", "0050"]
+    if market == "CRYPTO":
+        return ["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "DOGE-USD"]
+    return ["AAPL", "MSFT", "NVDA"]
 
 def get_all_user_watchlists(user_id):
     """取得所有市場的追蹤清單"""

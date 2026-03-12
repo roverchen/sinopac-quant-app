@@ -1,40 +1,62 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+import traceback
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from api.routes import auth, quant, trade, diag
 import uvicorn
 import os
+import sys
+
+# Ensure project root is in Python path for subpackage imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 app = FastAPI(
     title="Sinopac Quant Pro API",
     description="Professional backend for quantitative stock analysis and trading.",
-    version="1.0.2" # Incrementing to 1.0.2 for final verification
+    version="1.1.1" 
 )
 
-# 配置 CORS，允許前端訪問
+# 配置 CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # 生產環境應限制特定域名
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# 註冊路由
+# --- 1. Health Checks (Highest priority) ---
+@app.get("/health")
+@app.get("/api/health")
+async def health():
+    return {"status": "healthy", "version": "1.1.0"}
+
+# --- 2. API Routes ---
 app.include_router(quant.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
 app.include_router(trade.router, prefix="/api")
 app.include_router(diag.router, prefix="/api")
 
-# 靜態檔案掛載 (React Build 結果)
-# 優先檢查 static 目錄是否存在，若存在則掛載
+# --- 3. Exception Handler ---
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """捕捉所有未處理異常並返回包含 Traceback 的 JSON (開發者友善)"""
+    error_trace = traceback.format_exc()
+    print(f"CRITICAL ERROR: {str(exc)}\n{error_trace}")
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": str(exc),
+            "traceback": error_trace,
+            "path": request.url.path
+        }
+    )
+
+# --- 4. Static Files (Lowest priority, catch-all) ---
 static_path = "static"
 if os.path.exists(static_path):
     app.mount("/", StaticFiles(directory=static_path, html=True), name="static")
 
-@app.get("/health")
-async def health():
-    return {"status": "healthy"}
-
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8080) # Consistent with Cloud Run default

@@ -1,9 +1,9 @@
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 from api.routes.auth import get_current_user
-from api.models.schemas import StockAnalysisRequest, AnalysisResponse, AnalysisResult, ScanRequest, ScanProgressResponse
+from api.models.schemas import StockAnalysisRequest, AnalysisResponse, AnalysisResult, ScanRequest, ScanProgressResponse, PaginatedAnalysisResponse
 from api.services.quant_service import extract_stock_code, analyze_stock, fetch_tw_symbols, fetch_us_symbols, fetch_crypto_symbols
 from api.services.data_fetcher import fetch_batch_data
-from api.services.storage_service import save_data_pool, get_user_watchlist, save_user_watchlist, get_all_user_watchlists
+from api.services.storage_service import save_data_pool, load_data_pool, get_user_watchlist, save_user_watchlist, get_all_user_watchlists
 from datetime import datetime
 import asyncio
 
@@ -31,8 +31,13 @@ async def run_market_scan(market_type: str, defense_weight: float):
             symbols_map = fetch_us_symbols()
         else:
             symbols_map = fetch_crypto_symbols()
+        
         symbols = list(symbols_map.keys())
         total = len(symbols)
+        print(f"[Scan] {market_type} symbols found: {total}")
+        
+        if total == 0:
+            raise ValueError(f"No symbols found for {market_type}")
         
         scan_status["progress"] = 10
         scan_status["message"] = f"開始併發抓取 {total} 檔數據..."
@@ -57,14 +62,17 @@ async def run_market_scan(market_type: str, defense_weight: float):
             scan_status["progress"] = round(progress, 1)
             scan_status["message"] = f"已分析 {len(results)}/{total}..."
             scan_status["results_count"] = len(results)
+            print(f"[Scan] Progress: {scan_status['progress']}% ({len(results)}/{total})")
             
             await asyncio.sleep(0.1) # 給予事件循環喘息空間
             
-        # 保存結果至持久層
+        # 保存結果至持久層 (依評分降序排列)
+        results = sorted(results, key=lambda x: x.綜合評分, reverse=True)
+        
         scan_status["message"] = "分析完成，正在保存數據池..."
         save_data_pool(market_type, {"results": results, "dfs": all_dfs, "timestamp": datetime.now().isoformat()})
         
-        scan_status["top_results"] = sorted(results, key=lambda x: x.綜合評分, reverse=True)[:10]
+        scan_status["top_results"] = results[:10]
         scan_status["status"] = "completed"
         scan_status["progress"] = 100
         scan_status["message"] = f"海選完成！成功分析 {len(results)} 檔標的。"
@@ -109,31 +117,44 @@ async def analyze_watchlist(request: StockAnalysisRequest, current_user: str = D
             for m in ["TW", "US", "CRYPTO"]:
                 market_symbols = all_lists.get(m, [])
                 if not market_symbols: continue
-                data_pool = fetch_batch_data(market_symbols, m)
                 
-                # 名稱對應表
+                # 名稱對應表 - 減少 API 呼叫次數
                 tw_symbols = fetch_tw_symbols() if m == "TW" else {}
                 us_symbols = fetch_us_symbols() if m == "US" else {}
                 crypto_symbols = fetch_crypto_symbols() if m == "CRYPTO" else {}
                 
-                for symbol in market_symbols:
-                    code = extract_stock_code(symbol)
-                    df = data_pool.get(symbol)
-                    name = "未知"
-                    if m == "TW": name = tw_symbols.get(code, "未知")
-                    elif m == "US": name = us_symbols.get(code, "未知")
-                    elif m == "CRYPTO": name = crypto_symbols.get(code.lower(), "未知")
-                    
-                    if df is not None:
-                        analysis = analyze_stock(df, code, name, request.defense_weight, m)
-                        analysis["市場"] = m
-                        all_results.append(AnalysisResult(**analysis))
+                # 嘗試從 data_pool 讀取以加速 (如有最近掃描)
+                pool = load_data_pool(m) or {}
+                pool_results = {r.代碼: r for r in pool.get("results", [])}
+                
+                data_map_needed = []
+                for s in market_symbols:
+                    code = extract_stock_code(s)
+                    if code in pool_results:
+                        all_results.append(pool_results[code])
                     else:
-                        all_results.append(AnalysisResult(
-                            代碼=code, 名稱="無數據", 市場=m, 最新價格=0, 操作建議="❌ 無法取得數據",
-                            一年位階="-", 年線乖離="-", MA20乖離="-", MACD狀態="-", 綜合評分=-1,
-                            _ma_base=0, _ma20=0, _atr=0
-                        ))
+                        data_map_needed.append(s)
+                
+                if data_map_needed:
+                    data_pool = fetch_batch_data(data_map_needed, m)
+                    for symbol in data_map_needed:
+                        code = extract_stock_code(symbol)
+                        df = data_pool.get(symbol)
+                        name = "未知"
+                        if m == "TW": name = tw_symbols.get(code, "未知")
+                        elif m == "US": name = us_symbols.get(code, "未知")
+                        elif m == "CRYPTO": name = crypto_symbols.get(code.lower(), "未知")
+                        
+                        if df is not None:
+                            analysis_dict = analyze_stock(df, code, name, request.defense_weight, m)
+                            analysis_dict["市場"] = m
+                            all_results.append(AnalysisResult(**analysis_dict))
+                        else:
+                            all_results.append(AnalysisResult(
+                                代碼=code, 名稱="無數據", 市場=m, 最新價格=0, 操作建議="❌ 無法取得數據",
+                                一年位階="-", 年線乖離="-", MA20乖離="-", MACD狀態="-", 綜合評分=-1,
+                                ma_base=0, ma20=0, atr=0
+                            ))
             return AnalysisResponse(results=all_results, timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         else:
             watchlist = get_user_watchlist(current_user, request.market_type)
@@ -154,7 +175,7 @@ async def analyze_watchlist(request: StockAnalysisRequest, current_user: str = D
         df = data_pool.get(symbol)
         
         if df is not None:
-            # 自動從對照表中補齊名稱 (優先符合當前市場)
+            # --- 命名稱邏輯優化: 避免跨市場誤報 ---
             name = None
             if request.market_type == "TW":
                 name = tw_symbols.get(code)
@@ -163,17 +184,17 @@ async def analyze_watchlist(request: StockAnalysisRequest, current_user: str = D
             elif request.market_type == "CRYPTO":
                 name = crypto_symbols.get(code.lower())
             
-            # 如果當前市場未找到，則嘗試其他市場
+            # 只有在找不到名稱時，且代碼特徵明顯時才進行跨市場搜尋 (例如包含美元對)
             if not name:
-                if request.market_type != "TW": name = tw_symbols.get(code)
-            if not name:
-                if request.market_type != "US": name = us_symbols.get(code)
-            if not name:
-                if request.market_type != "CRYPTO": name = crypto_symbols.get(code.lower())
+                if "USD" in code.upper() or "-" in code:
+                    name = crypto_symbols.get(code.lower())
+                elif code.isdigit():
+                    name = tw_symbols.get(code)
             
             if not name:
-                if "BTC" in code: name = "Bitcoin"
-                elif "ETH" in code: name = "Ethereum"
+                if "BTC" in code.upper(): name = "Bitcoin"
+                elif "ETH" in code.upper(): name = "Ethereum"
+                elif "SOL" in code.upper(): name = "Solana"
                 else: name = "未知"
                 
             analysis = analyze_stock(df, code, name, request.defense_weight, request.market_type)
@@ -183,11 +204,44 @@ async def analyze_watchlist(request: StockAnalysisRequest, current_user: str = D
             results.append(AnalysisResult(
                 代碼=code, 名稱="無數據", 最新價格=0, 操作建議="❌ 無法取得數據",
                 一年位階="-", 年線乖離="-", MA20乖離="-", MACD狀態="-", 綜合評分=-1,
-                _ma_base=0, _ma20=0, _atr=0
+                ma_base=0, ma20=0, atr=0
             ))
             
     return AnalysisResponse(
         results=results,
+        timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    )
+
+@router.get("/results", response_model=PaginatedAnalysisResponse)
+async def get_market_results(market_type: str = "TW", page: int = 1, page_size: int = 20):
+    """獲取全市場海選結果 (從持久層讀取並分頁)。"""
+    pool = load_data_pool(market_type)
+    if not pool:
+        return PaginatedAnalysisResponse(
+            results=[], total=0, page=page, page_size=page_size,
+            timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        )
+    
+    all_results = pool.get("results", [])
+    # 確保每個結果都有市場欄位且依評分降序
+    for r in all_results:
+        if hasattr(r, '市場') and not r.市場:
+            r.市場 = market_type
+    
+    # 全部結果按評分降序排列 (防禦性再次排序)
+    all_results = sorted(all_results, key=lambda x: getattr(x, '綜合評分', -1), reverse=True)
+            
+    total = len(all_results)
+    start = (page - 1) * page_size
+    end = start + page_size
+    
+    paginated_results = all_results[start:end]
+    
+    return PaginatedAnalysisResponse(
+        results=paginated_results,
+        total=total,
+        page=page,
+        page_size=page_size,
         timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     )
 
