@@ -82,7 +82,8 @@ def get_yahoo_ticker(code, market_type='TW'):
         if c.endswith('twd'):
             return f"{c[:-3].upper()}-TWD"
         if c.endswith('usdt'):
-            return f"{c[:-4].upper()}-USDT"
+            # Yahoo Finance uses -USD for both USD and USDT pairs mostly
+            return f"{c[:-4].upper()}-USD"
         if "-USD" not in code.upper():
             return code.upper() + "-USD"
         return code.upper()

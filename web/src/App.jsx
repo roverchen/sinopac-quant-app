@@ -110,7 +110,7 @@ function App() {
           </button>
         </div>
 
-        <nav className="flex-1 px-4 py-4 space-y-2">
+        <nav className="flex-1 px-4 py-4 space-y-2 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-800">
           {navItems.map((item) => (
             <button
               key={item.id}
@@ -152,8 +152,11 @@ function App() {
             登出系統
           </button>
           
-          <div className="flex justify-center">
-            <span className="text-[10px] text-slate-600 font-mono opacity-50">v2.0.5</span>
+          <div className="flex flex-col items-center gap-1 py-2 border-t border-slate-800/50 mt-2">
+            <span className="text-[10px] text-slate-500 font-mono uppercase tracking-widest">System Build</span>
+            <span className="text-xs text-indigo-400 font-bold font-mono px-3 py-1 bg-indigo-500/10 rounded-full border border-indigo-500/20">
+              v2.0.5
+            </span>
           </div>
         </div>
       </aside>
