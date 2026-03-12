@@ -9,16 +9,16 @@ import asyncio
 
 router = APIRouter(prefix="/quant", tags=["quant"])
 
-# 全域掃描狀態紀錄
+# Global scan status
 scan_status = {
     "status": "idle",
     "progress": 0,
-    "message": "系統就緒",
+    "message": "System Ready",
     "results_count": 0,
     "top_results": []
 }
 
-# 全域結果快取 (避免每次 reload 都從 GCS 重抓)
+# Global results cache
 results_cache = {
     "TW": None,
     "US": None,
@@ -26,7 +26,6 @@ results_cache = {
 }
 
 def get_cached_pool(market_type: str):
-    """取得快取的數據池，如不存在則從持久層讀取"""
     global results_cache
     if results_cache.get(market_type) is None:
         print(f"[Cache] Loading {market_type} data pool from storage...")
@@ -40,7 +39,7 @@ async def run_market_scan(market_type: str, defense_weight: float):
     try:
         scan_status["status"] = "running"
         scan_status["progress"] = 5
-        scan_status["message"] = f"正在獲取 {market_type} 代碼清單..."
+        scan_status["message"] = f"Fetching {market_type} symbols..."
 
         if market_type == "TW":
             symbols_map = fetch_tw_symbols()
@@ -57,9 +56,8 @@ async def run_market_scan(market_type: str, defense_weight: float):
             raise ValueError(f"No symbols found for {market_type}")
 
         scan_status["progress"] = 10
-        scan_status["message"] = f"開始併發抓取 {total} 檔數據..."
+        scan_status["message"] = f"Scanning {total} stocks..."
 
-        # 分批抓取以免 API 超載 (Yahoo 比照辦理)
         chunk_size = 50
         results = []
         all_dfs = {}
@@ -69,43 +67,39 @@ async def run_market_scan(market_type: str, defense_weight: float):
             data_map = fetch_batch_data(chunk, market_type)
 
             for s, df in data_map.items():
-                name = symbols_map.get(s, "未知")
+                name = symbols_map.get(s, "Unknown")
                 analysis = analyze_stock(df, s, name, defense_weight, market_type)
                 results.append(AnalysisResult(**analysis))
                 all_dfs[s] = df
 
-            # 更新進度
             progress = 10 + (i / total) * 85
             scan_status["progress"] = round(progress, 1)
-            scan_status["message"] = f"已分析 {len(results)}/{total}..."
+            scan_status["message"] = f"Analyzed {len(results)}/{total}..."
             scan_status["results_count"] = len(results)
             print(f"[Scan] Progress: {scan_status['progress']}% ({len(results)}/{total})")
 
-            await asyncio.sleep(0.1) # 給予事件循環喘息空間
+            await asyncio.sleep(0.1)
 
-        # 保存結果至持久層 (依評分降序排列)
         results = sorted(results, key=lambda x: x.綜合評分, reverse=True)
 
-        scan_status["message"] = "分析完成，正在保存數據池..."
+        scan_status["message"] = "Saving results pool..."
         data_pool = {"results": results, "dfs": all_dfs, "timestamp": datetime.now().isoformat()}
         save_data_pool(market_type, data_pool)
 
-        # 更新內存快取
         results_cache[market_type] = data_pool
 
         scan_status["top_results"] = results[:10]
         scan_status["status"] = "completed"
         scan_status["progress"] = 100
-        scan_status["message"] = f"海選完成！成功分析 {len(results)} 檔標的。"
+        scan_status["message"] = f"Scan complete. Analyzed {len(results)} stocks."
 
     except Exception as e:
         scan_status["status"] = "error"
-        scan_status["message"] = f"掃描中斷: {str(e)}"
+        scan_status["message"] = f"Scan failed: {str(e)}"
         print(f"Scan Error: {e}")
 
 @router.post("/scan")
 async def start_scan(request: ScanRequest, background_tasks: BackgroundTasks):
-    """啟動全市場海選掃描。"""
     if scan_status["status"] == "running":
         raise HTTPException(status_code=400, detail="Scan already in progress")
 
@@ -114,12 +108,10 @@ async def start_scan(request: ScanRequest, background_tasks: BackgroundTasks):
 
 @router.get("/scan/progress", response_model=ScanProgressResponse)
 async def get_scan_progress():
-    """獲取當前掃描進度。"""
     return ScanProgressResponse(**scan_status)
 
 @router.post("/analyze", response_model=AnalysisResponse)
 async def analyze_watchlist(request: StockAnalysisRequest, current_user: str = Depends(get_current_user)):
-    """分析追蹤清單並返回結果。使用併發抓取優化。"""
     results = []
 
     if not request.watchlist:
@@ -131,7 +123,6 @@ async def analyze_watchlist(request: StockAnalysisRequest, current_user: str = D
     if not watchlist:
         return AnalysisResponse(results=[], timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
-    # 這裡優先從 data_pool 讀取以加速 (如有最近掃描)
     pool = get_cached_pool(request.market_type) or {}
     pool_results = {r.代碼: r for r in pool.get("results", [])}
     dfs = pool.get("dfs", {})
@@ -141,10 +132,10 @@ async def analyze_watchlist(request: StockAnalysisRequest, current_user: str = D
 
     for s in watchlist:
         code = extract_stock_code(s)
-        if code in pool_results and request.defense_weight == 0.5: # 預設權重直接用快取
+        if code in pool_results and request.defense_weight == 0.5:
             results.append(pool_results[code])
-        elif code in dfs: # 有數據但權重不同，重刷
-            name = pool_results[code].名稱 if code in pool_results else "未知"
+        elif code in dfs:
+            name = pool_results[code].名稱 if code in pool_results else "Unknown"
             analysis = analyze_stock(dfs[code], code, name, request.defense_weight, request.market_type)
             results.append(AnalysisResult(**analysis))
         else:
@@ -152,7 +143,6 @@ async def analyze_watchlist(request: StockAnalysisRequest, current_user: str = D
 
     if data_map_needed:
         data_pool = fetch_batch_data(data_map_needed, request.market_type)
-        # 取得名稱對照表
         tw_symbols = fetch_tw_symbols() if request.market_type == "TW" else {}
         us_symbols = fetch_us_symbols() if request.market_type == "US" else {}
         crypto_symbols = fetch_crypto_symbols() if request.market_type == "CRYPTO" else {}
@@ -161,22 +151,20 @@ async def analyze_watchlist(request: StockAnalysisRequest, current_user: str = D
             code = extract_stock_code(symbol)
             df = data_pool.get(symbol)
             if df is not None:
-                # 命名稱邏輯
-                name = "未知"
-                if request.market_type == "TW": name = tw_symbols.get(code, "未知")
-                elif request.market_type == "US": name = us_symbols.get(code, "未知")
-                elif request.market_type == "CRYPTO": name = crypto_symbols.get(code.lower(), "未知")
+                name = "Unknown"
+                if request.market_type == "TW": name = tw_symbols.get(code, "Unknown")
+                elif request.market_type == "US": name = us_symbols.get(code, "Unknown")
+                elif request.market_type == "CRYPTO": name = crypto_symbols.get(code.lower(), "Unknown")
 
                 analysis = analyze_stock(df, code, name, request.defense_weight, request.market_type)
                 results.append(AnalysisResult(**analysis))
             else:
                 results.append(AnalysisResult(
-                    代碼=code, 名稱="無數據", 最新價格=0, 操作建議="❌ 無法取得數據",
+                    代碼=code, 名稱="No Data", 最新價格=0, 操作建議="❌ Failed to fetch data",
                     一年位階="-", 年線乖離="-", MA20乖離="-", MACD狀態="-", 綜合評分=-1,
                     ma_base=0, ma20=0, atr=0
                 ))
 
-    # 確保依評分排序
     results = sorted(results, key=lambda x: x.綜合評分, reverse=True)
 
     return AnalysisResponse(
@@ -192,7 +180,6 @@ async def get_market_results(
     query: str = "",
     defense_weight: float = None
 ):
-    """獲取全市場海選結果 (從快取或持久層讀取並分頁)。支援動態權重重算。"""
     pool = get_cached_pool(market_type)
     if not pool:
         return PaginatedAnalysisResponse(
@@ -202,36 +189,28 @@ async def get_market_results(
 
     all_results = pool.get("results", [])
 
-    # 如果提供權重，則根據快取中的數據重新計算分數
     if defense_weight is not None:
         dfs = pool.get("dfs", {})
         new_results = []
         for r in all_results:
-            # r 是 AnalysisResult 物件
             code = getattr(r, '代碼', None)
             df = dfs.get(code)
             if df is not None:
-                # 重新分析以獲取新分數
-                # 這裡需要名稱，我們從現有結果抓
-                name = getattr(r, '名稱', '未知')
+                name = getattr(r, '名稱', 'Unknown')
                 analysis = analyze_stock(df, code, name, defense_weight, market_type)
                 new_results.append(AnalysisResult(**analysis))
             else:
                 new_results.append(r)
         all_results = new_results
 
-    # 確保依評分排序 (Fix slider ranking bug)
     all_results = sorted(all_results, key=lambda x: getattr(x, '綜合評分', -1), reverse=True)
 
-    # 確保每個結果都有市場欄位
     for r in all_results:
         if hasattr(r, '市場') and not r.市場:
             r.市場 = market_type
 
-    # 全部結果按評分降序排列 (防禦性再次排序)
     all_results = sorted(all_results, key=lambda x: getattr(x, '綜合評分', -1), reverse=True)
 
-    # 全局搜尋過濾
     if query:
         q = query.upper()
         all_results = [
@@ -255,7 +234,6 @@ async def get_market_results(
 
 @router.get("/watchlist")
 async def get_watchlist_api(market_type: str = "TW", current_user: str = Depends(get_current_user)):
-    """取得使用者追蹤清單"""
     if market_type == "ALL":
         return get_all_user_watchlists(current_user)
     watchlist = get_user_watchlist(current_user, market_type)
@@ -263,7 +241,6 @@ async def get_watchlist_api(market_type: str = "TW", current_user: str = Depends
 
 @router.post("/watchlist")
 async def add_to_watchlist_api(symbol: str, market_type: str = "TW", current_user: str = Depends(get_current_user)):
-    """新增標的至追蹤清單"""
     watchlist = get_user_watchlist(current_user, market_type)
     if symbol not in watchlist:
         watchlist.append(symbol)
@@ -272,7 +249,6 @@ async def add_to_watchlist_api(symbol: str, market_type: str = "TW", current_use
 
 @router.delete("/watchlist")
 async def remove_from_watchlist_api(symbol: str, market_type: str = "TW", current_user: str = Depends(get_current_user)):
-    """從追蹤清單移除標的"""
     watchlist = get_user_watchlist(current_user, market_type)
     if symbol in watchlist:
         watchlist.remove(symbol)
@@ -281,7 +257,6 @@ async def remove_from_watchlist_api(symbol: str, market_type: str = "TW", curren
 
 @router.get("/history")
 async def get_symbol_history(symbol: str, market_type: str = "TW"):
-    """獲取歷史 K 線數據 (OHLC)"""
     from api.services.quant_service import get_yahoo_ticker, fetch_stock_data
     from fastapi import HTTPException
 
@@ -291,10 +266,8 @@ async def get_symbol_history(symbol: str, market_type: str = "TW"):
     try:
         df = fetch_stock_data(symbol, ticker_str, period="3mo")
         if df is None or df.empty:
-            print(f"[History] No data returned for {ticker_str}")
             raise HTTPException(status_code=404, detail=f"No historical data found for {symbol}")
 
-        # 格式化為 Recharts 友善格式
         history = []
         for index, row in df.iterrows():
             history.append({
@@ -305,7 +278,6 @@ async def get_symbol_history(symbol: str, market_type: str = "TW"):
                 "close": round(float(row['Close']), 2),
                 "volume": int(row['Volume'])
             })
-        print(f"[History] Returning {len(history)} data points for {symbol}")
         return history
     except Exception as e:
         print(f"[History] Error fetching {symbol}: {e}")
