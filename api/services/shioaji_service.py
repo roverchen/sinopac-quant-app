@@ -15,16 +15,16 @@ class MockShioajiClient:
         self.TSE = self
         self.OTC = self
         self._mock_orders = [] # 儲存模擬訂單
-    
+
     def __getitem__(self, key): return self
     def list_accounts(self):
         class MockAcc: account_id = "MOCK-PAPER-TRADING-001"
         return [MockAcc()]
-    
+
     def place_order(self, contract, order, symbol="2330", qty=1, price=500.0, action="Buy"):
         # 模擬模式下，訂單進入「掛單」狀態
         order_id = f"MOCK-{random.randint(1000,9999)}"
-        class MockTrade: 
+        class MockTrade:
             class Order: id = order_id
             order = Order()
         return MockTrade()
@@ -59,7 +59,7 @@ class ShioajiService:
                 return _shioaji_instances[email]
 
             creds = get_user_credentials(email)
-            
+
             # 如果沒有憑證，直接返回 MockClient 進入模擬模式
             if not creds or 'shioaji_api_key' not in creds:
                 print(f"No credentials for {email}, returning MockShioajiClient for simulation.")
@@ -93,25 +93,25 @@ class ShioajiService:
             return MockShioajiClient(user_id=email).place_order(None, None, symbol=symbol, qty=qty, price=price, action=str(action) if action else "Buy")
 
         api = cls.get_api_client(email)
-        
+
         # 究極繞過邏輯：只要檢測到是 MockClient，就絕對不觸發任何 Shioaji 內部邏輯
         is_mock = False
         if api is None: is_mock = True
         elif hasattr(api, 'is_mock'): is_mock = True
         elif type(api).__name__ == 'MockShioajiClient': is_mock = True
         elif "MockShioajiClient" in str(type(api)): is_mock = True
-        
+
         if is_mock:
             print(f"DEBUG: [v1.0.3] Auto Mock Triggered for {email}")
             # 模擬模式下，所有下單進入掛單佇列，由 TradeEngine 進行價格撮合
             from api.services.storage_service import get_user_pending_orders, save_user_pending_orders
             pending = get_user_pending_orders(email)
             order_id = f"MOCK-{random.randint(1000,9999)}"
-            
+
             # 判斷市場
             market = "TW"
             if symbol.isdigit() and len(symbol) >= 4: market = "TW"
-            elif any(c.isalpha() for c in symbol): 
+            elif any(c.isalpha() for c in symbol):
                 if "-" in symbol or "USD" in symbol: market = "CRYPTO"
                 else: market = "US"
 
@@ -126,18 +126,18 @@ class ShioajiService:
                 "timestamp": datetime.now().isoformat()
             })
             save_user_pending_orders(email, pending)
-            
-            class MockTrade: 
+
+            class MockTrade:
                 class Order: id = order_id
                 order = Order()
             return MockTrade()
 
         from shioaji.constant import Action, StockPriceType, OrderType
         from shioaji import Order
-        
+
         if action is None:
             action = Action.Buy
-            
+
         if not api:
             raise Exception("[v1.0.2] 無法取得 API 連線。")
 
@@ -162,7 +162,7 @@ class ShioajiService:
         )
 
         trade = api.place_order(contract, order)
-        
+
         # 進入掛單追蹤系統
         from api.services.storage_service import get_user_pending_orders, save_user_pending_orders
         pending = get_user_pending_orders(email)
@@ -177,7 +177,7 @@ class ShioajiService:
             "timestamp": datetime.now().isoformat()
         })
         save_user_pending_orders(email, pending)
-        
+
         return trade
 
     @classmethod
@@ -193,14 +193,14 @@ class ShioajiService:
                 "status": "connected",
                 "is_mock": True
             }
-        
+
         if not api: return None
-        
+
         try:
             accounts = api.list_accounts()
             if not accounts:
                 return None
-            
+
             # 這裡簡化回傳第一個帳號的概況
             # 實務上 Shioaji 查詢庫存與資金需要點時間
             return {
@@ -217,11 +217,11 @@ class ShioajiService:
         """
         api = cls.get_api_client(email)
         if not api: return []
-        
+
         # 處理模擬模式
         if hasattr(api, 'is_mock') or type(api).__name__ == 'MockShioajiClient':
             return api.get_orders()
-            
+
         try:
             # 實務上 Shioaji 查詢委託需要一點處理
             api.update_status()
@@ -249,7 +249,7 @@ class ShioajiService:
         """
         api = cls.get_api_client(email)
         if not api: return []
-        
+
         # 處理模擬模式
         if hasattr(api, 'is_mock') or type(api).__name__ == 'MockShioajiClient':
             positions = api.get_positions()
@@ -286,7 +286,7 @@ class ShioajiService:
             except:
                 p['current_price'] = p['buy_price']
                 p['pnl_percent'] = 0.0
-                
+
         return positions
 
 # 全域單例

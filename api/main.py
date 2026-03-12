@@ -14,7 +14,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 app = FastAPI(
     title="Sinopac Quant Pro API",
     description="Professional backend for quantitative stock analysis and trading.",
-    version="1.2.0" 
+    version="1.2.0"
 )
 
 @app.on_event("startup")
@@ -22,7 +22,7 @@ async def startup_event():
     # 啟動掛單撮合引擎
     from api.services.trade_engine import engine
     engine.start()
-    
+
     # 啟動自動交易機器人
     from api.services.auto_trade_service import robot
     robot.start()

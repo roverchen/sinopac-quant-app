@@ -22,7 +22,7 @@ class AutoRobot:
             schedule.every().day.at("23:10").do(self.perform_daily_trade, market_type="CRYPTO")
             # 出場檢查 (每小時檢查一次，或是由 MatchingEngine 負責)
             schedule.every(30).minutes.do(self.check_exits)
-            
+
             self.thread = threading.Thread(target=self._run_scheduler, daemon=True)
             self.thread.start()
             print(f"[AutoRobot] Started for {self.user_id}")
@@ -54,16 +54,16 @@ class AutoRobot:
             # README 規則：使用建議買價 (entry_price)
             entry_price = getattr(top_1, 'entry_price', top_1.最新價格)
             print(f"[AutoRobot] Top 1 found: {top_1.代碼} ({top_1.名稱}) | Entry: {entry_price}")
-            
+
             # 執行買入 (台股買 1 張, 美股/Crypto 視價格定)
             qty = 1000 if market_type == "TW" else (10 if market_type == "US" else 0.1)
-            
+
             ShioajiService.place_order(
-                self.user_id, 
-                top_1.代碼, 
-                qty, 
-                entry_price, 
-                action="Buy", 
+                self.user_id,
+                top_1.代碼,
+                qty,
+                entry_price,
+                action="Buy",
                 is_simulation=True
             )
             print(f"[AutoRobot] Order placed for {top_1.代碼}")
@@ -82,7 +82,7 @@ class AutoRobot:
                 if pnl_pct >= 20.0 or pnl_pct <= -5.0:
                     status = "Take Profit" if pnl_pct >= 20.0 else "Stop Loss"
                     print(f"[AutoRobot] Trigger {status} for {pos['symbol']} at {pnl_pct}%")
-                    
+
                     ShioajiService.place_order(
                         self.user_id,
                         pos['symbol'],

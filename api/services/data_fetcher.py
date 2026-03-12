@@ -10,13 +10,13 @@ def fetch_batch_data(symbols, market_type='TW', period="1y"):
     import pandas as pd
     results = {}
     tickers_map = {s: get_yahoo_ticker(s, market_type) for s in symbols}
-    
+
     with ThreadPoolExecutor(max_workers=10) as executor:
         future_to_symbol = {
-            executor.submit(yf.Ticker(t).history, period=period): s 
+            executor.submit(yf.Ticker(t).history, period=period): s
             for s, t in tickers_map.items() if t
         }
-        
+
         for future in as_completed(future_to_symbol):
             symbol = future_to_symbol[future]
             try:
@@ -25,7 +25,7 @@ def fetch_batch_data(symbols, market_type='TW', period="1y"):
                     results[symbol] = df
             except Exception as e:
                 print(f"Error fetching {symbol}: {e}")
-                
+
     return results
 
 def download_and_pool(symbols, market_type='TW'):

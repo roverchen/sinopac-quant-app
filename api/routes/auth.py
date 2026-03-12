@@ -29,12 +29,12 @@ async def login(request: AuthRequest):
             raise ValueError("Token missing email field")
     except ValueError as e:
         raise HTTPException(status_code=401, detail=f"Google token verification failed: {e}")
-        
+
     # 確認是否為首次登入 (或載入既有憑證)
     stored_creds = load_credentials(user_id)
     if stored_creds is None or stored_creds == {}:
         save_credentials(user_id, {})
-        
+
     access_token = create_access_token(data={"sub": user_id})
     return {"access_token": access_token, "token_type": "bearer"}
 

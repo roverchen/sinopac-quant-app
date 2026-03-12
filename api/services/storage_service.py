@@ -41,7 +41,7 @@ def update_user_credentials(user_id, creds):
             return True
         except Exception as e:
             print(f"Firestore save error: {e}")
-    
+
     # 本地備援
     try:
         os.makedirs(CACHE_DIR, exist_ok=True)
@@ -63,11 +63,11 @@ def get_user_credentials(user_id):
                 creds = doc.to_dict().get("credentials", {})
         except Exception as e:
             print(f"Firestore load error: {e}")
-            
+
     # 如果 Firestore 沒抓到，嘗試本地
     if not isinstance(creds, dict):
         creds = {}
-        
+
     if not creds:
         path = os.path.join(CACHE_DIR, f"creds_{user_id}.json")
         if os.path.exists(path):
@@ -76,7 +76,7 @@ def get_user_credentials(user_id):
                     creds = json.load(f)
                 except:
                     creds = {}
-    
+
     return creds if isinstance(creds, dict) else {}
 
 #保留舊名稱別名以相容舊路由
@@ -92,7 +92,7 @@ def save_user_watchlist(user_id, market, watchlist):
             return True
         except Exception as e:
             print(f"Firestore save watchlist error: {e}")
-            
+
     # 本地備援
     try:
         os.makedirs(CACHE_DIR, exist_ok=True)
@@ -118,7 +118,7 @@ def get_user_watchlist(user_id, market):
     if os.path.exists(path):
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
-    
+
     # Defaults
     if market == "TW":
         return ["2330", "2317", "0050"]
@@ -143,7 +143,7 @@ def save_user_mock_positions(user_id, positions):
             return True
         except Exception as e:
             print(f"Firestore save mock_positions error: {e}")
-            
+
     # 本地備援
     try:
         os.makedirs(CACHE_DIR, exist_ok=True)
@@ -172,7 +172,7 @@ def get_user_mock_positions(user_id):
                 return json.load(f)
             except:
                 return []
-    
+
     # 預設範例持倉 (首次使用者)
     return [
         {
@@ -193,7 +193,7 @@ def save_user_pending_orders(user_id, orders):
             return True
         except Exception as e:
             print(f"Firestore save pending_orders error: {e}")
-            
+
     # 本地備援
     try:
         os.makedirs(CACHE_DIR, exist_ok=True)
@@ -233,7 +233,7 @@ def save_user_trade_history(user_id, history):
             return True
         except Exception as e:
             print(f"Firestore save trade_history error: {e}")
-            
+
     # 本地備援
     try:
         os.makedirs(CACHE_DIR, exist_ok=True)
@@ -277,7 +277,7 @@ def save_data_pool(market, data):
             return True
         except Exception as e:
             print(f"GCS save error: {e}")
-            
+
     # 本地備援
     try:
         os.makedirs(CACHE_DIR, exist_ok=True)
@@ -300,7 +300,7 @@ def load_data_pool(market):
                 return pickle.loads(content)
         except Exception as e:
             print(f"GCS load error: {e}")
-            
+
     # 本地備援
     path = os.path.join(CACHE_DIR, f"shared_results_{market}.pkl")
     if os.path.exists(path):

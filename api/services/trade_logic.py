@@ -16,7 +16,7 @@ async def execute_auto_trade_cycle(email: str, market_type: str = "TW"):
     5. 送出買入委託
     """
     print(f"[{datetime.now()}] Starting auto-trade cycle for {email} ({market_type})")
-    
+
     # 1. 取得追蹤清單
     watchlist = get_user_watchlist(email, market_type)
     if not watchlist:
@@ -25,11 +25,11 @@ async def execute_auto_trade_cycle(email: str, market_type: str = "TW"):
 
     # 2. 抓取數據並分析
     data_pool = fetch_batch_data(watchlist, market_type)
-    
+
     # 名稱對照
     tw_names = fetch_tw_symbols() if market_type == "TW" else {}
     us_names = fetch_us_symbols() if market_type == "US" else {}
-    
+
     candidates = []
     for symbol in watchlist:
         df = data_pool.get(symbol)
@@ -37,7 +37,7 @@ async def execute_auto_trade_cycle(email: str, market_type: str = "TW"):
             name = tw_names.get(symbol) or us_names.get(symbol) or "未知"
             # 策略權重 0.5 (平衡型)
             result = analyze_stock(df, symbol, name, defense_weight=0.5, market_type=market_type)
-            
+
             # 3. 篩選策略：分數大於 80 且處於強勢金叉
             if result['綜合評分'] >= 80 and "金叉" in result['MACD狀態']:
                 candidates.append(result)
@@ -55,10 +55,10 @@ async def execute_auto_trade_cycle(email: str, market_type: str = "TW"):
                 # 簡單策略：每檔買 1 張 (1000 股)，以市價/現價下單
                 # 注意：實務上需檢查餘額與現有部位
                 print(f"Placing auto-order for {stock['代碼']} @ {stock['最新價格']}")
-                
+
                 # 這裡調用 shioaji_service
                 # ShioajiService.place_order(email, stock['代碼'], 1, stock['最新價格'])
-                
+
                 print(f"Successfully placed order for {stock['代碼']}")
             except Exception as e:
                 print(f"Failed to place order for {stock['代碼']}: {e}")
@@ -74,5 +74,5 @@ async def run_scheduler():
             # 這裡應該迭代所有已啟用自動下單的使用者
             # 暫時用示範邏輯
             pass
-            
+
         await asyncio.sleep(60) # 每分鐘檢查一次

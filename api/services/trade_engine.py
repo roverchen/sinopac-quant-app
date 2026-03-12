@@ -3,9 +3,9 @@ import threading
 from datetime import datetime
 import yfinance as yf
 from api.services.storage_service import (
-    get_user_pending_orders, 
-    save_user_pending_orders, 
-    get_user_mock_positions, 
+    get_user_pending_orders,
+    save_user_pending_orders,
+    get_user_mock_positions,
     save_user_mock_positions,
     get_user_trade_history,
     save_user_trade_history
@@ -51,11 +51,11 @@ class MatchingEngine:
 
         filled_indices = []
         new_pending = []
-        
+
         # Batch symbols to fetch latest prices
         symbols = list(set([o['symbol'] for o in pending]))
         tickers = {s: get_yahoo_ticker(s, next(o['market'] for o in pending if o['symbol'] == s)) for s in symbols}
-        
+
         # Fetch current prices
         prices = {}
         for s, t in tickers.items():
@@ -98,7 +98,7 @@ class MatchingEngine:
         """Execute the actual movement of assets once matched."""
         positions = get_user_mock_positions(user_id)
         history = get_user_trade_history(user_id)
-        
+
         trade_id = order.get('trade_id', f"AUTO-{int(time.time())}")
         symbol = order['symbol']
         qty = order['qty']
@@ -122,7 +122,7 @@ class MatchingEngine:
                     "market": market,
                     "is_simulation": True
                 })
-            
+
             # Record history
             history.append({
                 "trade_id": trade_id,
@@ -134,7 +134,7 @@ class MatchingEngine:
                 "status": "Filled",
                 "timestamp": datetime.now().isoformat()
             })
-            
+
         elif action == 'Sell':
             # Remove/Decrease position
             existing = next((p for p in positions if p['symbol'] == symbol), None)
@@ -145,7 +145,7 @@ class MatchingEngine:
                     positions = [p for p in positions if p['symbol'] != symbol]
                 else:
                     existing['qty'] -= qty
-            
+
             # Record history
             history.append({
                 "trade_id": trade_id,

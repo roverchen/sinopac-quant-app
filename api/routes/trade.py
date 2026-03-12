@@ -39,9 +39,9 @@ async def get_account_summary(user_id: Optional[str] = None, current_user: str =
     info = ShioajiService.get_account_info(target_user)
     if not info:
         return {"status": "disconnected", "message": "API Key 未設定或連線失敗"}
-    
+
     positions = ShioajiService.get_positions(target_user)
-    
+
     return {
         "status": "connected",
         "balance": 1000000,
@@ -71,14 +71,14 @@ async def get_performance_summary(user_id: Optional[str] = None, current_user: s
     target_user = user_id if user_id else current_user
     positions = ShioajiService.get_positions(target_user)
     history = get_user_trade_history(target_user)
-    
+
     # 系統機器人歷史皆視為模擬
     realized_mock = sum(item.get('realized_pnl', 0) for item in history if item.get('is_simulation') or target_user == "system_auto")
     realized_live = sum(item.get('realized_pnl', 0) for item in history if not item.get('is_simulation') and target_user != "system_auto")
-    
+
     unrealized_mock = 0.0
     unrealized_live = 0.0
-    
+
     for pos in positions:
         # P/L 試算是在 get_positions 中注入的
         # pos['pnl_percent'] 是百分比，我們需要絕對值
@@ -91,7 +91,7 @@ async def get_performance_summary(user_id: Optional[str] = None, current_user: s
                 unrealized_mock += pnl
             else:
                 unrealized_live += pnl
-                
+
     return {
         "mock": {
             "realized": round(realized_mock, 2),
@@ -113,12 +113,12 @@ async def place_manual_order(order: OrderRequest, current_user: str = Depends(ge
     try:
         from shioaji.constant import Action
         action = Action.Buy if order.action == "Buy" else Action.Sell
-        
+
         trade = ShioajiService.place_order(
-            current_user, 
-            order.symbol, 
-            order.qty, 
-            order.price, 
+            current_user,
+            order.symbol,
+            order.qty,
+            order.price,
             action,
             is_simulation=order.is_simulation
         )
@@ -136,7 +136,7 @@ async def get_combined_balance(current_user: str = Depends(get_current_user)):
     """取得綜合帳戶餘額 (永豐 + MAX)"""
     from api.services.storage_service import get_user_credentials
     from max_api import MaxExchangeAPI
-    
+
     # 永豐餘額
     shioaji_bal = 1000000.0 # 預設模擬本金
     try:
@@ -148,7 +148,7 @@ async def get_combined_balance(current_user: str = Depends(get_current_user)):
                 shioaji_bal = 1000000.0
     except:
         pass
-        
+
     # MAX 餘額
     max_bal = {"total_twd": 0.0, "details": {}}
     try:
@@ -166,7 +166,7 @@ async def get_combined_balance(current_user: str = Depends(get_current_user)):
                 }
     except:
         pass
-        
+
     return {
         "sinopac_twd": shioaji_bal,
         "max": max_bal

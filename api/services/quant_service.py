@@ -39,7 +39,7 @@ def fetch_tw_symbols():
                     # 過濾：純數字代碼基本為股票/ETF/存託憑證
                     if code.isalnum() and len(code) >= 4:
                         symbols[code] = name
-        
+
         print(f"[QuantService] TW symbols scraped: {len(symbols)}")
         return symbols
     except Exception as e:
@@ -124,38 +124,38 @@ def calculate_technical_indicators(df):
     """計算常用技術指標 (MA, MACD, ATR, Year High/Low)"""
     if df is None or df.empty:
         return None
-        
+
     df = df.copy()
     df.columns = [c.lower() for c in df.columns]
-    
+
     # 計算 MA
     df['ma5'] = df['close'].rolling(window=5).mean()
     df['ma20'] = df['close'].rolling(window=20).mean()
     df['ma60'] = df['close'].rolling(window=60).mean()
     df['ma100'] = df['close'].rolling(window=100).mean()
     df['ma240'] = df['close'].rolling(window=240).mean()
-    
+
     # 計算成交量 MA
     df['vol_ma5'] = df['volume'].rolling(window=5).mean()
-    
+
     # 計算 MACD
     ema12 = df['close'].ewm(span=12).mean()
     ema26 = df['close'].ewm(span=26).mean()
     df['macd'] = ema12 - ema26
     df['signal'] = df['macd'].ewm(span=9).mean()
     df['hist'] = df['macd'] - df['signal']
-    
+
     # 計算 ATR
     high_low = df['high'] - df['low']
     high_cp = (df['high'] - df['close'].shift()).abs()
     low_cp = (df['low'] - df['close'].shift()).abs()
     tr = pd.concat([high_low, high_cp, low_cp], axis=1).max(axis=1)
     df['atr'] = tr.rolling(window=14).mean()
-    
+
     # 一年高低點 (240交易日)
     df['year_high'] = df['close'].rolling(window=240, min_periods=30).max()
     df['year_low'] = df['close'].rolling(window=240, min_periods=30).min()
-    
+
     return df
 
 def check_revenue_momentum(code):
@@ -173,19 +173,19 @@ def check_revenue_momentum(code):
         res = requests.get(url, params=params, timeout=5)
         data = res.json().get('data', [])
         if len(data) < 3: return "數據不足", True
-        
+
         yoy_list = []
         for d in data[-3:]:
             yoy = d.get('revenue_month_year_comparison') or d.get('revenue_percentage_change_year') or 0
             yoy_list.append(yoy)
-            
+
         latest_yoy = yoy_list[-1]
         is_declining = all(yoy_list[i] > yoy_list[i+1] for i in range(len(yoy_list)-1))
-        
+
         # 衰退判定：連續三個月 YoY 遞減且最新一月為負
         if is_declining and latest_yoy < 0:
             return f"📉 衰退({latest_yoy:.1f}%)", False
-            
+
         return f"✅ 正常({latest_yoy:.1f}%)", True
     except:
         return "無法取得", True
@@ -197,10 +197,10 @@ def analyze_stock(df, code, name, defense_weight=0.5, market_type='TW'):
             "代碼": code, "名稱": name, "最新價格": 0, "操作建議": "❌ 無效數據",
             "一年位階": "-", "年線乖離": "-", "MA20乖離": "-", "MACD狀態": "-", "綜合評分": -1
         }
-    
+
     df = calculate_technical_indicators(df)
     last_row = df.iloc[-1]
-    
+
     last_price = last_row['close']
     ma20_last = last_row['ma20']
     ma240_last = last_row['ma240']
@@ -208,51 +208,51 @@ def analyze_stock(df, code, name, defense_weight=0.5, market_type='TW'):
     year_high = last_row['year_high']
     year_low = last_row['year_low']
     atr = last_row['atr']
-    
+
     # 位階百分比
     level_percentile = (last_price - year_low) / (year_high - year_low) if year_high > year_low else 0.5
-    
+
     # 乖離率 (README: 台股 240/60, Crypto 100)
     if market_type == 'CRYPTO':
         defense_base = ma100_last if not np.isnan(ma100_last) else last_row['ma60']
     else:
         defense_base = ma240_last if not np.isnan(ma240_last) else last_row['ma60']
-    
+
     dist_to_defense = (last_price - defense_base) / defense_base if defense_base > 0 else 0
     dist_to_ma20 = (last_price - ma20_last) / ma20_last if ma20_last > 0 else 0
-    
+
     # MACD 狀態 (加入 0 軸濾鏡)
     macd = last_row['macd']
     signal = last_row['signal']
     hist = last_row['hist']
     prev_hist = df['hist'].iloc[-2] if len(df) > 1 else hist
-    
+
     is_gold_cross = prev_hist <= 0 and hist > 0
     is_above_zero = macd > 0 and signal > 0
-    
+
     macd_status = "🔴 弱勢"
     if is_above_zero:
         macd_status = "🚀 強勢金叉" if is_gold_cross else "☁️ 強勢整理"
     else:
         macd_status = "🌓 低檔金叉" if is_gold_cross else "🔴 弱勢盤整"
-    
+
     # 成交量動能 (README: 站在 5 日均線上 且 成交量 > 5 日均量 1.2 倍)
     ma5 = last_row['ma5']
     vol_ma5 = last_row['vol_ma5']
     has_vol_momentum = (last_price > ma5) and (last_row['volume'] > vol_ma5 * 1.2)
-    
+
     # 分數計算 (README 規則)
     # A. 價值防禦
     value_score = (1 - level_percentile) * 50
     if -0.05 < dist_to_defense < 0.05: value_score += 30
     if has_vol_momentum: value_score += 20
-    
+
     # B. 強勢拉回
     pullback_score = (1 - min(abs(dist_to_ma20), 0.1)/0.1) * 50
     if is_gold_cross:
         bonus = 50 if is_above_zero else 30
         pullback_score += bonus
-    
+
     final_score = (defense_weight * value_score) + ((1 - defense_weight) * pullback_score)
 
     # 營收檢查 (僅台股且非海選模式 - 這裡我們簡化為如果是台股就查)
@@ -276,11 +276,11 @@ def analyze_stock(df, code, name, defense_weight=0.5, market_type='TW'):
     defense_base = sanitize(defense_base)
     ma20_last = sanitize(ma20_last)
     atr = sanitize(atr)
-    
+
     # 進出場建議 (README 規則)
     weighted_value = defense_weight * value_score
     weighted_growth = (1 - defense_weight) * pullback_score
-    
+
     if weighted_growth >= weighted_value:
         # 強勢回測劇本
         suggestion_type = "📈強勢"
@@ -300,7 +300,7 @@ def analyze_stock(df, code, name, defense_weight=0.5, market_type='TW'):
 
     suggestion = f"{suggestion_type} | 買:{entry_price:.1f} | 標:{target_price:.1f} | 損:{sanitize(stop_loss):.1f}"
     if not is_rev_ok: suggestion = "⚠️營收衰退 | " + suggestion
-    
+
     return {
         "代碼": code,
         "名稱": name,
