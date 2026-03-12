@@ -15,9 +15,11 @@ import {
 
 const Watchlist = () => {
   const [data, setData] = useState([]);
+  const [cachedData, setCachedData] = useState({}); // 快取各市場的數據
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [marketType, setMarketType] = useState('ALL');
+  const [defenseWeight, setDefenseWeight] = useState(0.5); // 動態權重
   const [selectedStock, setSelectedStock] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [qty, setQty] = useState(1);
@@ -37,23 +39,34 @@ const Watchlist = () => {
   const [trackedSymbols, setTrackedSymbols] = useState([]); // 追蹤中的代碼列表
   
   const fetchData = async (forceScan = false) => {
-    setLoading(true);
+    // 如果不是強制掃描，且快取中有資料，則先顯示快取以達到「秒開」
+    if (!forceScan && cachedData[marketType] && !search && page === 1) {
+      setData(cachedData[marketType].results || []);
+      setTotal(cachedData[marketType].total || 0);
+      // 仍然在後台偷偷更新一下，但不要切換 loading 狀態以維持流暢
+    } else {
+      setLoading(true);
+    }
+
     try {
-      // 先獲取目前的追蹤清單，用於比對是否已追蹤
-      const twWatch = await quantService.getWatchlist('TW');
-      const usWatch = await quantService.getWatchlist('US');
-      const cryptoWatch = await quantService.getWatchlist('CRYPTO');
-      setTrackedSymbols([
-        ...(twWatch.watchlist || []),
-        ...(usWatch.watchlist || []),
-        ...(cryptoWatch.watchlist || [])
-      ]);
+      // 獲取追蹤清單
+      if (trackedSymbols.length === 0) {
+        const [twWatch, usWatch, cryptoWatch] = await Promise.all([
+          quantService.getWatchlist('TW'),
+          quantService.getWatchlist('US'),
+          quantService.getWatchlist('CRYPTO')
+        ]);
+        setTrackedSymbols([
+          ...(twWatch.watchlist || []),
+          ...(usWatch.watchlist || []),
+          ...(cryptoWatch.watchlist || [])
+        ]);
+      }
 
       if (marketType === 'ALL') {
-        const resp = await quantService.analyze([], 0.5, 'ALL');
+        const resp = await quantService.analyze([], defenseWeight, 'ALL');
         let sortedData = (resp.results || []).sort((a, b) => b.綜合評分 - a.綜合評分);
         
-        // ALL 模式下維持本地過濾搜尋
         if (search) {
           const q = search.toUpperCase();
           sortedData = sortedData.filter(item => 
@@ -63,24 +76,37 @@ const Watchlist = () => {
         
         setData(sortedData);
         setTotal(sortedData.length);
+        setCachedData(prev => ({ ...prev, ALL: { results: sortedData, total: sortedData.length } }));
       } else {
         if (forceScan) {
-          await quantService.startScan(marketType, 0.5);
+          await quantService.startScan(marketType, defenseWeight);
           startPollingProgress();
           return;
         }
-        // 使用後台全局搜尋
-        const resp = await quantService.getResults(marketType, page, pageSize, search);
+        // 使用新 API 傳入 defenseWeight
+        const resp = await quantService.getResults(marketType, page, pageSize, search, defenseWeight);
         setData(resp.results || []);
         setTotal(resp.total || 0);
+        
+        // 只有在非搜尋且第一頁時快取
+        if (!search && page === 1) {
+          setCachedData(prev => ({ ...prev, [marketType]: resp }));
+        }
       }
     } catch (err) {
       console.error('Fetch error:', err);
-      setData([]);
     } finally {
-      if (!forceScan) setLoading(false);
+      setLoading(false);
     }
   };
+
+  // 當權重改變時，不立即 fetchData，等使用者放開或防抖
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchData();
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [defenseWeight]);
 
   const startPollingProgress = () => {
     const interval = setInterval(async () => {
@@ -226,14 +252,35 @@ const Watchlist = () => {
           </div>
         </div>
         
-        <button 
-          onClick={() => fetchData(marketType !== 'ALL')}
-          disabled={loading || !!scanProgress}
-          className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 rounded-xl text-sm font-bold transition-all shadow-lg shadow-indigo-600/20"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading || !!scanProgress ? 'animate-spin' : ''}`} />
-          {marketType === 'ALL' ? '刷新分析' : '啟動海選掃描'}
-        </button>
+        <div className="flex items-center gap-6">
+          <div className="flex flex-col gap-1 w-48">
+            <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-slate-500">
+              <span>🛡 價值</span>
+              <span>成長 🚀</span>
+            </div>
+            <input 
+              type="range" 
+              min="0" 
+              max="1" 
+              step="0.1" 
+              value={defenseWeight}
+              onChange={(e) => setDefenseWeight(parseFloat(e.target.value))}
+              className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+            />
+            <div className="text-[10px] text-center font-bold text-indigo-400">
+              比重配置: {Math.round(defenseWeight * 100)}% / {Math.round((1 - defenseWeight) * 100)}%
+            </div>
+          </div>
+
+          <button 
+            onClick={() => fetchData(marketType !== 'ALL')}
+            disabled={loading || !!scanProgress}
+            className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 rounded-xl text-sm font-bold transition-all shadow-lg shadow-indigo-600/20"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading || !!scanProgress ? 'animate-spin' : ''}`} />
+            {marketType === 'ALL' ? '刷新分析' : '啟動海選掃描'}
+          </button>
+        </div>
       </div>
 
       {scanProgress && (

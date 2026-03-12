@@ -238,9 +238,10 @@ async def get_market_results(
     market_type: str = "TW", 
     page: int = 1, 
     page_size: int = 20,
-    query: str = ""
+    query: str = "",
+    defense_weight: float = None
 ):
-    """獲取全市場海選結果 (從快取或持久層讀取並分頁)。"""
+    """獲取全市場海選結果 (從快取或持久層讀取並分頁)。支援動態權重重算。"""
     pool = get_cached_pool(market_type)
     if not pool:
         return PaginatedAnalysisResponse(
@@ -249,6 +250,24 @@ async def get_market_results(
         )
     
     all_results = pool.get("results", [])
+    
+    # 如果提供權重，則根據快取中的數據重新計算分數
+    if defense_weight is not None:
+        dfs = pool.get("dfs", {})
+        new_results = []
+        for r in all_results:
+            # r 是 AnalysisResult 物件
+            code = getattr(r, '代碼', None)
+            df = dfs.get(code)
+            if df is not None:
+                # 重新分析以獲取新分數
+                # 這裡需要名稱，我們從現有結果抓
+                name = getattr(r, '名稱', '未知')
+                analysis = analyze_stock(df, code, name, defense_weight, market_type)
+                new_results.append(AnalysisResult(**analysis))
+            else:
+                new_results.append(r)
+        all_results = new_results
     # 確保每個結果都有市場欄位且依評分降序
     for r in all_results:
         if hasattr(r, '市場') and not r.市場:

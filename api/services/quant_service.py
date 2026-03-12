@@ -14,35 +14,36 @@ def extract_stock_code(raw_str):
     return raw_str.upper()
 
 def fetch_tw_symbols():
-    """從公開來源獲取台股代碼清單"""
+    """從公開來源獲取所有台股代碼清單 (上市+上櫃+ETF+權證等全部類別)"""
     import requests
+    import pandas as pd
     try:
-        # 證交所 (上市)
-        url = "https://isin.twse.com.tw/isin/C_public.jsp?strMode=2"
-        response = requests.get(url, verify=False, timeout=15)
-        response.encoding = 'big5'
-        tables = pd.read_html(response.text)
-        df = tables[0]
         symbols = {}
-        for val in df[0].dropna():
-            parts = str(val).split('\u3000')
-            if len(parts) == 2 and parts[0].isdigit() and len(parts[0]) == 4:
-                symbols[parts[0]] = parts[1]
+        # 模式描述: 2=上市, 4=上櫃, 5=興櫃 (興櫃暫不抓取以維護穩健性)
+        for mode in ["2", "4"]:
+            url = f"https://isin.twse.com.tw/isin/C_public.jsp?strMode={mode}"
+            response = requests.get(url, verify=False, timeout=15)
+            response.encoding = 'big5'
+            # 獲取表格
+            dfs = pd.read_html(response.text)
+            if not dfs: continue
+            df = dfs[0]
+            # 核心邏輯：第一欄包含 "代碼 名稱" 格式
+            for val in df[0].dropna():
+                # 匹配 '2330　台積電' 這種格式 (\u3000 是全形空格)
+                parts = str(val).split('\u3000')
+                if len(parts) >= 2:
+                    code = parts[0].strip()
+                    name = parts[1].strip()
+                    # 過濾：純數字代碼基本為股票/ETF/存託憑證
+                    if code.isalnum() and len(code) >= 4:
+                        symbols[code] = name
         
-        # OTC (上櫃)
-        url_otc = "https://isin.twse.com.tw/isin/C_public.jsp?strMode=4"
-        response_otc = requests.get(url_otc, verify=False, timeout=15)
-        response_otc.encoding = 'big5'
-        tables_otc = pd.read_html(response_otc.text)
-        df_otc = tables_otc[0]
-        for val in df_otc[0].dropna():
-            parts = str(val).split('\u3000')
-            if len(parts) == 2 and parts[0].isdigit() and len(parts[0]) == 4:
-                symbols[parts[0]] = parts[1]
+        print(f"[QuantService] TW symbols scraped: {len(symbols)}")
         return symbols
     except Exception as e:
         print(f"Error fetching TW symbols: {e}")
-        return {"2330": "台積電", "2317": "鴻海", "0050": "元大台灣50"}
+        return {"2330": "台積電", "2317": "鴻海", "2303": "聯電", "2454": "聯發科", "2881": "富邦金"}
 
 def fetch_us_symbols():
     """獲取 S&P 500 代碼清單"""
