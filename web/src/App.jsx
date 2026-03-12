@@ -155,14 +155,16 @@ function App() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto bg-[radial-gradient(circle_at_top_right,rgba(37,38,44,1),rgba(15,15,18,1))] relative w-full">
+      <main className="flex-1 overflow-y-auto bg-[radial-gradient(circle_at_top_right,rgba(37,38,44,1),rgba(15,15,18,1))] relative w-full pb-20 md:pb-0">
         <header className="h-16 md:h-20 px-4 md:px-8 flex items-center justify-between border-b border-slate-800/50 sticky top-0 bg-slate-950/80 backdrop-blur-md z-30">
           <div className="flex items-center gap-3">
             <button 
-              className="md:hidden p-2 -ml-2 text-slate-400 hover:text-white"
+              className="md:hidden flex items-center justify-center -ml-1"
               onClick={() => setIsMobileMenuOpen(true)}
             >
-              <Menu className="w-6 h-6" />
+              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center font-bold text-white text-sm border-2 border-slate-800">
+                {user?.user_id?.[0] || 'U'}
+              </div>
             </button>
             <div className="hidden md:flex items-center gap-2 text-slate-400 text-sm">
               <span>首頁</span>
@@ -217,6 +219,29 @@ function App() {
           onClose={() => setIsDiagModalOpen(false)} 
         />
       </main>
+      
+      {/* Bottom Navigation for Mobile */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-slate-900/80 backdrop-blur-xl border-t border-slate-800/50 flex items-center justify-around px-2 z-50 pb-safe">
+        {navItems.map((item) => {
+          const isActive = activeTab === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id)}
+              className={`flex flex-col items-center justify-center gap-1 flex-1 py-1 transition-all duration-200 ${
+                isActive ? 'text-indigo-400' : 'text-slate-500'
+              }`}
+            >
+              <div className={`p-1.5 rounded-lg transition-all ${isActive ? 'bg-indigo-600/10' : ''}`}>
+                <item.icon className={`w-5 h-5 ${isActive ? 'stroke-[2.5px]' : 'stroke-[2px]'}`} />
+              </div>
+              <span className="text-[10px] font-medium tracking-tight whitespace-nowrap">
+                {item.label}
+              </span>
+            </button>
+          );
+        })}
+      </nav>
     </div>
   )
 }
