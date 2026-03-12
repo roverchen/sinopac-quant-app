@@ -9,9 +9,10 @@ router = APIRouter(prefix="/trade", tags=["trade"])
 
 class OrderRequest(BaseModel):
     symbol: str
-    qty: int
+    qty: float
     price: float
     action: str = "Buy" # "Buy" or "Sell"
+    is_simulation: bool = True
 
 @router.get("/status")
 async def get_trading_status(current_user: str = Depends(get_current_user)):
@@ -57,7 +58,8 @@ async def place_manual_order(order: OrderRequest, current_user: str = Depends(ge
             order.symbol, 
             order.qty, 
             order.price, 
-            action
+            action,
+            is_simulation=order.is_simulation
         )
         return {"status": "success", "trade_id": str(trade.order.id)}
     except Exception as e:

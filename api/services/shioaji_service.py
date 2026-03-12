@@ -1,6 +1,7 @@
 import os
 import threading
 import random
+from datetime import datetime
 from typing import Dict, Optional
 from api.services.storage_service import get_user_credentials
 
@@ -19,17 +20,17 @@ class MockShioajiClient:
         class MockAcc: account_id = "MOCK-PAPER-TRADING-001"
         return [MockAcc()]
     
-    def place_order(self, contract, order, symbol="2330"):
+    def place_order(self, contract, order, symbol="2330", qty=1, price=500.0, action="Buy"):
         # 建立一個較完整的模擬訂單物件
         order_id = f"MOCK-{random.randint(1000,9999)}"
         new_order = {
             "order_id": order_id,
             "symbol": symbol,
-            "action": "Buy",
-            "qty": 1,
-            "price": 500.0,
+            "action": action,
+            "qty": qty,
+            "price": price,
             "status": "Filled",
-            "time": "剛剛"
+            "time": datetime.now().strftime("%H:%M:%S")
         }
         self._mock_orders.insert(0, new_order)
         
@@ -85,10 +86,15 @@ class ShioajiService:
                 return mock_api
 
     @classmethod
-    def place_order(cls, email: str, symbol: str, qty: int, price: float, action=None):
+    def place_order(cls, email: str, symbol: str, qty: float, price: float, action=None, is_simulation: bool = None):
         """
-        執行下單操作 (v1.0.2 強制繞過版)。
+        執行下單操作 (v1.0.3 支援強制模擬版)。
         """
+        # 如果使用者在前端明確選擇「模擬下單」，則強制走 Mock 邏輯
+        if is_simulation is True:
+            print(f"DEBUG: [v1.0.3] Forced Simulation Mode for {email}")
+            return MockShioajiClient().place_order(None, None, symbol=symbol, qty=qty, price=price, action=str(action) if action else "Buy")
+
         api = cls.get_api_client(email)
         
         # 究極繞過邏輯：只要檢測到是 MockClient，就絕對不觸發任何 Shioaji 內部邏輯
@@ -99,8 +105,9 @@ class ShioajiService:
         elif "MockShioajiClient" in str(type(api)): is_mock = True
         
         if is_mock:
-            print(f"DEBUG: [v1.0.2] Extreme Bypass Triggered for {email}")
-            return api.place_order(None, None, symbol=symbol) if api else MockShioajiClient().place_order(None, None, symbol=symbol)
+            print(f"DEBUG: [v1.0.3] Auto Mock Triggered for {email}")
+            target_api = api if api else MockShioajiClient()
+            return target_api.place_order(None, None, symbol=symbol, qty=qty, price=price, action=str(action) if action else "Buy")
 
         from shioaji.constant import Action, StockPriceType, OrderType
         from shioaji import Order
