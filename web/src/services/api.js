@@ -64,8 +64,12 @@ export const quantService = {
     const response = await api.post(`/quant/watchlist?symbol=${symbol}&market_type=${marketType}`);
     return response.data;
   },
-  getResults: async (marketType = 'TW', page = 1, pageSize = 20) => {
-    const response = await api.get(`/quant/results?market_type=${marketType}&page=${page}&page_size=${pageSize}`);
+  getResults: async (marketType = 'TW', page = 1, pageSize = 20, query = '') => {
+    const response = await api.get(`/quant/results?market_type=${marketType}&page=${page}&page_size=${pageSize}&query=${encodeURIComponent(query)}`);
+    return response.data;
+  },
+  getHistory: async (symbol, marketType = 'TW') => {
+    const response = await api.get(`/quant/history?symbol=${encodeURIComponent(symbol)}&market_type=${marketType}`);
     return response.data;
   },
   removeFromWatchlist: async (symbol, marketType = 'TW') => {

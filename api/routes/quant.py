@@ -213,7 +213,12 @@ async def analyze_watchlist(request: StockAnalysisRequest, current_user: str = D
     )
 
 @router.get("/results", response_model=PaginatedAnalysisResponse)
-async def get_market_results(market_type: str = "TW", page: int = 1, page_size: int = 20):
+async def get_market_results(
+    market_type: str = "TW", 
+    page: int = 1, 
+    page_size: int = 20,
+    query: str = ""
+):
     """獲取全市場海選結果 (從持久層讀取並分頁)。"""
     pool = load_data_pool(market_type)
     if not pool:
@@ -230,6 +235,14 @@ async def get_market_results(market_type: str = "TW", page: int = 1, page_size: 
     
     # 全部結果按評分降序排列 (防禦性再次排序)
     all_results = sorted(all_results, key=lambda x: getattr(x, '綜合評分', -1), reverse=True)
+    
+    # 全局搜尋過濾
+    if query:
+        q = query.upper()
+        all_results = [
+            r for r in all_results 
+            if q in getattr(r, '代碼', '').upper() or q in getattr(r, '名稱', '').upper()
+        ]
             
     total = len(all_results)
     start = (page - 1) * page_size
@@ -270,3 +283,29 @@ async def remove_from_watchlist_api(symbol: str, market_type: str = "TW", curren
         watchlist.remove(symbol)
         save_user_watchlist(current_user, market_type, watchlist)
     return {"status": "success", "watchlist": watchlist}
+
+@router.get("/history")
+async def get_symbol_history(symbol: str, market_type: str = "TW"):
+    """獲取歷史 K 線數據 (OHLC)"""
+    from api.services.quant_service import get_yahoo_ticker, fetch_stock_data
+    from fastapi import HTTPException
+    
+    ticker_str = get_yahoo_ticker(symbol, market_type)
+    df = fetch_stock_data(symbol, ticker_str, period="3mo") # 預設顯示 3 個月
+    
+    if df is None or df.empty:
+        raise HTTPException(status_code=404, detail=f"No historical data found for {symbol}")
+    
+    # 格式化為 Recharts 友善格式
+    history = []
+    for index, row in df.iterrows():
+        # yfinance columns are Open, High, Low, Close, Volume
+        history.append({
+            "date": index.strftime("%m/%d"),
+            "open": round(float(row['Open']), 2),
+            "high": round(float(row['High']), 2),
+            "low": round(float(row['Low']), 2),
+            "close": round(float(row['Close']), 2),
+            "volume": int(row['Volume'])
+        })
+    return history

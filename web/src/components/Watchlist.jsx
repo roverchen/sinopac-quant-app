@@ -1,7 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { quantService } from '../services/api';
-import { RefreshCw, Search, TrendingUp, TrendingDown, Minus, ChevronLeft, ChevronRight } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { RefreshCw, Search, TrendingUp, TrendingDown, Minus, Plus, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  ComposedChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer,
+  Cell
+} from 'recharts';
 
 const Watchlist = () => {
   const [data, setData] = useState([]);
@@ -21,12 +31,36 @@ const Watchlist = () => {
   // Scan Progress State
   const [scanProgress, setScanProgress] = useState(null);
   
+  // Chart & Details State
+  const [history, setHistory] = useState([]);
+  const [isChartLoading, setIsChartLoading] = useState(false);
+  const [trackedSymbols, setTrackedSymbols] = useState([]); // 追蹤中的代碼列表
+  
   const fetchData = async (forceScan = false) => {
     setLoading(true);
     try {
+      // 先獲取目前的追蹤清單，用於比對是否已追蹤
+      const twWatch = await quantService.getWatchlist('TW');
+      const usWatch = await quantService.getWatchlist('US');
+      const cryptoWatch = await quantService.getWatchlist('CRYPTO');
+      setTrackedSymbols([
+        ...(twWatch.watchlist || []),
+        ...(usWatch.watchlist || []),
+        ...(cryptoWatch.watchlist || [])
+      ]);
+
       if (marketType === 'ALL') {
         const resp = await quantService.analyze([], 0.5, 'ALL');
-        const sortedData = (resp.results || []).sort((a, b) => b.綜合評分 - a.綜合評分);
+        let sortedData = (resp.results || []).sort((a, b) => b.綜合評分 - a.綜合評分);
+        
+        // ALL 模式下維持本地過濾搜尋
+        if (search) {
+          const q = search.toUpperCase();
+          sortedData = sortedData.filter(item => 
+            item.代碼.toUpperCase().includes(q) || item.名稱.toUpperCase().includes(q)
+          );
+        }
+        
         setData(sortedData);
         setTotal(sortedData.length);
       } else {
@@ -35,11 +69,8 @@ const Watchlist = () => {
           startPollingProgress();
           return;
         }
-        const resp = await quantService.getResults(marketType, page, pageSize);
-        if ((!resp.results || resp.results.length === 0) && page === 1) {
-          // 如果首頁沒資料，自動啟動掃描 (或提示)
-          console.log('No results found, suggests scan');
-        }
+        // 使用後台全局搜尋
+        const resp = await quantService.getResults(marketType, page, pageSize, search);
         setData(resp.results || []);
         setTotal(resp.total || 0);
       }
@@ -75,6 +106,15 @@ const Watchlist = () => {
     setPage(1);
   }, [marketType]);
 
+  // 搜尋防抖處理
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (page !== 1) setPage(1);
+      else fetchData();
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [search]);
+
   useEffect(() => {
     fetchData();
   }, [marketType, page]);
@@ -84,7 +124,7 @@ const Watchlist = () => {
     item.名稱.toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleRowClick = (stock) => {
+  const handleRowClick = async (stock) => {
     setSelectedStock(stock);
     const m = stock.市場 || marketType;
     if (m === 'TW') setQty(1000);
@@ -92,6 +132,35 @@ const Watchlist = () => {
     else if (m === 'CRYPTO') setQty(0.1);
     else setQty(1);
     setIsModalOpen(true);
+    
+    // 異步抓取歷史資料
+    setIsChartLoading(true);
+    try {
+      const hist = await quantService.getHistory(stock.代碼, m);
+      setHistory(hist);
+    } catch (err) {
+      console.error("Failed to load history", err);
+      setHistory([]);
+    } finally {
+      setIsChartLoading(false);
+    }
+  };
+
+  const handleToggleWatchlist = async () => {
+    const isTracked = trackedSymbols.includes(selectedStock.代碼);
+    const m = selectedStock.市場 || marketType;
+    try {
+      if (isTracked) {
+        if (!window.confirm(`確定要將 ${selectedStock.代碼} 從追蹤清單移除嗎？`)) return;
+        await quantService.removeFromWatchlist(selectedStock.代碼, m);
+      } else {
+        await quantService.addToWatchlist(selectedStock.代碼, m);
+        alert(`已將 ${selectedStock.代碼} 加入追蹤清單`);
+      }
+      fetchData(); // 重新整理列表與狀態
+    } catch (err) {
+      alert("操作失敗");
+    }
   };
 
   const handleOrder = async (isSimulation) => {
@@ -304,76 +373,145 @@ const Watchlist = () => {
       </div>
 
       {/* 買入對話框 Modal */}
-      {isModalOpen && selectedStock && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
-          <motion.div 
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden"
-          >
-            <div className="p-8 space-y-6">
-              <div className="flex justify-between items-start">
-                <div>
-                  <h3 className="text-2xl font-black text-white">{selectedStock.名稱}</h3>
-                  <p className="text-slate-400 font-mono text-sm">{selectedStock.代碼}</p>
+      <AnimatePresence>
+        {isModalOpen && selectedStock && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden"
+            >
+              <div className="p-8 space-y-6">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="text-2xl font-black text-white">{selectedStock.名稱}</h3>
+                    <p className="text-slate-400 font-mono text-sm">{selectedStock.代碼}</p>
+                  </div>
+                  <button onClick={() => setIsModalOpen(false)} className="text-slate-500 hover:text-white transition-colors">
+                    <X className="w-6 h-6" />
+                  </button>
                 </div>
-                <div className="text-right">
-                  <p className="text-3xl font-black text-indigo-400 font-inter font-bold">
-                    ${selectedStock.最新價格.toLocaleString(undefined, { minimumFractionDigits: selectedStock.市場 === 'CRYPTO' ? 2 : 1 })}
-                  </p>
-                  <p className="text-xs text-slate-500">最新價格</p>
+
+                {/* K-Line Chart Section */}
+                <div className="bg-slate-950/50 rounded-2xl p-2 border border-slate-800/50">
+                   <div className="flex items-center justify-between px-2 pt-1">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">3個月走勢參考</span>
+                   </div>
+                   <StockChart data={history} loading={isChartLoading} />
+                </div>
+
+                <div className="flex justify-between items-end bg-slate-800/20 p-4 rounded-2xl border border-slate-800/50">
+                  <div className="space-y-1">
+                    <p className="text-xs text-slate-500 font-bold uppercase">最新價格</p>
+                    <p className="text-3xl font-black text-indigo-400 font-inter">
+                      ${selectedStock.最新價格.toLocaleString(undefined, { minimumFractionDigits: selectedStock.市場 === 'CRYPTO' ? 2 : 1 })}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <span className={`text-xs px-2 py-1 rounded-md font-bold ${
+                      selectedStock.綜合評分 >= 80 ? 'text-emerald-400 bg-emerald-500/10' : 'text-indigo-400 bg-indigo-500/10'
+                    }`}>
+                      評分: {selectedStock.綜合評分}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="bg-slate-800/30 p-4 rounded-2xl border border-slate-800/50">
+                  <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">下單數量</label>
+                  <div className="flex items-center gap-4">
+                    <input 
+                      type="number" 
+                      value={qty}
+                      onChange={(e) => setQty(e.target.value)}
+                      className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white font-inter font-bold focus:ring-2 focus:ring-indigo-500/50 outline-none"
+                    />
+                    <span className="text-slate-400 font-bold">{selectedStock.市場 === 'TW' ? '股' : selectedStock.市場 === 'US' ? '股' : '單位'}</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <button 
+                    onClick={() => handleOrder(true)}
+                    disabled={orderLoading}
+                    className="py-4 bg-slate-800 hover:bg-slate-700 text-white rounded-2xl font-bold transition-all disabled:opacity-50"
+                  >
+                    模擬下單
+                  </button>
+                  <button 
+                    onClick={() => handleOrder(false)}
+                    disabled={orderLoading}
+                    className="py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-bold transition-all shadow-lg shadow-indigo-600/20 disabled:opacity-50"
+                  >
+                    實盤交易
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between pt-4 border-t border-slate-800">
+                  <button 
+                    onClick={handleToggleWatchlist}
+                    className={`flex items-center gap-2 text-sm font-bold transition-colors ${
+                      trackedSymbols.includes(selectedStock.代碼) ? 'text-rose-500 hover:text-rose-400' : 'text-indigo-400 hover:text-indigo-300'
+                    }`}
+                  >
+                    {trackedSymbols.includes(selectedStock.代碼) ? (
+                      <><Minus className="w-4 h-4" /> 移出追蹤清單</>
+                    ) : (
+                      <><Plus className="w-4 h-4" /> 加入追蹤清單</>
+                    )}
+                  </button>
+                  <button 
+                    onClick={() => setIsModalOpen(false)}
+                    className="text-slate-500 hover:text-slate-300 text-sm font-bold transition-colors"
+                  >
+                    取消
+                  </button>
                 </div>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
 
-              <div className="bg-slate-800/30 p-4 rounded-2xl border border-slate-800/50">
-                <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">下單數量</label>
-                <div className="flex items-center gap-4">
-                  <input 
-                    type="number" 
-                    value={qty}
-                    onChange={(e) => setQty(e.target.value)}
-                    className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white font-inter font-bold focus:ring-2 focus:ring-indigo-500/50 outline-none"
-                  />
-                  <span className="text-slate-400 font-bold">{selectedStock.市場 === 'TW' ? '股' : selectedStock.市場 === 'US' ? '股' : '單位'}</span>
-                </div>
-              </div>
+const StockChart = ({ data, loading }) => {
+  if (loading) return <div className="h-48 flex items-center justify-center text-slate-500 text-xs font-bold animate-pulse">載入趨勢中...</div>;
+  if (!data || data.length === 0) return <div className="h-48 flex items-center justify-center text-slate-500 text-xs">暫無歷史數據</div>;
 
-              <div className="grid grid-cols-2 gap-4">
-                <button 
-                  onClick={() => handleOrder(true)}
-                  disabled={orderLoading}
-                  className="py-4 bg-slate-800 hover:bg-slate-700 text-white rounded-2xl font-bold transition-all disabled:opacity-50"
-                >
-                  模擬下單
-                </button>
-                <button 
-                  onClick={() => handleOrder(false)}
-                  disabled={orderLoading}
-                  className="py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-bold transition-all shadow-lg shadow-indigo-600/20 disabled:opacity-50"
-                >
-                  實盤交易
-                </button>
-              </div>
-
-              <div className="flex items-center justify-between pt-4 border-t border-slate-800">
-                <button 
-                  onClick={handleDelete}
-                  className="flex items-center gap-2 text-rose-500 hover:text-rose-400 text-sm font-bold transition-colors"
-                >
-                  <Minus className="w-4 h-4" />
-                  移出追蹤清單
-                </button>
-                <button 
-                  onClick={() => setIsModalOpen(false)}
-                  className="text-slate-500 hover:text-slate-300 text-sm font-bold transition-colors"
-                >
-                  取消
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        </div>
-      )}
+  return (
+    <div className="h-48 w-full mt-2">
+      <ResponsiveContainer width="100%" height="100%">
+        <ComposedChart data={data}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} opacity={0.3} />
+          <XAxis 
+            dataKey="date" 
+            axisLine={false} 
+            tickLine={false} 
+            tick={{ fill: '#475569', fontSize: 9, fontWeight: 600 }} 
+            minTickGap={20}
+          />
+          <YAxis 
+            hide 
+            domain={['auto', 'auto']} 
+          />
+          <Tooltip 
+            contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '12px', fontSize: '10px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}
+            itemStyle={{ color: '#818cf8', fontWeight: 'bold' }}
+            cursor={{ stroke: '#334155', strokeWidth: 1 }}
+          />
+          <Bar dataKey="close">
+            {data.map((entry, index) => (
+              <Cell 
+                key={`cell-${index}`} 
+                fill={entry.close >= entry.open ? '#10b981' : '#f43f5e'} 
+                fillOpacity={0.8}
+              />
+            ))}
+          </Bar>
+        </ComposedChart>
+      </ResponsiveContainer>
     </div>
   );
 };
