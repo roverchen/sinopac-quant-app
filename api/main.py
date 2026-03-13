@@ -14,7 +14,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 app = FastAPI(
     title="Sinopac Quant Pro API",
     description="Professional backend for quantitative stock analysis and trading.",
-    version="1.2.6"
+    version="1.2.7"
 )
 
 @app.on_event("startup")
@@ -36,7 +36,7 @@ app.add_middleware(
 @app.get("/health")
 @app.get("/api/health")
 async def health():
-    return {"status": "healthy", "version": "1.2.6"}
+    return {"status": "healthy", "version": "1.2.7"}
 
 app.include_router(quant.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")

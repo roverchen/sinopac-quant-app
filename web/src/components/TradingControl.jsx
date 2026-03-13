@@ -9,7 +9,10 @@ const TradingControl = () => {
   const [loading, setLoading] = useState(false);
   const [selectedPosition, setSelectedPosition] = useState(null);
   const [sellForm, setSellForm] = useState({ price: 0, qty: 0 });
+  const [viewAccount, setViewAccount] = useState('personal'); // 'personal' or 'system_auto'
   const [viewType, setViewType] = useState('positions'); // 'positions' or 'history'
+  const [pending, setPending] = useState([]);
+  const [summary, setSummary] = useState(null);
   const [history, setHistory] = useState([]);
 
   useEffect(() => {
@@ -20,6 +23,7 @@ const TradingControl = () => {
   }, [viewAccount, viewType]);
 
   const refreshAll = () => {
+    fetchStatus();
     if (viewType === 'positions') {
       fetchAccount();
       fetchPending();
@@ -27,6 +31,48 @@ const TradingControl = () => {
       fetchHistory();
     }
     fetchSummary();
+  };
+
+  const fetchStatus = async () => {
+    try {
+      const resp = await tradeService.getStatus();
+      setStatus(resp);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const fetchAccount = async () => {
+    setLoading(true);
+    try {
+      const userId = viewAccount === 'system_auto' ? 'system_auto' : null;
+      const resp = await tradeService.getAccount(userId);
+      setAccount(resp);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchPending = async () => {
+    try {
+      const userId = viewAccount === 'system_auto' ? 'system_auto' : null;
+      const resp = await tradeService.getPending(userId);
+      setPending(resp.pending || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const fetchSummary = async () => {
+    try {
+      const userId = viewAccount === 'system_auto' ? 'system_auto' : null;
+      const resp = await tradeService.getSummary(userId);
+      setSummary(resp);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const fetchHistory = async () => {
@@ -42,7 +88,47 @@ const TradingControl = () => {
     }
   };
 
-  // Skip handlers for toggleAutoTrade, openSellModal, handleSellSubmit for brevity in this chunk
+  const toggleAutoTrade = async () => {
+    setLoading(true);
+    try {
+      await tradeService.toggleAutoTrade(!status.auto_trade_enabled);
+      await fetchStatus();
+    } catch (err) {
+      alert("切換失敗，請檢查網路連線");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openSellModal = (pos) => {
+    setSelectedPosition(pos);
+    setSellForm({ price: pos.current_price || pos.buy_price, qty: pos.qty });
+  };
+
+  const handleSellSubmit = async () => {
+    if (sellForm.qty <= 0 || sellForm.qty > selectedPosition.qty) {
+      alert("數量不正確");
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      await tradeService.placeOrder({
+        symbol: selectedPosition.symbol,
+        qty: Number(sellForm.qty),
+        price: Number(sellForm.price),
+        action: "Sell",
+        is_simulation: selectedPosition.is_simulation
+      });
+      alert("賣出委託已送出");
+      setSelectedPosition(null);
+      fetchAccount();
+    } catch (err) {
+      alert("交易失敗: " + (err.response?.data?.detail || "未知錯誤"));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">
