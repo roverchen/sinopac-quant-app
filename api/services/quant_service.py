@@ -60,7 +60,9 @@ def fetch_tw_symbols():
                 if len(parts) >= 2:
                     code = parts[0].strip()
                     name = parts[1].strip()
-                    if code.isalnum() and len(code) >= 4:
+                    if code.isdigit() and len(code) in [4, 5, 6]:
+                        # Typical TW stocks are 4 digits, ETFs are 5-6 digits.
+                        # This excludes warrants (6 digits with letters) and other junk.
                         symbols[code] = name
         print(f"[QuantService] TW symbols scraped: {len(symbols)}")
         return symbols
@@ -324,7 +326,15 @@ async def run_market_scan(market_type: str, defense_weight: float = 0.5):
             scan_status["message"] = f"Analyzed {len(results)}/{total}..."
             print(f"[QuantService] {market_type} Progress: {len(results)}/{total}")
             scan_status["results_count"] = len(results)
-            await asyncio.sleep(0.1)
+            
+            # Partial save to GCS every 1000 stocks to ensure data visibility
+            if len(results) % 1000 == 0:
+                print(f"[QuantService] Saving partial results for {market_type} ({len(results)} stocks)...")
+                partial_pool = {"results": results, "dfs": all_dfs, "timestamp": datetime.now().isoformat(), "is_partial": True}
+                save_data_pool(market_type, partial_pool)
+                results_cache[market_type] = partial_pool
+                
+            await asyncio.sleep(0.05)
 
         results = sorted(results, key=lambda x: x.score, reverse=True)
         data_pool = {"results": results, "dfs": all_dfs, "timestamp": datetime.now().isoformat()}
