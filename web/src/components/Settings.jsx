@@ -58,6 +58,34 @@ const Settings = () => {
           </div>
           
           <div className="space-y-4">
+            <div className="space-y-1.5 text-right mb-2">
+              <span className="text-[10px] bg-indigo-500/10 text-indigo-400 px-2 py-0.5 rounded-full font-bold">
+                實盤交易必填 - 包含憑證 (CA)
+              </span>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider ml-1">身分證字號</label>
+                <input 
+                  type="text"
+                  placeholder="A123456789"
+                  className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all font-inter"
+                  value={creds.shioaji_person_id || ''}
+                  onChange={(e) => setCreds({...creds, shioaji_person_id: e.target.value.toUpperCase()})}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider ml-1">登入密碼</label>
+                <input 
+                  type="password"
+                  className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all font-inter"
+                  value={creds.shioaji_password || ''}
+                  onChange={(e) => setCreds({...creds, shioaji_password: e.target.value})}
+                />
+              </div>
+            </div>
+
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider ml-1">API Key</label>
               <input 
@@ -75,6 +103,46 @@ const Settings = () => {
                 value={creds.shioaji_secret_key}
                 onChange={(e) => setCreds({...creds, shioaji_secret_key: e.target.value})}
               />
+            </div>
+
+            <div className="border-t border-slate-800/50 pt-4 mt-2 space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-indigo-400 uppercase tracking-wider ml-1">下單憑證 (.pfx / .p12)</label>
+                <div className="relative group">
+                  <input 
+                    type="file"
+                    accept=".pfx,.p12"
+                    onChange={(e) => {
+                      const file = e.target.files[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (readerEvt) => {
+                          const binaryString = readerEvt.target.result;
+                          const base64 = btoa(binaryString);
+                          setCreds({...creds, shioaji_ca_base64: base64, ca_filename: file.name});
+                        };
+                        reader.readAsBinaryString(file);
+                      }
+                    }}
+                    className="w-full px-4 py-3 bg-indigo-600/5 border border-dashed border-indigo-500/30 rounded-xl focus:outline-none cursor-pointer text-xs"
+                  />
+                  {creds.ca_filename && (
+                    <div className="mt-2 text-[10px] text-emerald-400 font-bold flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" /> 已選取憑證: {creds.ca_filename}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider ml-1">憑證密碼</label>
+                <input 
+                  type="password"
+                  placeholder="CA Password"
+                  className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all font-inter"
+                  value={creds.shioaji_ca_password || ''}
+                  onChange={(e) => setCreds({...creds, shioaji_ca_password: e.target.value})}
+                />
+              </div>
             </div>
           </div>
         </section>

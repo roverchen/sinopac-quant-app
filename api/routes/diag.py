@@ -33,12 +33,16 @@ root_logger.addHandler(handler)
 
 @router.get("/logs")
 async def get_logs(current_user: str = Depends(get_current_user)):
+    from api.services.shioaji_service import shioaji_service
+    acc_info = shioaji_service.get_account_info(current_user)
+    
     return {
         "logs": log_buffer,
         "system_info": {
-            "version": "v1.3.1",
+            "version": "v1.3.2",
             "environment": "production",
-            "status": "healthy" if not any(l["level"] == "ERROR" for l in log_buffer) else "warning"
+            "status": "healthy" if not any(l["level"] == "ERROR" for l in log_buffer) else "warning",
+            "shioaji_status": acc_info.get("status", "disconnected") if acc_info else "disconnected"
         }
     }
 

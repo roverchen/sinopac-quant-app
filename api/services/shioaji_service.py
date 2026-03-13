@@ -65,10 +65,37 @@ class ShioajiService:
                 import shioaji as sj
                 api = sj.Shioaji()
                 print(f"[ShioajiService] Logging in with API Key: {creds['shioaji_api_key'][:5]}...")
-                api.login(
-                    api_key=creds['shioaji_api_key'],
-                    secret_key=creds['shioaji_secret_key']
-                )
+                
+                # Preferred login with Person ID and Password if available for real trading
+                login_kwargs = {
+                    "api_key": creds['shioaji_api_key'],
+                    "secret_key": creds['shioaji_secret_key']
+                }
+                if creds.get('shioaji_person_id') and creds.get('shioaji_password'):
+                    login_kwargs["person_id"] = creds['shioaji_person_id']
+                    login_kwargs["password"] = creds['shioaji_password']
+                
+                api.login(**login_kwargs)
+                
+                # Activate CA if certificate exists
+                if creds.get('shioaji_ca_base64') and creds.get('shioaji_ca_password'):
+                    try:
+                        import base64
+                        ca_content = base64.b64decode(creds['shioaji_ca_base64'])
+                        ca_path = f"/tmp/ca_{creds.get('shioaji_person_id', 'user')}.pfx"
+                        with open(ca_path, 'wb') as f:
+                            f.write(ca_content)
+                        
+                        print(f"[ShioajiService] Activating CA for {email}...")
+                        api.activate_ca(
+                            ca_path=ca_path,
+                            ca_passwd=creds['shioaji_ca_password'],
+                            person_id=creds.get('shioaji_person_id')
+                        )
+                        print(f"[ShioajiService] CA Activation SUCCESS for {email}")
+                    except Exception as ca_e:
+                        print(f"[ShioajiService] CA Activation FAILED: {ca_e}")
+
                 print(f"[ShioajiService] Login SUCCESS for {email}")
                 _shioaji_instances[email] = api
                 return api
