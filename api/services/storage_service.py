@@ -254,6 +254,7 @@ def get_user_trade_history(user_id):
 def save_data_pool(market, data):
     gcs = get_gcs()
     if gcs:
+        try:
             bucket_name = f"{PROJECT_ID}-data"
             bucket = gcs.bucket(bucket_name)
             if not bucket.exists():
