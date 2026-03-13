@@ -173,10 +173,12 @@ const TradingControl = () => {
               <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
                 {viewAccount === 'personal' ? '個人' : '系統'}累計損益
               </p>
-              <p className={`text-2xl font-black font-inter ${summary.mock.total >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                ${summary.mock.total.toLocaleString()}
-              </p>
-              <p className="text-[10px] text-slate-500 mt-1 font-bold">
+              {viewAccount === 'personal' && (
+                <p className={`text-2xl font-black font-inter ${summary.mock.total >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  ${summary.mock.total.toLocaleString()}
+                </p>
+              )}
+              <p className={`text-[10px] ${viewAccount === 'system_auto' ? 'text-2xl mt-0' : 'text-slate-500 mt-1'} font-bold ${viewAccount === 'system_auto' && summary.mock.return_rate >= 0 ? 'text-emerald-400' : viewAccount === 'system_auto' ? 'text-rose-400' : ''}`}>
                 回報率: {summary.mock.return_rate}%
               </p>
             </div>
@@ -314,7 +316,9 @@ const TradingControl = () => {
                              {pos.is_simulation ? '模擬' : '實盤'}
                            </span>
                         </td>
-                        <td className="px-8 py-6 text-right font-inter font-bold text-slate-300">{pos.qty.toLocaleString()}</td>
+                        <td className="px-8 py-6 text-right font-inter font-bold text-slate-300">
+                          {pos.is_simulation ? '-' : pos.qty.toLocaleString()}
+                        </td>
                         <td className="px-8 py-6 text-right font-inter font-bold text-slate-400">${pos.buy_price.toLocaleString()}</td>
                         <td className="px-8 py-6 text-right font-inter font-bold text-indigo-400">${pos.current_price?.toLocaleString() || '-'}</td>
                         <td className="px-8 py-6 text-right">
@@ -374,12 +378,18 @@ const TradingControl = () => {
                       </span>
                     </td>
                     <td className="px-8 py-6 text-right font-inter text-xs text-slate-300">
-                      {h.qty} @ ${h.price}
+                      {h.is_simulation ? '-' : h.qty} @ ${h.price}
                     </td>
                     <td className="px-8 py-6 text-right">
-                       <span className={`font-inter font-bold ${h.realized_pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                         {h.realized_pnl ? `${h.realized_pnl >= 0 ? '+' : ''}${h.realized_pnl}` : '-'}
-                       </span>
+                       {h.is_simulation ? (
+                         <span className={`font-inter font-bold ${h.pnl_percent >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                           {h.action === 'Sell' ? (h.pnl_percent != null ? `${h.pnl_percent >= 0 ? '+' : ''}${h.pnl_percent}%` : '-') : '-'}
+                         </span>
+                       ) : (
+                         <span className={`font-inter font-bold ${h.realized_pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                           {h.realized_pnl ? `${h.realized_pnl >= 0 ? '+' : ''}${h.realized_pnl}` : '-'}
+                         </span>
+                       )}
                     </td>
                   </tr>
                 )) : (

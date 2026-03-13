@@ -66,14 +66,11 @@ class ShioajiService:
                 api = sj.Shioaji()
                 print(f"[ShioajiService] Logging in with API Key: {creds['shioaji_api_key'][:5]}...")
                 
-                # Preferred login with Person ID and Password if available for real trading
+                # Preferred login with Person ID if available for real trading
                 login_kwargs = {
                     "api_key": creds['shioaji_api_key'],
                     "secret_key": creds['shioaji_secret_key']
                 }
-                if creds.get('shioaji_person_id') and creds.get('shioaji_password'):
-                    login_kwargs["person_id"] = creds['shioaji_person_id']
-                    login_kwargs["password"] = creds['shioaji_password']
                 
                 api.login(**login_kwargs)
                 

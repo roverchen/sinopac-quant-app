@@ -159,8 +159,13 @@ class MatchingEngine:
         elif action == 'Sell':
             existing = next((p for p in positions if p['symbol'] == symbol), None)
             realized_pl = 0
+            pnl_percent = 0
             if existing:
-                realized_pl = (fill_price - existing['buy_price']) * min(qty, existing['qty'])
+                buy_price = existing.get('buy_price', 0)
+                realized_pl = (fill_price - buy_price) * min(qty, existing['qty'])
+                if buy_price > 0:
+                    pnl_percent = round(((fill_price - buy_price) / buy_price) * 100, 2)
+                    
                 if existing['qty'] <= qty:
                     positions = [p for p in positions if p['symbol'] != symbol]
                 else:
@@ -176,6 +181,7 @@ class MatchingEngine:
                 "status": "Filled",
                 "is_simulation": is_simulation,
                 "realized_pl": realized_pl,
+                "pnl_percent": pnl_percent,
                 "timestamp": datetime.now().isoformat()
             })
 

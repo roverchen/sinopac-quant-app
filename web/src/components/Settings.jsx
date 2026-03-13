@@ -19,6 +19,10 @@ const Settings = () => {
         setCreds({
           shioaji_api_key: user.creds.shioaji_api_key || '',
           shioaji_secret_key: user.creds.shioaji_secret_key || '',
+          shioaji_person_id: user.creds.shioaji_person_id || '',
+          shioaji_ca_password: user.creds.shioaji_ca_password || '',
+          shioaji_ca_base64: user.creds.shioaji_ca_base64 || '',
+          ca_filename: user.creds.shioaji_ca_base64 ? '(已儲存的憑證)' : '',
           max_api_key: user.creds.max_api_key || '',
           max_api_secret: user.creds.max_api_secret || '',
         });
@@ -64,7 +68,7 @@ const Settings = () => {
               </span>
             </div>
             
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4">
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider ml-1">身分證字號</label>
                 <input 
@@ -73,15 +77,6 @@ const Settings = () => {
                   className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all font-inter"
                   value={creds.shioaji_person_id || ''}
                   onChange={(e) => setCreds({...creds, shioaji_person_id: e.target.value.toUpperCase()})}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider ml-1">登入密碼</label>
-                <input 
-                  type="password"
-                  className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all font-inter"
-                  value={creds.shioaji_password || ''}
-                  onChange={(e) => setCreds({...creds, shioaji_password: e.target.value})}
                 />
               </div>
             </div>
