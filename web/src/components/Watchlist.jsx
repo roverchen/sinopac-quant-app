@@ -143,6 +143,22 @@ const Watchlist = () => {
   }, [search]);
 
   useEffect(() => {
+    // Check if a scan is already running on mount
+    const checkInitialScan = async () => {
+      try {
+        const prog = await quantService.getScanProgress();
+        if (prog && prog.status === 'running') {
+          setScanProgress(prog);
+          startPollingProgress();
+        }
+      } catch (err) {
+        // Silently ignore
+      }
+    };
+    checkInitialScan();
+  }, []);
+
+  useEffect(() => {
     fetchData();
   }, [marketType, page]);
 

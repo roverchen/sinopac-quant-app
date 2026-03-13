@@ -36,7 +36,7 @@ async def get_logs(current_user: str = Depends(get_current_user)):
     return {
         "logs": log_buffer,
         "system_info": {
-            "version": "v1.3.0",
+            "version": "v1.3.1",
             "environment": "production",
             "status": "healthy" if not any(l["level"] == "ERROR" for l in log_buffer) else "warning"
         }

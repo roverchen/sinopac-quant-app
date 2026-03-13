@@ -60,10 +60,11 @@ def fetch_tw_symbols():
                 if len(parts) >= 2:
                     code = parts[0].strip()
                     name = parts[1].strip()
-                    if code.isdigit() and len(code) in [4, 5, 6]:
-                        # Typical TW stocks are 4 digits, ETFs are 5-6 digits.
-                        # This excludes warrants (6 digits with letters) and other junk.
-                        symbols[code] = name
+                    if code.isdigit() and len(code) in [4, 5]:
+                        # Typical TW stocks are 4 digits, ETFs are 5 digits.
+                        # Exclude warrants which are usually 6 digits and contain names like "購/售/牛/熊"
+                        if not any(x in name for x in ["購", "售", "牛", "熊"]):
+                            symbols[code] = name
         print(f"[QuantService] TW symbols scraped: {len(symbols)}")
         return symbols
     except Exception as e:
@@ -305,15 +306,15 @@ async def run_market_scan(market_type: str, defense_weight: float = 0.5):
         total = len(symbols)
         if total == 0: raise ValueError(f"No symbols found for {market_type}")
 
-        scan_status["progress"] = 10
-        scan_status["message"] = f"Scanning {total} stocks..."
-
-        chunk_size = 50
+        print(f"[QuantService] Starting {market_type} market scan (Defense Weight: {defense_weight}). Filtered Symbols: {total}")
+        
+        chunk_size = 30 # Smaller batches for more frequent updates
         results = []
         all_dfs = {}
 
         for i in range(0, total, chunk_size):
             chunk = symbols[i : i + chunk_size]
+            print(f"[QuantService] Fetching {market_type} chunk {i//chunk_size + 1}: {chunk[:3]}...")
             data_map = fetch_batch_data(chunk, market_type)
 
             for s, df in data_map.items():
@@ -323,18 +324,18 @@ async def run_market_scan(market_type: str, defense_weight: float = 0.5):
                 all_dfs[s] = df
 
             scan_status["progress"] = round(10 + (i / total) * 85, 1)
-            scan_status["message"] = f"Analyzed {len(results)}/{total}..."
+            scan_status["message"] = f"Analyzed {len(results)}/{total} items..."
             print(f"[QuantService] {market_type} Progress: {len(results)}/{total}")
             scan_status["results_count"] = len(results)
             
-            # Partial save to GCS every 1000 stocks to ensure data visibility
-            if len(results) % 1000 == 0:
-                print(f"[QuantService] Saving partial results for {market_type} ({len(results)} stocks)...")
+            # Partial save to GCS every 500 stocks for better responsiveness
+            if len(results) % 500 == 0 or i + chunk_size >= total:
+                print(f"[QuantService] Syncing results to GCS ({len(results)} stocks)...")
                 partial_pool = {"results": results, "dfs": all_dfs, "timestamp": datetime.now().isoformat(), "is_partial": True}
                 save_data_pool(market_type, partial_pool)
                 results_cache[market_type] = partial_pool
                 
-            await asyncio.sleep(0.05)
+            await asyncio.sleep(0.02)
 
         results = sorted(results, key=lambda x: x.score, reverse=True)
         data_pool = {"results": results, "dfs": all_dfs, "timestamp": datetime.now().isoformat()}
