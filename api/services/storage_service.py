@@ -254,8 +254,12 @@ def get_user_trade_history(user_id):
 def save_data_pool(market, data):
     gcs = get_gcs()
     if gcs:
-        try:
-            bucket = gcs.bucket(f"{PROJECT_ID}-data")
+            bucket_name = f"{PROJECT_ID}-data"
+            bucket = gcs.bucket(bucket_name)
+            if not bucket.exists():
+                print(f"[Storage] Creating missing bucket: {bucket_name}")
+                bucket = gcs.create_bucket(bucket_name, location="asia-east1")
+            
             blob = bucket.blob(f"shared_results_{market}.pkl")
             content = pickle.dumps(data)
             blob.upload_from_string(content)
