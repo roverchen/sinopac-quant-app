@@ -162,6 +162,14 @@ const Watchlist = () => {
     fetchData();
   }, [marketType, page]);
 
+  // Debounced effect for defenseWeight slider
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      fetchData();
+    }, 400); // 400ms debounce
+    return () => clearTimeout(handler);
+  }, [defenseWeight]);
+
   const filteredData = data.filter(item => 
     item.symbol.toLowerCase().includes(search.toLowerCase()) ||
     item.name.toLowerCase().includes(search.toLowerCase())
@@ -196,11 +204,11 @@ const Watchlist = () => {
     const m = selectedStock.market || marketType;
     try {
       if (isTracked) {
-        if (!window.confirm(`確定要將 ${selectedStock.symbol} 從追蹤清單移除嗎？`)) return;
+        if (!window.confirm(`確定要將 ${selectedStock.symbol} 從我的清單移除嗎？`)) return;
         await quantService.removeFromWatchlist(selectedStock.symbol, m);
       } else {
         await quantService.addToWatchlist(selectedStock.symbol, m);
-        alert(`已將 ${selectedStock.symbol} 加入追蹤清單`);
+        alert(`已將 ${selectedStock.symbol} 加入我的清單`);
       }
       fetchData(); // 重新整理列表與狀態
     } catch (err) {
@@ -254,7 +262,7 @@ const Watchlist = () => {
                   marketType === m ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                {m === 'ALL' ? '追蹤清單' : m === 'TW' ? '台股' : m === 'US' ? '美股' : '加密貨幣'}
+                {m === 'ALL' ? '我的清單' : m === 'TW' ? '台股' : m === 'US' ? '美股' : '加密貨幣'}
               </button>
             ))}
           </div>
@@ -402,7 +410,7 @@ const Watchlist = () => {
                     <div className="flex flex-col items-center opacity-30">
                       <Minus className="w-12 h-12 mb-3 text-slate-400" />
                       <p className="text-slate-400 font-bold text-lg">尚無數據</p>
-                      <p className="text-slate-500 text-sm">請確認是否已完成海選掃描或已添加追蹤標的。</p>
+                      <p className="text-slate-500 text-sm">請確認是否已完成海選掃描或已添加目標標的至我的清單。</p>
                     </div>
                   </td>
                 </tr>

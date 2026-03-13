@@ -331,7 +331,9 @@ async def run_market_scan(market_type: str, defense_weight: float = 0.5):
             # Partial save to GCS every 500 stocks for better responsiveness
             if len(results) % 500 == 0 or i + chunk_size >= total:
                 print(f"[QuantService] Syncing results to GCS ({len(results)} stocks)...")
-                partial_pool = {"results": results, "dfs": all_dfs, "timestamp": datetime.now().isoformat(), "is_partial": True}
+                # Ensure results are sorted by score before partial save
+                sorted_partial = sorted(results, key=lambda x: x.score, reverse=True)
+                partial_pool = {"results": sorted_partial, "dfs": all_dfs, "timestamp": datetime.now().isoformat(), "is_partial": True}
                 save_data_pool(market_type, partial_pool)
                 results_cache[market_type] = partial_pool
                 

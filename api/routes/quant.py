@@ -27,7 +27,14 @@ async def analyze_watchlist(request: StockAnalysisRequest, current_user: str = D
     results = []
     if not request.watchlist:
         from api.services.storage_service import get_user_watchlist
-        watchlist = get_user_watchlist(current_user, request.market_type)
+        if request.market_type == "ALL":
+            # Merge all available watchlists
+            tw = get_user_watchlist(current_user, "TW")
+            us = get_user_watchlist(current_user, "US")
+            crypto = get_user_watchlist(current_user, "CRYPTO")
+            watchlist = list(set(tw + us + crypto))
+        else:
+            watchlist = get_user_watchlist(current_user, request.market_type)
     else:
         watchlist = request.watchlist
 

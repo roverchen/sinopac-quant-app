@@ -210,8 +210,58 @@ const TradingControl = () => {
         <>
           {/* Pending Orders Table */}
           {pending.length > 0 && (
-            <div className="bg-slate-900/20 border border-indigo-500/10 rounded-[2.5rem] overflow-hidden">
-                {/* ... existing table code ... */}
+            <div className="bg-slate-900/40 border border-indigo-500/20 rounded-[3rem] overflow-hidden backdrop-blur-sm mb-6">
+              <div className="p-8 border-b border-indigo-500/10 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-indigo-500/10 rounded-2xl">
+                    <Clock className="w-6 h-6 text-indigo-400" />
+                  </div>
+                  <h3 className="text-xl font-bold text-white">委託中訂單 (Pending)</h3>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="bg-slate-800/20 border-b border-slate-800">
+                      <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">標的</th>
+                      <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">模式</th>
+                      <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">動作</th>
+                      <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">數量</th>
+                      <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">委託價</th>
+                      <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">狀態</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/50">
+                    {pending.map((o, i) => (
+                      <tr key={i} className="hover:bg-slate-800/30 transition-colors">
+                        <td className="px-8 py-6 font-bold text-white font-inter">{o.symbol}</td>
+                        <td className="px-8 py-6">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-black ${
+                            o.is_simulation ? 'bg-amber-500/10 text-amber-500' : 'bg-rose-500/10 text-rose-500'
+                          }`}>
+                            {o.is_simulation ? '模擬' : '實盤'}
+                          </span>
+                        </td>
+                        <td className="px-8 py-6">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-black ${
+                            o.action === 'Buy' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'
+                          }`}>
+                            {o.action === 'Buy' ? '買入' : '賣出'}
+                          </span>
+                        </td>
+                        <td className="px-8 py-6 text-right font-inter font-bold text-slate-300">{o.qty.toLocaleString()}</td>
+                        <td className="px-8 py-6 text-right font-inter font-bold text-slate-400">${o.price.toLocaleString()}</td>
+                        <td className="px-8 py-6 text-right">
+                          <span className="flex items-center justify-end gap-2 text-[10px] font-black text-amber-500">
+                            <div className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse" />
+                            委託中
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 
@@ -261,7 +311,7 @@ const TradingControl = () => {
                            <span className={`px-2 py-0.5 rounded text-[10px] font-black ${
                              pos.is_simulation ? 'bg-amber-500/10 text-amber-500' : 'bg-rose-500/10 text-rose-500'
                            }`}>
-                             {pos.is_simulation ? 'SIM' : 'LIVE'}
+                             {pos.is_simulation ? '模擬' : '實盤'}
                            </span>
                         </td>
                         <td className="px-8 py-6 text-right font-inter font-bold text-slate-300">{pos.qty.toLocaleString()}</td>
@@ -298,6 +348,7 @@ const TradingControl = () => {
                 <tr className="bg-slate-800/20 border-b border-slate-800">
                   <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">時間</th>
                   <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">標的</th>
+                  <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">模式</th>
                   <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">動作</th>
                   <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">數量/價格</th>
                   <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">實現損益</th>
@@ -308,6 +359,13 @@ const TradingControl = () => {
                   <tr key={i} className="hover:bg-slate-800/30 transition-colors">
                     <td className="px-8 py-6 text-xs text-slate-500 font-inter">{h.timestamp?.split('T')[0] || '-'}</td>
                     <td className="px-8 py-6 font-bold text-white font-inter">{h.symbol}</td>
+                    <td className="px-8 py-6">
+                      <span className={`px-2 py-0.5 rounded text-[9px] font-black ${
+                        h.is_simulation ? 'bg-amber-500/10 text-amber-500' : 'bg-rose-500/10 text-rose-500'
+                      }`}>
+                        {h.is_simulation ? '模擬' : '實盤'}
+                      </span>
+                    </td>
                     <td className="px-8 py-6">
                       <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
                         h.action === 'Buy' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'
@@ -325,7 +383,7 @@ const TradingControl = () => {
                     </td>
                   </tr>
                 )) : (
-                  <tr><td colSpan="5" className="px-8 py-32 text-center opacity-30 text-xl font-bold">目前無成交紀錄</td></tr>
+                  <tr><td colSpan="6" className="px-8 py-32 text-center opacity-30 text-xl font-bold">目前無成交紀錄</td></tr>
                 )}
               </tbody>
             </table>
