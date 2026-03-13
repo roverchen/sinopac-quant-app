@@ -16,17 +16,17 @@ class OrderRequest(BaseModel):
 
 @router.get("/status")
 async def get_trading_status(current_user: str = Depends(get_current_user)):
-    """查詢自動交易開關狀態"""
+    """Check auto-trade status"""
     creds = get_user_credentials(current_user)
     return {
         "auto_trade_enabled": creds.get("auto_trade_enabled", False),
         "mode": "Simulation" if creds.get("simulation_mode", True) else "Live",
-        "backend_version": "1.0.2"
+        "backend_version": "1.2.2"
     }
 
 @router.post("/toggle")
 async def toggle_auto_trade(enabled: bool, current_user: str = Depends(get_current_user)):
-    """開啟或關閉自動交易"""
+    """Toggle auto-trade on/off"""
     creds = get_user_credentials(current_user)
     creds["auto_trade_enabled"] = enabled
     update_user_credentials(current_user, creds)
@@ -34,23 +34,23 @@ async def toggle_auto_trade(enabled: bool, current_user: str = Depends(get_curre
 
 @router.get("/account")
 async def get_account_summary(user_id: Optional[str] = None, current_user: str = Depends(get_current_user)):
-    """取得庫存與資金概況"""
+    """Get account summary and positions"""
     target_user = user_id if user_id else current_user
     info = ShioajiService.get_account_info(target_user)
     if not info:
-        return {"status": "disconnected", "message": "API Key 未設定或連線失敗"}
+        return {"status": "disconnected", "message": "API Key not set or connection failed"}
 
     positions = ShioajiService.get_positions(target_user)
 
     return {
         "status": "connected",
-        "balance": 1000000,
+        "balance": ShioajiService.get_balance(target_user),
         "positions": positions
     }
 
 @router.get("/pending")
 async def get_pending_orders(user_id: Optional[str] = None, current_user: str = Depends(get_current_user)):
-    """取得待成交訂單"""
+    """Get pending orders"""
     from api.services.storage_service import get_user_pending_orders
     target_user = user_id if user_id else current_user
     pending = get_user_pending_orders(target_user)
@@ -58,7 +58,7 @@ async def get_pending_orders(user_id: Optional[str] = None, current_user: str = 
 
 @router.get("/history")
 async def get_trade_history(user_id: Optional[str] = None, current_user: str = Depends(get_current_user)):
-    """取得交易歷史紀錄"""
+    """Get trade history"""
     from api.services.storage_service import get_user_trade_history
     target_user = user_id if user_id else current_user
     history = get_user_trade_history(target_user)
@@ -66,13 +66,12 @@ async def get_trade_history(user_id: Optional[str] = None, current_user: str = D
 
 @router.get("/summary")
 async def get_performance_summary(user_id: Optional[str] = None, current_user: str = Depends(get_current_user)):
-    """取得投資績效總計 (P/L)"""
+    """Get portfolio performance summary (P/L)"""
     from api.services.storage_service import get_user_trade_history
     target_user = user_id if user_id else current_user
     positions = ShioajiService.get_positions(target_user)
     history = get_user_trade_history(target_user)
 
-    # 系統機器人歷史皆視為模擬
     realized_mock = sum(item.get('realized_pnl', 0) for item in history if item.get('is_simulation') or target_user == "system_auto")
     realized_live = sum(item.get('realized_pnl', 0) for item in history if not item.get('is_simulation') and target_user != "system_auto")
 
@@ -80,8 +79,6 @@ async def get_performance_summary(user_id: Optional[str] = None, current_user: s
     unrealized_live = 0.0
 
     for pos in positions:
-        # P/L 試算是在 get_positions 中注入的
-        # pos['pnl_percent'] 是百分比，我們需要絕對值
         current = pos.get('current_price', 0)
         buy = pos.get('buy_price', 0)
         qty = pos.get('qty', 0)
@@ -97,19 +94,19 @@ async def get_performance_summary(user_id: Optional[str] = None, current_user: s
             "realized": round(realized_mock, 2),
             "unrealized": round(unrealized_mock, 2),
             "total": round(realized_mock + unrealized_mock, 2),
-            "return_rate": round((realized_mock + unrealized_mock) / 1000000 * 100, 2) if realized_mock + unrealized_mock != 0 else 0
+            "return_rate": round((realized_mock + unrealized_mock) / 1000000 * 100, 2) if (realized_mock + unrealized_mock) != 0 else 0
         },
         "live": {
             "realized": round(realized_live, 2),
             "unrealized": round(unrealized_live, 2),
             "total": round(realized_live + unrealized_live, 2),
-            "return_rate": 0 # 實盤回報率需根據實際本金計算
+            "return_rate": 0 
         }
     }
 
 @router.post("/order")
 async def place_manual_order(order: OrderRequest, current_user: str = Depends(get_current_user)):
-    """手動下單介面"""
+    """Place manual order"""
     try:
         from shioaji.constant import Action
         action = Action.Buy if order.action == "Buy" else Action.Sell
@@ -128,28 +125,18 @@ async def place_manual_order(order: OrderRequest, current_user: str = Depends(ge
 
 @router.get("/orders")
 async def get_orders(current_user: str = Depends(get_current_user)):
-    """取得委託紀錄"""
+    """Get broker order records"""
     orders = ShioajiService.get_orders(current_user)
     return {"orders": orders}
+
 @router.get("/balance")
 async def get_combined_balance(current_user: str = Depends(get_current_user)):
-    """取得綜合帳戶餘額 (永豐 + MAX)"""
+    """Get combined balance (Sinopac + MAX)"""
     from api.services.storage_service import get_user_credentials
     from max_api import MaxExchangeAPI
 
-    # 永豐餘額
-    shioaji_bal = 1000000.0 # 預設模擬本金
-    try:
-        api = ShioajiService.get_api_client(current_user)
-        if api and not hasattr(api, 'is_mock'):
-            accs = api.list_accounts()
-            if accs:
-                # 實務上需要查詢交割銀行餘額，這裡先用模擬
-                shioaji_bal = 1000000.0
-    except:
-        pass
+    shioaji_bal = ShioajiService.get_balance(current_user)
 
-    # MAX 餘額
     max_bal = {"total_twd": 0.0, "details": {}}
     try:
         creds = get_user_credentials(current_user)
@@ -162,7 +149,7 @@ async def get_combined_balance(current_user: str = Depends(get_current_user)):
                 max_bal = {
                     "twd": round(twd, 2),
                     "usdt": round(usdt, 2),
-                    "total_twd_estimate": round(twd + (usdt * 32), 2) # 簡化匯率
+                    "total_twd_estimate": round(twd + (usdt * 32), 2)
                 }
     except:
         pass

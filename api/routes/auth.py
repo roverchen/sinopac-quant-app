@@ -20,7 +20,7 @@ async def get_current_user(auth: HTTPAuthorizationCredentials = Security(securit
 @router.post("/login", response_model=Token)
 async def login(request: AuthRequest):
     try:
-        # 驗證 Google Token
+        # Verify Google Token
         idinfo = id_token.verify_oauth2_token(
             request.credential, requests.Request(), GOOGLE_CLIENT_ID
         )
@@ -30,7 +30,7 @@ async def login(request: AuthRequest):
     except ValueError as e:
         raise HTTPException(status_code=401, detail=f"Google token verification failed: {e}")
 
-    # 確認是否為首次登入 (或載入既有憑證)
+    # Initialize or load credentials
     stored_creds = load_credentials(user_id)
     if stored_creds is None or stored_creds == {}:
         save_credentials(user_id, {})
@@ -45,6 +45,5 @@ async def get_me(user_id: str = Depends(get_current_user)):
 
 @router.post("/credentials")
 async def update_credentials(update: UserCredentialsUpdate, user_id: str = Depends(get_current_user)):
-    # 直接更新 Firestore
     save_credentials(user_id, update.creds)
     return {"status": "success", "message": "Credentials updated"}

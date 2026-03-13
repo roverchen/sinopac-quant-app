@@ -29,7 +29,7 @@ COPY --from=build-stage /app/web/dist ./static
 
 # 設定環境變數
 ENV PORT=8080
-ENV GOOGLE_CLOUD_PROJECT=sinopac-quant-app
+# ENV GOOGLE_CLOUD_PROJECT=sinopac-quant-app
 
 # 啟動命令
 # 使用 uvicorn 啟動 FastAPI，並將埠號與環境變數對接

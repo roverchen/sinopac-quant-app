@@ -10,7 +10,7 @@ from api.config import PROJECT_ID, CACHE_DIR, SYNC_DIR
 os.makedirs(CACHE_DIR, exist_ok=True)
 os.makedirs(SYNC_DIR, exist_ok=True)
 
-# 延遲初始化 Firestore 用戶端
+# Delayed initialization of Firestore client
 _db = None
 def get_db():
     global _db
@@ -22,7 +22,7 @@ def get_db():
             print(f"[Storage] Firestore client failed: {e}")
     return _db
 
-# 延遲初始化 GCS 用戶端
+# Delayed initialization of GCS client
 _gcs = None
 def get_gcs():
     global _gcs
@@ -35,7 +35,7 @@ def get_gcs():
     return _gcs
 
 def update_user_credentials(user_id, creds):
-    """保存憑證：優先使用 Firestore，失敗則存入本地 JSON"""
+    # Save credentials: Prioritize Firestore, fallback to local JSON
     db = get_db()
     if db:
         try:
@@ -44,7 +44,7 @@ def update_user_credentials(user_id, creds):
         except Exception as e:
             print(f"Firestore save error: {e}")
 
-    # 本地備援
+    # Local fallback
     try:
         os.makedirs(CACHE_DIR, exist_ok=True)
         path = os.path.join(CACHE_DIR, f"creds_{user_id}.json")
@@ -55,7 +55,7 @@ def update_user_credentials(user_id, creds):
     return True
 
 def get_user_credentials(user_id):
-    """加載憑證：優先從 Firestore 讀取。"""
+    # Load credentials: Prioritize Firestore
     db = get_db()
     creds = {}
     if db:
@@ -84,7 +84,7 @@ load_credentials = get_user_credentials
 save_credentials = update_user_credentials
 
 def save_user_watchlist(user_id, market, watchlist):
-    """保存使用者追蹤清單"""
+    # Save user watchlist
     db = get_db()
     if db:
         try:
@@ -102,7 +102,7 @@ def save_user_watchlist(user_id, market, watchlist):
     return True
 
 def get_user_watchlist(user_id, market):
-    """取得使用者追蹤清單"""
+    # Retrieve user watchlist
     db = get_db()
     if db:
         try:
@@ -163,7 +163,7 @@ def get_user_mock_positions(user_id):
     return [{"symbol": "2330", "qty": 1000, "buy_price": 1025.0, "market": "TW", "is_simulation": True}]
 
 def get_all_users_with_pending() -> List[str]:
-    """Retrieve a list of all user IDs that have pending orders."""
+    # Retrieve a list of all user IDs that have pending orders
     users = []
     # Local scan
     if os.path.exists(CACHE_DIR):
@@ -172,11 +172,10 @@ def get_all_users_with_pending() -> List[str]:
                 user_id = filename.replace("pending_orders_", "").replace(".json", "")
                 if user_id:
                     users.append(user_id)
-    # Firestore scan (optional, if we want to be thorough)
+    # Firestore scan
     db = get_db()
     if db:
         try:
-            # This is slow but thorough for small datasets
             docs = db.collection("users").stream()
             for doc in docs:
                 if doc.to_dict().get("pending_orders"):

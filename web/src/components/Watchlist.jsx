@@ -71,7 +71,7 @@ const Watchlist = () => {
         if (search) {
           const q = search.toUpperCase();
           sortedData = sortedData.filter(item => 
-            item.代碼.toUpperCase().includes(q) || item.名稱.toUpperCase().includes(q)
+            item.symbol.toUpperCase().includes(q) || item.name.toUpperCase().includes(q)
           );
         }
         
@@ -147,25 +147,25 @@ const Watchlist = () => {
   }, [marketType, page]);
 
   const filteredData = data.filter(item => 
-    item.代碼.toLowerCase().includes(search.toLowerCase()) ||
-    item.名稱.toLowerCase().includes(search.toLowerCase())
+    item.symbol.toLowerCase().includes(search.toLowerCase()) ||
+    item.name.toLowerCase().includes(search.toLowerCase())
   );
 
   const handleRowClick = async (stock) => {
     setSelectedStock(stock);
-    const m = stock.市場 || marketType;
+    const m = stock.market || marketType;
     if (m === 'TW') setQty(1000);
     else if (m === 'US') setQty(10);
     else if (m === 'CRYPTO') setQty(0.1);
     else setQty(1);
     
-    setPrice(stock.最新價格); // 初始化委託價格
+    setPrice(stock.price); // Initialize limit price
     setIsModalOpen(true);
     
     // 異步抓取歷史資料
     setIsChartLoading(true);
     try {
-      const hist = await quantService.getHistory(stock.代碼, m);
+      const hist = await quantService.getHistory(stock.symbol, m);
       setHistory(hist);
     } catch (err) {
       console.error("Failed to load history", err);
@@ -176,15 +176,15 @@ const Watchlist = () => {
   };
 
   const handleToggleWatchlist = async () => {
-    const isTracked = trackedSymbols.includes(selectedStock.代碼);
-    const m = selectedStock.市場 || marketType;
+    const isTracked = trackedSymbols.includes(selectedStock.symbol);
+    const m = selectedStock.market || marketType;
     try {
       if (isTracked) {
-        if (!window.confirm(`確定要將 ${selectedStock.代碼} 從追蹤清單移除嗎？`)) return;
-        await quantService.removeFromWatchlist(selectedStock.代碼, m);
+        if (!window.confirm(`確定要將 ${selectedStock.symbol} 從追蹤清單移除嗎？`)) return;
+        await quantService.removeFromWatchlist(selectedStock.symbol, m);
       } else {
-        await quantService.addToWatchlist(selectedStock.代碼, m);
-        alert(`已將 ${selectedStock.代碼} 加入追蹤清單`);
+        await quantService.addToWatchlist(selectedStock.symbol, m);
+        alert(`已將 ${selectedStock.symbol} 加入追蹤清單`);
       }
       fetchData(); // 重新整理列表與狀態
     } catch (err) {
@@ -197,7 +197,7 @@ const Watchlist = () => {
     try {
       const { tradeService } = await import('../services/api');
       const resp = await tradeService.placeOrder({
-        symbol: selectedStock.代碼,
+        symbol: selectedStock.symbol,
         qty: parseFloat(qty),
         price: parseFloat(price),
         action: "Buy",
@@ -213,9 +213,9 @@ const Watchlist = () => {
   };
 
   const handleDelete = async () => {
-    if (!window.confirm(`確定要將 ${selectedStock.代碼} 從追蹤清單移除嗎？`)) return;
+    if (!window.confirm(`確定要將 ${selectedStock.symbol} 從追蹤清單移除嗎？`)) return;
     try {
-      await quantService.removeFromWatchlist(selectedStock.代碼, selectedStock.市場 || marketType);
+      await quantService.removeFromWatchlist(selectedStock.symbol, selectedStock.market || marketType);
       setIsModalOpen(false);
       fetchData();
     } catch (err) {
@@ -323,7 +323,7 @@ const Watchlist = () => {
             <tbody className="divide-y divide-slate-800/50">
               {filteredData.map((item, idx) => (
                 <motion.tr 
-                  key={`${item.代碼}-${item.市場}`}
+                  key={`${item.symbol}-${item.market}`}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: idx * 0.02 }}
@@ -332,51 +332,51 @@ const Watchlist = () => {
                 >
                   <td className="px-6 py-5">
                     <div className="flex flex-col">
-                      <span className="font-bold text-slate-100 font-inter text-base">{item.代碼}</span>
-                      <span className="text-xs text-slate-500 font-medium truncate max-w-[120px]">{item.名稱}</span>
+                      <span className="font-bold text-slate-100 font-inter text-base">{item.symbol}</span>
+                      <span className="text-xs text-slate-500 font-medium truncate max-w-[120px]">{item.name}</span>
                     </div>
                   </td>
                   <td className="px-6 py-5">
                     <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
-                      item.市場 === 'TW' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
-                      item.市場 === 'US' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
+                      item.market === 'TW' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+                      item.market === 'US' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
                       'bg-amber-500/10 text-amber-500 border-amber-500/20'
                     }`}>
-                      {item.市場}
+                      {item.market}
                     </span>
                   </td>
                   <td className="px-6 py-5 font-inter text-indigo-400 font-bold text-lg">
-                    {item.最新價格.toLocaleString(undefined, { minimumFractionDigits: item.市場 === 'CRYPTO' ? 2 : (item.最新價格 < 10 ? 2 : 1) })}
+                    {item.price.toLocaleString(undefined, { minimumFractionDigits: item.market === 'CRYPTO' ? 2 : (item.price < 10 ? 2 : 1) })}
                   </td>
                   <td className="px-6 py-5">
                     <div className="flex items-center gap-3 justify-center">
                       <div className="w-20 h-1.5 bg-slate-800 rounded-full overflow-hidden">
                         <div 
                           className="h-full bg-gradient-to-r from-indigo-500 to-purple-500"
-                          style={{ width: item.一年位階 }}
+                          style={{ width: item.level }}
                         ></div>
                       </div>
-                      <span className="text-xs text-slate-500 font-inter w-10">{item.一年位階}</span>
+                      <span className="text-xs text-slate-500 font-inter w-10">{item.level}</span>
                     </div>
                   </td>
                   <td className="px-6 py-5">
                     <span className={`text-[10px] px-2 py-1 rounded-md font-bold uppercase ${
-                      item.MACD狀態.includes('🚀') ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 
-                      item.MACD狀態.includes('🔴') ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' : 'bg-slate-800 text-slate-500'
+                      item.macd_status.includes('Bullish') ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 
+                      item.macd_status.includes('Bearish') ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' : 'bg-slate-800 text-slate-500'
                     }`}>
-                      {item.MACD狀態}
+                      {item.macd_status}
                     </span>
                   </td>
                   <td className="px-6 py-5 text-center">
                     <div className={`inline-flex items-center justify-center w-10 h-10 rounded-full font-inter font-black text-sm border-2 ${
-                      item.綜合評分 >= 80 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 
-                      item.綜合評分 >= 60 ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' : 'bg-slate-800/50 text-slate-500 border-transparent'
+                      item.score >= 80 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 
+                      item.score >= 60 ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' : 'bg-slate-800/50 text-slate-500 border-transparent'
                     }`}>
-                      {item.綜合評分}
+                      {item.score}
                     </div>
                   </td>
                   <td className="px-6 py-5">
-                    <p className="text-xs text-slate-400 leading-relaxed max-w-xs font-medium">{item.操作建議}</p>
+                    <p className="text-xs text-slate-400 leading-relaxed max-w-xs font-medium">{item.suggestion}</p>
                   </td>
                 </motion.tr>
               ))}
@@ -430,13 +430,13 @@ const Watchlist = () => {
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden"
+              className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
             >
-              <div className="p-8 space-y-6">
+              <div className="overflow-y-auto p-8 space-y-6 custom-scrollbar">
                 <div className="flex justify-between items-start">
                   <div>
-                    <h3 className="text-2xl font-black text-white">{selectedStock.名稱}</h3>
-                    <p className="text-slate-400 font-mono text-sm">{selectedStock.代碼}</p>
+                    <h3 className="text-2xl font-black text-white">{selectedStock.name}</h3>
+                    <p className="text-slate-400 font-mono text-sm">{selectedStock.symbol}</p>
                   </div>
                   <button onClick={() => setIsModalOpen(false)} className="text-slate-500 hover:text-white transition-colors">
                     <X className="w-6 h-6" />
@@ -448,14 +448,14 @@ const Watchlist = () => {
                   <div className="space-y-1">
                     <p className="text-xs text-slate-500 font-bold uppercase">最新價格</p>
                     <p className="text-3xl font-black text-indigo-400 font-inter">
-                      ${selectedStock.最新價格.toLocaleString(undefined, { minimumFractionDigits: selectedStock.市場 === 'CRYPTO' ? 2 : 1 })}
+                      ${selectedStock.price.toLocaleString(undefined, { minimumFractionDigits: selectedStock.market === 'CRYPTO' ? 2 : 1 })}
                     </p>
                   </div>
                   <div className="text-right">
                     <span className={`text-xs px-2 py-1 rounded-md font-bold ${
-                      selectedStock.綜合評分 >= 80 ? 'text-emerald-400 bg-emerald-500/10' : 'text-indigo-400 bg-indigo-500/10'
+                      selectedStock.score >= 80 ? 'text-emerald-400 bg-emerald-500/10' : 'text-indigo-400 bg-indigo-500/10'
                     }`}>
-                      評分: {selectedStock.綜合評分}
+                      評分: {selectedStock.score}
                     </span>
                   </div>
                 </div>
@@ -518,10 +518,10 @@ const Watchlist = () => {
                   <button 
                     onClick={handleToggleWatchlist}
                     className={`flex items-center gap-2 text-sm font-bold transition-colors ${
-                      trackedSymbols.includes(selectedStock.代碼) ? 'text-rose-500 hover:text-rose-400' : 'text-indigo-400 hover:text-indigo-300'
+                      trackedSymbols.includes(selectedStock.symbol) ? 'text-rose-500 hover:text-rose-400' : 'text-indigo-400 hover:text-indigo-300'
                     }`}
                   >
-                    {trackedSymbols.includes(selectedStock.代碼) ? (
+                    {trackedSymbols.includes(selectedStock.symbol) ? (
                       <><Minus className="w-4 h-4" /> 移出追蹤清單</>
                     ) : (
                       <><Plus className="w-4 h-4" /> 加入追蹤清單</>

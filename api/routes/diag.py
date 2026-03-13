@@ -6,7 +6,7 @@ from api.routes.auth import get_current_user
 
 router = APIRouter(prefix="/diag", tags=["diagnostics"])
 
-# 全域日誌緩衝區
+# Global log buffer
 MAX_LOGS = 50
 log_buffer: List[Dict] = []
 
@@ -25,19 +25,18 @@ class DiagnosticHandler(logging.Handler):
         except Exception:
             pass
 
-# 註冊日誌處理器
+# Register log handler
 root_logger = logging.getLogger()
 handler = DiagnosticHandler()
-handler.setLevel(logging.WARNING) # 只記錄警告與錯誤
+handler.setLevel(logging.WARNING) 
 root_logger.addHandler(handler)
 
 @router.get("/logs")
 async def get_logs(current_user: str = Depends(get_current_user)):
-    """取得最近的系統日誌 (需要權限)"""
     return {
         "logs": log_buffer,
         "system_info": {
-            "version": "v2.0.6",
+            "version": "v1.2.6",
             "environment": "production",
             "status": "healthy" if not any(l["level"] == "ERROR" for l in log_buffer) else "warning"
         }
@@ -45,6 +44,5 @@ async def get_logs(current_user: str = Depends(get_current_user)):
 
 @router.post("/clear")
 async def clear_logs(current_user: str = Depends(get_current_user)):
-    """清空日誌緩衝區"""
     log_buffer.clear()
     return {"status": "success"}

@@ -4,8 +4,15 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Google Cloud Project Config
-PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT", "sinopac-quant-app")
-FIRESTORE_DB = DEFAULT = "(default)"
+PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT")
+if not PROJECT_ID:
+    try:
+        import google.auth
+        _, PROJECT_ID = google.auth.default()
+    except:
+        PROJECT_ID = "sinopac-quant-app"
+
+FIRESTORE_DB = "(default)"
 
 # Broker API Config
 SHIOAJI_API_KEY = os.getenv("SHIOAJI_API_KEY")

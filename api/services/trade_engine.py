@@ -39,11 +39,9 @@ class MatchingEngine:
             time.sleep(self.interval)
 
     def _process_all_users(self):
-        # Dynamically find all users who have pending orders to check
         from api.services.storage_service import get_all_users_with_pending
         active_users = get_all_users_with_pending()
         
-        # Ensure system_auto is always checked if not in list
         if 'system_auto' not in active_users:
             active_users.append('system_auto')
             
@@ -55,14 +53,10 @@ class MatchingEngine:
         if not pending:
             return
 
-        filled_indices = []
         new_pending = []
-
-        # Batch symbols to fetch latest prices
         symbols = list(set([o['symbol'] for o in pending]))
         tickers = {s: get_yahoo_ticker(s, next(o['market'] for o in pending if o['symbol'] == s)) for s in symbols}
 
-        # Fetch current prices for simulation orders
         prices = {}
         has_sim = any(o.get('is_simulation', True) for o in pending)
         if has_sim:
@@ -74,7 +68,6 @@ class MatchingEngine:
                 except:
                     continue
 
-        # Get API client for live order status checking
         api = None
         has_live = any(not o.get('is_simulation', True) for o in pending)
         if has_live:
@@ -89,25 +82,19 @@ class MatchingEngine:
         for order in pending:
             symbol = order['symbol']
             limit_price = order.get('price')
-            action = order['action'] # 'Buy' or 'Sell'
+            action = order['action']
             current_price = prices.get(symbol)
-
-            if current_price is None:
-                new_pending.append(order)
-                continue
 
             is_matched = False
             is_simulation = order.get('is_simulation', True)
 
             if is_simulation:
-                # Simulation Logic: Match based on price
                 if current_price is not None:
                     if action == 'Buy' and current_price <= limit_price:
                         is_matched = True
                     elif action == 'Sell' and current_price >= limit_price:
                         is_matched = True
             else:
-                # Live Logic: Poll broker API status
                 if api and not hasattr(api, 'is_mock'):
                     try:
                         trades = api.list_trades()
@@ -115,7 +102,6 @@ class MatchingEngine:
                         match = next((t for t in trades if str(t.order.id) == trade_id), None)
                         if match and str(match.status.status) == "Filled":
                             is_matched = True
-                            # For live, we use the actual fill price from the API if possible
                             if hasattr(match.status, 'filled_avg_price') and match.status.filled_avg_price:
                                 current_price = float(match.status.filled_avg_price)
                             print(f"[TradeEngine] LIVE Order FILLED for {user_id}: {symbol}")
@@ -132,7 +118,6 @@ class MatchingEngine:
             save_user_pending_orders(user_id, new_pending)
 
     def _execute_fill(self, user_id, order, fill_price):
-        """Execute the actual movement of assets once matched."""
         positions = get_user_mock_positions(user_id)
         history = get_user_trade_history(user_id)
 
@@ -141,14 +126,11 @@ class MatchingEngine:
         qty = order['qty']
         action = order['action']
         market = order['market']
-
         is_simulation = order.get('is_simulation', True)
 
         if action == 'Buy':
-            # Add to positions
             existing = next((p for p in positions if p['symbol'] == symbol), None)
             if existing:
-                # Average down/up
                 total_qty = existing['qty'] + qty
                 avg_price = (existing['buy_price'] * existing['qty'] + fill_price * qty) / total_qty
                 existing['qty'] = total_qty
@@ -162,7 +144,6 @@ class MatchingEngine:
                     "is_simulation": is_simulation
                 })
 
-            # Record history
             history.append({
                 "trade_id": trade_id,
                 "symbol": symbol,
@@ -176,7 +157,6 @@ class MatchingEngine:
             })
 
         elif action == 'Sell':
-            # Remove/Decrease position
             existing = next((p for p in positions if p['symbol'] == symbol), None)
             realized_pl = 0
             if existing:
@@ -186,7 +166,6 @@ class MatchingEngine:
                 else:
                     existing['qty'] -= qty
 
-            # Record history
             history.append({
                 "trade_id": trade_id,
                 "symbol": symbol,
@@ -203,5 +182,4 @@ class MatchingEngine:
         save_user_mock_positions(user_id, positions)
         save_user_trade_history(user_id, history)
 
-# Singleton instance
 engine = MatchingEngine()

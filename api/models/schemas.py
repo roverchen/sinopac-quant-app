@@ -7,16 +7,16 @@ class StockAnalysisRequest(BaseModel):
     market_type: str = "TW"
 
 class AnalysisResult(BaseModel):
-    代碼: str
-    名稱: str
-    市場: Optional[str] = None
-    最新價格: float
-    操作建議: str
-    一年位階: str
-    年線乖離: str
-    MA20乖離: str
-    MACD狀態: str
-    綜合評分: float
+    symbol: str
+    name: str
+    market: Optional[str] = None
+    price: float
+    suggestion: str
+    level: str
+    ma240_diff: str
+    ma20_diff: str
+    macd_status: str
+    score: float
     ma_base: Optional[float] = None
     ma20: Optional[float] = None
     atr: Optional[float] = None
