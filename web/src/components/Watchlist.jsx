@@ -346,8 +346,8 @@ const Watchlist = () => {
                 >
                   <td className="px-6 py-5">
                     <div className="flex flex-col">
-                      <span className="font-bold text-slate-100 font-inter text-base">{item.symbol}</span>
-                      <span className="text-xs text-slate-500 font-medium truncate max-w-[120px]">{item.name}</span>
+                      <span className="font-bold text-slate-100 font-inter text-base group-hover:text-indigo-400 transition-colors leading-tight">{item.symbol}</span>
+                      <span className="text-[10px] text-slate-500 font-bold mt-0.5 line-clamp-1">{item.name}</span>
                     </div>
                   </td>
                   <td className="px-6 py-5">

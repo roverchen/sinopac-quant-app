@@ -278,8 +278,8 @@ const TradingControl = () => {
                   >
                     <td className="px-8 py-6">
                       <div className="flex flex-col">
-                        <span className="text-lg font-black text-white group-hover:text-indigo-400 font-inter">{pos.symbol}</span>
-                        <span className="text-[10px] text-slate-500 font-bold">{pos.name || '-'}</span>
+                        <span className="text-lg font-black text-white group-hover:text-indigo-400 font-inter leading-tight">{pos.symbol}</span>
+                        <span className="text-[10px] text-slate-500 font-bold mt-0.5 line-clamp-1">{pos.name || '-'}</span>
                       </div>
                     </td>
                     <td className="px-8 py-6">
@@ -341,8 +341,8 @@ const TradingControl = () => {
                     <td className="px-8 py-6 text-xs text-slate-500 font-inter">{h.timestamp?.split('T')[0] || '-'}</td>
                     <td className="px-8 py-6">
                       <div className="flex flex-col">
-                        <span className="font-bold text-white font-inter">{h.symbol}</span>
-                        <span className="text-[10px] text-slate-500 font-bold">{h.name || '-'}</span>
+                        <span className="font-bold text-white font-inter leading-tight">{h.symbol}</span>
+                        <span className="text-[10px] text-slate-500 font-bold mt-0.5 line-clamp-1">{h.name || '-'}</span>
                       </div>
                     </td>
                     <td className="px-8 py-6">
