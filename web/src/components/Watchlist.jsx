@@ -129,8 +129,10 @@ const Watchlist = () => {
   };
 
   useEffect(() => {
-    // 切換市場時重置頁碼
+    // 切換市場時重置頁碼並立即清除當前資料，防止閃爍舊資料
+    setData([]);
     setPage(1);
+    fetchData();
   }, [marketType]);
 
   // 搜尋防抖處理
@@ -511,8 +513,8 @@ const Watchlist = () => {
                   </button>
                   <button 
                     onClick={() => handleOrder(false)}
-                    disabled={orderLoading}
-                    className="py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-bold transition-all shadow-lg shadow-indigo-600/20 disabled:opacity-50"
+                    disabled={orderLoading || (selectedStock?.market !== 'TW' && selectedStock?.market !== 'TSE' && selectedStock?.market !== 'OTC')}
+                    className="py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-bold transition-all shadow-lg shadow-indigo-600/20 disabled:opacity-30 disabled:cursor-not-allowed"
                   >
                     實盤交易
                   </button>

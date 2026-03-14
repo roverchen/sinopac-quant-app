@@ -83,49 +83,81 @@ def get_user_credentials(user_id):
 load_credentials = get_user_credentials
 save_credentials = update_user_credentials
 
-def save_user_watchlist(user_id, market, watchlist):
-    # Save user watchlist
+def save_user_watchlist(user_id, watchlist):
+    """
+    Save unified watchlist. 
+    Format: list of strings "MARKET:SYMBOL" (e.g., "TW:2330")
+    """
     db = get_db()
     if db:
         try:
-            db.collection("users").document(user_id).set({f"watchlist_{market}": watchlist}, merge=True)
+            db.collection("users").document(user_id).set({"watchlist": watchlist}, merge=True)
             return True
         except Exception as e:
             print(f"Firestore save watchlist error: {e}")
 
     try:
-        path = os.path.join(CACHE_DIR, f"watchlist_{market}_{user_id}.json")
+        path = os.path.join(CACHE_DIR, f"watchlist_{user_id}.json")
         with open(path, "w", encoding="utf-8") as f:
             json.dump(watchlist, f, ensure_ascii=False)
     except Exception as e:
         print(f"[Storage] Local watchlist save failed: {e}")
     return True
 
-def get_user_watchlist(user_id, market):
-    # Retrieve user watchlist
+def get_user_watchlist(user_id):
+    """
+    Retrieve unified watchlist. Performs lazy migration if needed.
+    """
     db = get_db()
+    watchlist = None
+    
     if db:
         try:
             doc = db.collection("users").document(user_id).get()
             if doc.exists:
-                return doc.to_dict().get(f"watchlist_{market}", [])
+                data = doc.to_dict()
+                watchlist = data.get("watchlist")
+                
+                # Lazy migration from old fields
+                if watchlist is None:
+                    tw = data.get("watchlist_TW", [])
+                    us = data.get("watchlist_US", [])
+                    crypto = data.get("watchlist_CRYPTO", [])
+                    if tw or us or crypto:
+                        watchlist = []
+                        for s in tw: watchlist.append(f"TW:{s}")
+                        for s in us: watchlist.append(f"US:{s}")
+                        for s in crypto: watchlist.append(f"CRYPTO:{s}")
+                        # Save back the migrated version
+                        save_user_watchlist(user_id, watchlist)
         except Exception as e:
             print(f"Firestore load watchlist error: {e}")
     
-    path = os.path.join(CACHE_DIR, f"watchlist_{market}_{user_id}.json")
+    if watchlist is not None:
+        return watchlist
+
+    # Local fallback
+    path = os.path.join(CACHE_DIR, f"watchlist_{user_id}.json")
     if os.path.exists(path):
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
+            
+    # Default initial list
+    return ["TW:2330", "TW:2317", "US:AAPL", "US:NVDA", "CRYPTO:BTC-USD"]
 
-    if market == "TW": return ["2330", "2317", "0050"]
-    if market == "CRYPTO": return ["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "DOGE-USD"]
-    return ["AAPL", "MSFT", "NVDA"]
+def get_user_watchlist_filtered(user_id, market):
+    """Helper to get only symbols for a specific market from unified list"""
+    full = get_user_watchlist(user_id)
+    if market == "ALL":
+        return [s.split(":", 1)[1] for s in full if ":" in s]
+    return [s.split(":", 1)[1] for s in full if s.startswith(f"{market}:")]
 
 def get_all_user_watchlists(user_id):
+    full = get_user_watchlist(user_id)
     return {
-        "TW": get_user_watchlist(user_id, "TW"),
-        "US": get_user_watchlist(user_id, "US"),
-        "CRYPTO": get_user_watchlist(user_id, "CRYPTO")
+        "TW": [s.split(":", 1)[1] for s in full if s.startswith("TW:")],
+        "US": [s.split(":", 1)[1] for s in full if s.startswith("US:")],
+        "CRYPTO": [s.split(":", 1)[1] for s in full if s.startswith("CRYPTO:")]
     }
 
 def save_user_mock_positions(user_id, positions):

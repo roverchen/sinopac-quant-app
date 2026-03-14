@@ -26,15 +26,8 @@ async def get_scan_progress():
 async def analyze_watchlist(request: StockAnalysisRequest, current_user: str = Depends(get_current_user)):
     results = []
     if not request.watchlist:
-        from api.services.storage_service import get_user_watchlist
-        if request.market_type == "ALL":
-            # Merge all available watchlists
-            tw = get_user_watchlist(current_user, "TW")
-            us = get_user_watchlist(current_user, "US")
-            crypto = get_user_watchlist(current_user, "CRYPTO")
-            watchlist = list(set(tw + us + crypto))
-        else:
-            watchlist = get_user_watchlist(current_user, request.market_type)
+        from api.services.storage_service import get_user_watchlist_filtered
+        watchlist = get_user_watchlist_filtered(current_user, request.market_type)
     else:
         watchlist = request.watchlist
 
@@ -102,21 +95,33 @@ async def get_market_results(
         )
 
     all_results = pool.get("results", [])
-    if defense_weight is not None:
-        dfs = pool.get("dfs", {})
-        new_results = []
-        for r in all_results:
-            code = getattr(r, 'symbol', None)
-            df = dfs.get(code)
-            if df is not None:
-                name = getattr(r, 'name', 'Unknown')
-                analysis = analyze_stock(df, code, name, defense_weight, market_type)
-                new_results.append(AnalysisResult(**analysis))
-            else:
-                new_results.append(r)
-        all_results = new_results
-
-    all_results = sorted(all_results, key=lambda x: x.score, reverse=True)
+    
+    # Optimization: Only re-score if weight is actually different from default (0.5) 
+    # Or if we want to support dynamic rescanning without full re-calculation.
+    if defense_weight is not None and abs(defense_weight - 0.5) > 0.001:
+        # Check if we already have this weight in cache to avoid CPU spike
+        cache_key = f"res_{market_type}_{defense_weight}"
+        from api.services.quant_service import results_cache
+        if results_cache.get(cache_key):
+             all_results = results_cache[cache_key]
+        else:
+            from api.services.quant_service import analyze_stock
+            dfs = pool.get("dfs", {})
+            new_results = []
+            for r in all_results:
+                code = getattr(r, 'symbol', r.get('symbol') if isinstance(r, dict) else None)
+                df = dfs.get(code)
+                if df is not None:
+                    name = getattr(r, 'name', r.get('name', 'Unknown') if isinstance(r, dict) else 'Unknown')
+                    analysis = analyze_stock(df, code, name, defense_weight, market_type)
+                    new_results.append(AnalysisResult(**analysis))
+                else:
+                    new_results.append(r)
+            all_results = new_results
+            # Cache for a short while or until next scan
+            results_cache[cache_key] = all_results
+    
+    all_results = sorted(all_results, key=lambda x: x.score if hasattr(x, 'score') else (x.get('score', 0) if isinstance(x, dict) else 0), reverse=True)
     for r in all_results:
         if hasattr(r, 'market') and not r.market:
             r.market = market_type
@@ -140,25 +145,30 @@ async def get_market_results(
 
 @router.get("/watchlist")
 async def get_watchlist_api(market_type: str = "TW", current_user: str = Depends(get_current_user)):
+    from api.services.storage_service import get_user_watchlist_filtered, get_all_user_watchlists
     if market_type == "ALL": return get_all_user_watchlists(current_user)
-    watchlist = get_user_watchlist(current_user, market_type)
+    watchlist = get_user_watchlist_filtered(current_user, market_type)
     return {"watchlist": watchlist}
 
 @router.post("/watchlist")
 async def add_to_watchlist_api(symbol: str, market_type: str = "TW", current_user: str = Depends(get_current_user)):
-    watchlist = get_user_watchlist(current_user, market_type)
-    if symbol not in watchlist:
-        watchlist.append(symbol)
-        save_user_watchlist(current_user, market_type, watchlist)
-    return {"status": "success", "watchlist": watchlist}
+    from api.services.storage_service import get_user_watchlist, save_user_watchlist
+    watchlist = get_user_watchlist(current_user)
+    entry = f"{market_type}:{symbol}"
+    if entry not in watchlist:
+        watchlist.append(entry)
+        save_user_watchlist(current_user, watchlist)
+    return {"status": "success", "watchlist": [s.split(":", 1)[1] for s in watchlist if s.startswith(f"{market_type}:")]}
 
 @router.delete("/watchlist")
 async def remove_from_watchlist_api(symbol: str, market_type: str = "TW", current_user: str = Depends(get_current_user)):
-    watchlist = get_user_watchlist(current_user, market_type)
-    if symbol in watchlist:
-        watchlist.remove(symbol)
-        save_user_watchlist(current_user, market_type, watchlist)
-    return {"status": "success", "watchlist": watchlist}
+    from api.services.storage_service import get_user_watchlist, save_user_watchlist
+    watchlist = get_user_watchlist(current_user)
+    entry = f"{market_type}:{symbol}"
+    if entry in watchlist:
+        watchlist.remove(entry)
+        save_user_watchlist(current_user, watchlist)
+    return {"status": "success", "watchlist": [s.split(":", 1)[1] for s in watchlist if s.startswith(f"{market_type}:")]}
 
 @router.get("/history")
 async def get_symbol_history(symbol: str, market_type: str = "TW"):
