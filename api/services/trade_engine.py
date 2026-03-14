@@ -61,12 +61,28 @@ class MatchingEngine:
         has_sim = any(o.get('is_simulation', True) for o in pending)
         if has_sim:
             for s, t in tickers.items():
+                price = None
+                # Try Yahoo
                 try:
                     data = yf.download(t, period="1d", interval="1m", progress=False)
                     if not data.empty:
-                        prices[s] = data['Close'].iloc[-1]
+                        price = float(data['Close'].iloc[-1])
                 except:
-                    continue
+                    pass
+                
+                # Fallback for Crypto: Binance
+                if price is None and ("-USD" in t or market == "CRYPTO"):
+                    base = t.split("-")[0]
+                    try:
+                        import requests
+                        r = requests.get(f"https://api.binance.com/api/v3/ticker/price?symbol={base}USDT", timeout=5)
+                        if r.status_code == 200:
+                            price = float(r.json()['price'])
+                    except:
+                        pass
+                
+                if price:
+                    prices[s] = price
 
         api = None
         has_live = any(not o.get('is_simulation', True) for o in pending)

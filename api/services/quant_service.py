@@ -113,6 +113,7 @@ def get_yahoo_ticker(code, market_type='TW'):
         return code + (".TW" if int(code) < 10000 else ".TWO")
     if market_type == 'CRYPTO':
         c = code.upper()
+        if c == "MATIC-USD" or c == "MATICUSDT": return "POL-USD"
         if c.endswith('TWD'): return f"{c[:-3]}-TWD"
         if c.endswith('USDT'): return f"{c[:-4]}-USD"
         if "-" not in c: return f"{c}-USD"

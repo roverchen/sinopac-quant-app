@@ -298,15 +298,6 @@ const Watchlist = () => {
               比重配置: {Math.round(defenseWeight * 100)}% / {Math.round((1 - defenseWeight) * 100)}%
             </div>
           </div>
-
-          <button 
-            onClick={() => fetchData(marketType !== 'ALL')}
-            disabled={loading || !!scanProgress}
-            className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 rounded-xl text-sm font-bold transition-all shadow-lg shadow-indigo-600/20"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading || !!scanProgress ? 'animate-spin' : ''}`} />
-            {marketType === 'ALL' ? '刷新分析' : '啟動海選掃描'}
-          </button>
         </div>
       </div>
 

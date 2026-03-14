@@ -129,14 +129,17 @@ def get_all_user_watchlists(user_id):
     }
 
 def save_user_mock_positions(user_id, positions):
+    # Save user mock positions
     db = get_db()
+    success = False
     if db:
         try:
-            db.collection("users").document(user_id).set({"mock_positions": positions}, merge=True)
-            return True
+            db.collection("users").document(user_id).set({"mock_positions": json.loads(json.dumps(positions))}, merge=True)
+            success = True
         except Exception as e:
             print(f"Firestore save mock_positions error: {e}")
 
+    # Fallback/Mirror to local
     try:
         path = os.path.join(CACHE_DIR, f"mock_positions_{user_id}.json")
         with open(path, "w", encoding="utf-8") as f:
@@ -218,14 +221,17 @@ def get_user_pending_orders(user_id):
     return []
 
 def save_user_trade_history(user_id, history):
+    # Save user trade history
     db = get_db()
     if db:
         try:
-            db.collection("users").document(user_id).set({"trade_history": history}, merge=True)
-            return True
+            # Firestore has a 1MB limit per document. If history is HUGE, we might need a sub-collection.
+            # But for simple trading, 1MB is enough for ~2000-5000 records.
+            db.collection("users").document(user_id).set({"trade_history": json.loads(json.dumps(history))}, merge=True)
         except Exception as e:
             print(f"Firestore save trade_history error: {e}")
 
+    # Fallback/Mirror
     try:
         path = os.path.join(CACHE_DIR, f"trade_history_{user_id}.json")
         with open(path, "w", encoding="utf-8") as f:

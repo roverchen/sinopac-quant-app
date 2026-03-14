@@ -21,8 +21,38 @@ class MockShioajiClient:
         class MockAcc: account_id = "MOCK-PAPER-TRADING-001"
         return [MockAcc()]
 
-    def place_order(self, contract, order, symbol="2330", qty=1, price=500.0, action="Buy"):
-        order_id = f"MOCK-{random.randint(1000,9999)}"
+    def place_order(self, contract, order, symbol=None, qty=None, price=None, action=None):
+        from api.services.storage_service import get_user_pending_orders, save_user_pending_orders
+        pending = get_user_pending_orders(self.user_id)
+        order_id = f"SIM-{random.randint(1000,9999)}"
+        
+        target_symbol = symbol or (contract.code if contract else "Unknown")
+        target_qty = qty or (order.quantity if order else 0)
+        target_price = price or (order.price if order else 0)
+        target_action = action or (str(order.action) if order else "Buy")
+
+        # Market detection
+        c = target_symbol.upper()
+        if target_symbol.isdigit() and len(target_symbol) >= 4:
+            market = "TW"
+        elif "-" in c or c.endswith("USDT") or c.endswith("TWD"):
+            market = "CRYPTO"
+        else:
+            market = "US"
+
+        pending.append({
+            "trade_id": order_id,
+            "symbol": target_symbol,
+            "action": "Buy" if "Buy" in str(target_action) else "Sell",
+            "qty": float(target_qty),
+            "price": float(target_price),
+            "market": market,
+            "is_simulation": True,
+            "timestamp": datetime.now().isoformat()
+        })
+        save_user_pending_orders(self.user_id, pending)
+        print(f"[MockShioaji] SIM Order saved for {self.user_id}: {target_symbol} @ {target_price}")
+
         class MockTrade:
             class Order: id = order_id
             order = Order()
@@ -122,28 +152,32 @@ class ShioajiService:
             raise Exception(f"[ShioajiService] Live trading failed: Unable to connect to Sinopac API. Please check your credentials.")
 
         if is_mock:
-            print(f"DEBUG: Auto Mock Triggered for {email}")
             from api.services.storage_service import get_user_pending_orders, save_user_pending_orders
             pending = get_user_pending_orders(email)
             order_id = f"MOCK-{random.randint(1000,9999)}"
 
-            market = "TW"
-            if symbol.isdigit() and len(symbol) >= 4: market = "TW"
-            elif any(c.isalpha() for c in symbol):
-                if "-" in symbol or "USD" in symbol: market = "CRYPTO"
-                else: market = "US"
+            # Detect market
+            c = symbol.upper()
+            if symbol.isdigit() and len(symbol) >= 4:
+                market = "TW"
+            elif "-" in c or c.endswith("USDT") or c.endswith("TWD"):
+                market = "CRYPTO"
+            else:
+                market = "US"
 
-            pending.append({
+            pending_item = {
                 "trade_id": order_id,
                 "symbol": symbol,
                 "action": "Buy" if "Buy" in str(action) else "Sell",
-                "qty": qty,
-                "price": price,
+                "qty": float(qty),
+                "price": float(price),
                 "market": market,
                 "is_simulation": True,
                 "timestamp": datetime.now().isoformat()
-            })
+            }
+            pending.append(pending_item)
             save_user_pending_orders(email, pending)
+            print(f"[ShioajiService] MOCK Order saved for {email}: {symbol} @ {price}")
 
             class MockTrade:
                 class Order: id = order_id
@@ -159,6 +193,11 @@ class ShioajiService:
         if not api:
             raise Exception("Unable to establish API connection.")
 
+        # Detect market - only TW stocks use Shioaji live
+        is_tw = symbol.isdigit() and len(symbol) >= 4
+        if not is_tw:
+            raise Exception(f"Live trading for {symbol} is not yet supported. Only Taiwan stocks are available for live execution.")
+
         contract = None
         for mk in ["TSE", "OTC"]:
             try:
@@ -167,7 +206,7 @@ class ShioajiService:
             except: continue
 
         if not contract:
-            raise Exception(f"Unable to find contract for {symbol}.")
+            raise Exception(f"Unable to find Taiwan stock contract for {symbol}. If this is a US/Crypto asset, please use Simulation mode.")
 
         order = Order(
             price=price,
