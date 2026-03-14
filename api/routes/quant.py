@@ -25,6 +25,7 @@ async def get_scan_progress():
 @router.post("/analyze", response_model=AnalysisResponse)
 async def analyze_watchlist(request: StockAnalysisRequest, current_user: str = Depends(get_current_user)):
     results = []
+    data_map_needed = []
     if not request.watchlist:
         from api.services.storage_service import get_user_watchlist_filtered
         watchlist = get_user_watchlist_filtered(current_user, request.market_type)
