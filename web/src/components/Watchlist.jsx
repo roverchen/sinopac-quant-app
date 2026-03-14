@@ -63,7 +63,7 @@ const Watchlist = () => {
 
       if (marketType === 'ALL') {
         const resp = await quantService.analyze([], defenseWeight, 'ALL');
-        let sortedData = (resp.results || []).sort((a, b) => b.綜合評分 - a.綜合評分);
+        let sortedData = (resp.results || []).sort((a, b) => b.score - a.score);
         
         if (search) {
           const q = search.toUpperCase();

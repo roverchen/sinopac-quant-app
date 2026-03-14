@@ -177,7 +177,7 @@ class MatchingEngine:
                 "qty": qty,
                 "price": fill_price,
                 "market": market,
-                "status": "Filled",
+                "status": "FILLED",
                 "entry_type": "HISTORY",
                 "is_simulation": is_simulation,
                 "timestamp": datetime.now().isoformat()
@@ -204,7 +204,7 @@ class MatchingEngine:
                 "qty": qty,
                 "price": fill_price,
                 "market": market,
-                "status": "Filled",
+                "status": "FILLED",
                 "entry_type": "HISTORY",
                 "is_simulation": is_simulation,
                 "realized_pl": realized_pl,

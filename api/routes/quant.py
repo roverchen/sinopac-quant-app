@@ -34,46 +34,58 @@ async def analyze_watchlist(request: StockAnalysisRequest, current_user: str = D
     if not watchlist:
         return AnalysisResponse(results=[], timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
-    pool = get_cached_pool(request.market_type) or {}
-    pool_results = {r.symbol: r for r in pool.get("results", [])}
-    dfs = pool.get("dfs", {})
-
-    results = []
-    data_map_needed = []
-
     for s in watchlist:
-        code = extract_stock_code(s)
+        # Support MARKET:SYMBOL format
+        target_market = request.market_type
+        if ":" in s:
+            target_market, symbol_only = s.split(":", 1)
+            code = extract_stock_code(symbol_only)
+        else:
+            code = extract_stock_code(s)
+            
+        pool = get_cached_pool(target_market) or {}
+        pool_results = {r.symbol: r for r in pool.get("results", [])}
+        dfs = pool.get("dfs", {})
+
         if code in pool_results and request.defense_weight == 0.5:
-            results.append(pool_results[code])
+            # Add market info if missing
+            res = pool_results[code]
+            if hasattr(res, 'market') and not res.market: res.market = target_market
+            results.append(res)
         elif code in dfs:
             name = pool_results[code].name if code in pool_results else "Unknown"
-            analysis = analyze_stock(dfs[code], code, name, request.defense_weight, request.market_type)
+            analysis = analyze_stock(dfs[code], code, name, request.defense_weight, target_market)
             results.append(AnalysisResult(**analysis))
         else:
-            data_map_needed.append(s)
+            # For data fetcher, we pass the raw symbol or reconstructed one
+            data_map_needed.append((s, target_market))
 
     if data_map_needed:
-        data_pool = fetch_batch_data(data_map_needed, request.market_type)
-        tw_symbols = fetch_tw_symbols() if request.market_type == "TW" else {}
-        us_symbols = fetch_us_symbols() if request.market_type == "US" else {}
-        crypto_symbols = fetch_crypto_symbols() if request.market_type == "CRYPTO" else {}
-
-        for symbol in data_map_needed:
-            code = extract_stock_code(symbol)
-            df = data_pool.get(symbol)
+        # Group by market for batch fetching if needed, or just fetch one by one
+        tw_symbols = fetch_tw_symbols()
+        us_symbols = fetch_us_symbols()
+        crypto_symbols = fetch_crypto_symbols()
+        
+        for symbol_raw, m in data_map_needed:
+            code = extract_stock_code(symbol_raw)
+            # Re-fetch data if not in pool
+            from api.services.data_fetcher import fetch_batch_data
+            data_pool = fetch_batch_data([code], m)
+            df = data_pool.get(code)
+            
             if df is not None:
                 name = "Unknown"
-                if request.market_type == "TW": name = tw_symbols.get(code, "Unknown")
-                elif request.market_type == "US": name = us_symbols.get(code, "Unknown")
-                elif request.market_type == "CRYPTO": name = crypto_symbols.get(code.lower(), "Unknown")
+                if m == "TW": name = tw_symbols.get(code, "Unknown")
+                elif m == "US": name = us_symbols.get(code, "Unknown")
+                elif m == "CRYPTO": name = crypto_symbols.get(code.upper(), "Unknown")
 
-                analysis = analyze_stock(df, code, name, request.defense_weight, request.market_type)
+                analysis = analyze_stock(df, code, name, request.defense_weight, m)
                 results.append(AnalysisResult(**analysis))
             else:
                 results.append(AnalysisResult(
-                    symbol=code, name="No Data", price=0, suggestion="Failed to fetch data",
+                    symbol=code, name="No Data", price=0, suggestion="Failed to fetch",
                     level="-", ma240_diff="-", ma20_diff="-", macd_status="-", score=-1,
-                    ma_base=0, ma20=0, atr=0
+                    ma_base=0, ma20=0, atr=0, market=m
                 ))
 
     results = sorted(results, key=lambda x: x.score, reverse=True)

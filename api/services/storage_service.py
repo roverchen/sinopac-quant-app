@@ -149,7 +149,7 @@ def get_user_watchlist_filtered(user_id, market):
     """Helper to get only symbols for a specific market from unified list"""
     full = get_user_watchlist(user_id)
     if market == "ALL":
-        return [s.split(":", 1)[1] for s in full if ":" in s]
+        return [s for s in full if ":" in s]
     return [s.split(":", 1)[1] for s in full if s.startswith(f"{market}:")]
 
 def get_all_user_watchlists(user_id):
@@ -288,12 +288,12 @@ def save_data_pool(market, data):
     db = get_db()
     if db:
         try:
-            # We only store the 'results' part in Firestore as it's JSON serializable
-            # and what the frontend mostly needs.
+            # Relocate scans to system_auto/market_scans/[MARKET]
             results = data.get("results", [])
-            db.collection("scans").document(market).set({
+            db.collection("users").document("system_auto").collection("market_scans").document(market).set({
                 "results": json.loads(json.dumps(results)),
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
+                "market": market
             })
         except Exception as e:
             print(f"Firestore scan result save error: {e}")
@@ -318,11 +318,15 @@ def load_data_pool(market):
         except Exception as e:
             print(f"GCS load error: {e}")
 
-    # Try Firestore
+    # Try Firestore (under system_auto)
     db = get_db()
     if db:
         try:
-            doc = db.collection("scans").document(market).get()
+            doc = db.collection("users").document("system_auto").collection("market_scans").document(market).get()
+            if not doc.exists:
+                # Fallback to legacy top-level collection if new path doesn't exist yet
+                doc = db.collection("scans").document(market).get()
+                
             if doc.exists:
                 scan_data = doc.to_dict()
                 return {"results": scan_data.get("results", []), "metadata": {"source": "firestore"}}

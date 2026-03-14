@@ -5,10 +5,7 @@ import asyncio
 from datetime import datetime
 from api.services.quant_service import run_market_scan, get_cached_pool, scan_status
 from api.services.shioaji_service import ShioajiService
-from api.services.storage_service import (
-    get_user_mock_positions, save_user_mock_positions, 
-    get_user_trade_history, save_user_trade_history
-)
+from api.services.storage_service import get_user_trade_logs
 
 class AutoRobot:
     def __init__(self):

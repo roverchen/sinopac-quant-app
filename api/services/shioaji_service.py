@@ -62,7 +62,7 @@ class MockShioajiClient:
     def get_orders(self):
         if not self._mock_orders:
             self._mock_orders = [
-                {"order_id": "MOCK-0001", "symbol": "2330", "action": "Buy", "qty": 1, "price": 1025.0, "status": "Filled", "time": "2026-03-11"}
+                {"order_id": "MOCK-0001", "symbol": "2330", "action": "Buy", "qty": 1, "price": 1025.0, "status": "FILLED", "time": "2026-03-11"}
             ]
         return self._mock_orders
 
