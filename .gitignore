@@ -26,3 +26,7 @@ watchlist.json
 # OS specific
 .DS_Store
 .env
+# Web
+web/node_modules/
+web/dist/
+web/.vite/
