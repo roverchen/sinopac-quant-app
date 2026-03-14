@@ -79,7 +79,7 @@ const Dashboard = () => {
               <span className="text-xs font-black uppercase tracking-widest">永豐金證券 (Sinopac)</span>
             </div>
             <h2 className="text-4xl font-black text-white font-inter">
-              ${balance?.sinopac_twd?.toLocaleString() || '1,000,000'}
+              ${balance?.sinopac_twd !== undefined ? balance.sinopac_twd.toLocaleString() : '...'}
               <span className="text-sm font-medium text-slate-500 ml-2">TWD</span>
             </h2>
             <p className="text-xs text-slate-400 mt-2 font-medium">可用交割金額 (已串接 API)</p>
@@ -96,12 +96,12 @@ const Dashboard = () => {
               <span className="text-xs font-black uppercase tracking-widest">MAX 交易所 (Crypto)</span>
             </div>
             <h2 className="text-4xl font-black text-white font-inter">
-              ${balance?.max?.total_twd_estimate?.toLocaleString() || '0'}
+              ${balance?.max?.total_twd_estimate !== undefined ? balance.max.total_twd_estimate.toLocaleString() : '0'}
               <span className="text-sm font-medium text-slate-500 ml-2">TWD (估值)</span>
             </h2>
             <div className="flex gap-4 mt-2">
-              <p className="text-[10px] text-slate-400 font-bold uppercase">TWD: ${balance?.max?.twd?.toLocaleString() || 0}</p>
-              <p className="text-[10px] text-slate-400 font-bold uppercase">USDT: {balance?.max?.usdt?.toLocaleString() || 0}</p>
+              <p className="text-[10px] text-slate-400 font-bold uppercase">TWD: ${balance?.max?.twd !== undefined ? balance.max.twd.toLocaleString() : 0}</p>
+              <p className="text-[10px] text-slate-400 font-bold uppercase">USDT: {balance?.max?.usdt !== undefined ? balance.max.usdt.toLocaleString() : 0}</p>
             </div>
           </div>
         </div>

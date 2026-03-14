@@ -141,6 +141,7 @@ class MatchingEngine:
         
         trade_id = order.get('trade_id', f"AUTO-{int(time.time())}")
         symbol = order['symbol']
+        name = order.get('name', symbol)
         qty = order['qty']
         action = order['action']
         market = order['market']
@@ -159,6 +160,7 @@ class MatchingEngine:
             else:
                 existing = {
                     "symbol": symbol,
+                    "name": name,
                     "qty": qty,
                     "buy_price": fill_price,
                     "market": market,
@@ -173,6 +175,7 @@ class MatchingEngine:
             logs.append({
                 "trade_id": trade_id,
                 "symbol": symbol,
+                "name": name,
                 "action": "Buy",
                 "qty": qty,
                 "price": fill_price,
@@ -200,6 +203,7 @@ class MatchingEngine:
             logs.append({
                 "trade_id": trade_id,
                 "symbol": symbol,
+                "name": name,
                 "action": "Sell",
                 "qty": qty,
                 "price": fill_price,

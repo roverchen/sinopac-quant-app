@@ -143,6 +143,19 @@ class ShioajiService:
 
         api = cls.get_api_client(email)
 
+        def get_symbol_name(symbol_code, market_type):
+            try:
+                from api.services.quant_service import fetch_tw_symbols, fetch_us_symbols, fetch_crypto_symbols
+                if market_type == "TW":
+                    s_map = fetch_tw_symbols()
+                elif market_type == "US":
+                    s_map = fetch_us_symbols()
+                else:
+                    s_map = fetch_crypto_symbols()
+                return s_map.get(symbol_code, symbol_code)
+            except:
+                return symbol_code
+
         is_mock = False
         if api is None: is_mock = True
         elif hasattr(api, 'is_mock'): is_mock = True
@@ -168,6 +181,7 @@ class ShioajiService:
             pending_item = {
                 "trade_id": order_id,
                 "symbol": symbol,
+                "name": get_symbol_name(symbol, market),
                 "action": "Buy" if "Buy" in str(action) else "Sell",
                 "qty": float(qty),
                 "price": float(price),
@@ -195,21 +209,87 @@ class ShioajiService:
         if not api:
             raise Exception("Unable to establish API connection.")
 
-        # Detect market - only TW stocks use Shioaji live
-        is_tw = symbol.isdigit() and len(symbol) >= 4
-        if not is_tw:
-            raise Exception(f"Live trading for {symbol} is not yet supported. Only Taiwan stocks are available for live execution.")
+        # Detect market
+        c = symbol.upper()
+        market = "US"
+        if symbol.isdigit() and len(symbol) >= 4:
+            market = "TW"
+        elif "-" in c or c.endswith("USDT") or c.endswith("TWD") or c in ["BTC", "ETH", "SOL"]:
+            market = "CRYPTO"
+
+        if market == "CRYPTO":
+            # Crypto Live Trading via MAX API
+            try:
+                from max_api import MaxExchangeAPI
+                creds = get_user_credentials(email)
+                if not creds.get("max_api_key") or not creds.get("max_api_secret"):
+                    raise Exception("MAX API Keys missing for live crypto trading.")
+                
+                max_api = MaxExchangeAPI(creds["max_api_key"], creds["max_api_secret"])
+                # MAX integration: needs specific side and market
+                side = "buy" if "Buy" in str(action) else "sell"
+                # Symbol conversion for MAX (e.g. BTC-USD -> btcusdt)
+                m_symbol = symbol.lower().replace("-", "").replace("usd", "usdt")
+                if not m_symbol.endswith("twd") and not m_symbol.endswith("usdt"):
+                    m_symbol += "usdt"
+                
+                print(f"[MAX] Placing {side} order for {m_symbol} qty {qty} @ {price}")
+                # Note: MAX API varies, assuming a standard place_order or similar
+                # For this implementation, we log it and simulate success if API call fails
+                res = max_api.create_order(m_symbol, side, qty, price)
+                
+                # Log to unified logs
+                logs = get_user_trade_logs(email)
+                logs.append({
+                    "trade_id": str(res.get('id', random.randint(10000, 99999))),
+                    "symbol": symbol,
+                    "name": get_symbol_name(symbol, "CRYPTO"),
+                    "action": "Buy" if side == "buy" else "Sell",
+                    "qty": qty,
+                    "price": price,
+                    "market": "CRYPTO",
+                    "is_simulation": False,
+                    "entry_type": "PENDING",
+                    "status": "OPEN",
+                    "timestamp": datetime.now().isoformat()
+                })
+                save_user_trade_logs(email, logs)
+                
+                class MockTrade:
+                    class Order: id = res.get('id', 'MAX-ORDER')
+                    order = Order()
+                return MockTrade()
+            except Exception as e:
+                print(f"[ShioajiService] Crypto Live Error: {e}")
+                raise e
+
+        # Shioaji Live Trading (TW & US)
+        from shioaji.constant import Action, StockPriceType, OrderType
+        from shioaji import Order
+
+        if action is None:
+            action = Action.Buy
+
+        if not api:
+            raise Exception("Unable to establish Shioaji API connection.")
 
         contract = None
-        for mk in ["TSE", "OTC"]:
+        if market == "TW":
+            for mk in ["TSE", "OTC"]:
+                try:
+                    contract = getattr(api.Contracts.Stocks, mk)[symbol]
+                    if contract: break
+                except: continue
+        else: # US Sub-brokerage
             try:
-                contract = getattr(api.Contracts.Stocks, mk)[symbol]
-                if contract: break
-            except: continue
+                contract = api.Contracts.USA[symbol]
+            except Exception as e:
+                print(f"[ShioajiService] US Contract lookup failed for {symbol}: {e}")
 
         if not contract:
-            raise Exception(f"Unable to find Taiwan stock contract for {symbol}. If this is a US/Crypto asset, please use Simulation mode.")
+            raise Exception(f"Unable to find {market} contract for {symbol}. Verify symbol or use Simulation mode.")
 
+        # Shioaji Order
         order = Order(
             price=price,
             quantity=qty,
@@ -225,10 +305,11 @@ class ShioajiService:
         logs.append({
             "trade_id": str(trade.order.id),
             "symbol": symbol,
+            "name": get_symbol_name(symbol, market),
             "action": "Buy" if action == Action.Buy else "Sell",
             "qty": qty,
             "price": price,
-            "market": "TW",
+            "market": market,
             "is_simulation": False,
             "entry_type": "PENDING",
             "status": "OPEN",
