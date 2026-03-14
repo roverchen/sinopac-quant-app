@@ -307,34 +307,64 @@ def save_data_pool(market, data):
     return True
 
 def load_data_pool(market):
-    # Try GCS
+    """
+    Load data pool with a layered approach:
+    1. Try GCS (Full Pickle - results + dfs)
+    2. Try Local CACHE_DIR (Full Pickle)
+    3. Try Firestore (Results Summary only)
+    """
+    final_pool = None
+    
+    # Layer 1: GCS (Full)
     gcs = get_gcs()
     if gcs:
         try:
             bucket = gcs.bucket(f"{PROJECT_ID}-data")
             blob = bucket.blob(f"shared_results_{market}.pkl")
             if blob.exists():
-                return pickle.loads(blob.download_as_string())
+                final_pool = pickle.loads(blob.download_as_string())
+                final_pool["metadata"] = {"source": "gcs", "timestamp": final_pool.get("timestamp")}
         except Exception as e:
-            print(f"GCS load error: {e}")
+            print(f"[Storage] GCS load fallback: {e}")
 
-    # Try Firestore (under system_auto)
+    # Layer 2: Local Pickle (Full) - If GCS failed or not used
+    if not final_pool:
+        path = os.path.join(CACHE_DIR, f"shared_results_{market}.pkl")
+        if os.path.exists(path):
+            try:
+                with open(path, "rb") as f:
+                    final_pool = pickle.load(f)
+                    final_pool["metadata"] = {"source": "local", "timestamp": final_pool.get("timestamp")}
+            except Exception as e:
+                print(f"[Storage] Local pickle corrupt: {e}")
+
+    # Layer 3: Firestore (Results Only) - High availability
+    # We always check Firestore to see if results are NEWER than the pickle
     db = get_db()
     if db:
         try:
+            # Try new system_auto path first
             doc = db.collection("users").document("system_auto").collection("market_scans").document(market).get()
             if not doc.exists:
-                # Fallback to legacy top-level collection if new path doesn't exist yet
+                # Fallback to legacy
                 doc = db.collection("scans").document(market).get()
-                
+            
             if doc.exists:
-                scan_data = doc.to_dict()
-                return {"results": scan_data.get("results", []), "metadata": {"source": "firestore"}}
+                fs_data = doc.to_dict()
+                fs_results = fs_data.get("results", [])
+                fs_ts = fs_data.get("timestamp")
+                
+                if not final_pool:
+                    final_pool = {"results": fs_results, "dfs": {}, "timestamp": fs_ts, "metadata": {"source": "firestore"}}
+                else:
+                    # Merge logic: if Firestore is newer than pickle, use Firestore results but KEEP pickle dfs
+                    pickle_ts = final_pool.get("timestamp", "0")
+                    if fs_ts and fs_ts > pickle_ts:
+                        print(f"[Storage] {market} Firestore results are newer than local pickle. Merging.")
+                        final_pool["results"] = fs_results
+                        final_pool["timestamp"] = fs_ts
+                        final_pool["metadata"]["merged_from"] = "firestore"
         except Exception as e:
-            print(f"Firestore scan result load error: {e}")
+            print(f"[Storage] Firestore summary check failed: {e}")
 
-    path = os.path.join(CACHE_DIR, f"shared_results_{market}.pkl")
-    if os.path.exists(path):
-        with open(path, "rb") as f:
-            return pickle.load(f)
-    return None
+    return final_pool
