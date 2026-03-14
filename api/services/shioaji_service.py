@@ -234,9 +234,8 @@ class ShioajiService:
                     m_symbol += "usdt"
                 
                 print(f"[MAX] Placing {side} order for {m_symbol} qty {qty} @ {price}")
-                # Note: MAX API varies, assuming a standard place_order or similar
-                # For this implementation, we log it and simulate success if API call fails
-                res = max_api.create_order(m_symbol, side, qty, price)
+                # [FIX] Use place_order as defined in max_api.py
+                res = max_api.place_order(m_symbol, side, qty, price)
                 
                 # Log to unified logs
                 logs = get_user_trade_logs(email)

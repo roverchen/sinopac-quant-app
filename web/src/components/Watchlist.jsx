@@ -40,10 +40,11 @@ const Watchlist = () => {
   const [trackedSymbols, setTrackedSymbols] = useState([]); // 追蹤中的代碼列表
   
   const fetchData = async (forceScan = false) => {
-    // 如果不是強制掃描，且快取中有資料，則先顯示快取以達到「秒開」
-    if (!forceScan && cachedData[marketType] && !search && page === 1) {
-      setData(cachedData[marketType].results || []);
-      setTotal(cachedData[marketType].total || 0);
+    const cacheKey = `${marketType}_${defenseWeight}`;
+    // 如果不是強制掃描，且快取中有該權重下的資料，則先顯示快取以達到「秒開」
+    if (!forceScan && cachedData[cacheKey] && !search && page === 1) {
+      setData(cachedData[cacheKey].results || []);
+      setTotal(cachedData[cacheKey].total || 0);
       // 仍然在後台偷偷更新一下，但不要切換 loading 狀態以維持流暢
     } else {
       setLoading(true);
@@ -88,7 +89,7 @@ const Watchlist = () => {
         
         // 只有在非搜尋且第一頁時快取
         if (!search && page === 1) {
-          setCachedData(prev => ({ ...prev, [marketType]: resp }));
+          setCachedData(prev => ({ ...prev, [cacheKey]: resp }));
         }
       }
     } catch (err) {
@@ -98,13 +99,6 @@ const Watchlist = () => {
     }
   };
 
-  // 當權重改變時，不立即 fetchData，等使用者放開或防抖
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchData();
-    }, 400);
-    return () => clearTimeout(timer);
-  }, [defenseWeight]);
 
   const startPollingProgress = () => {
     const interval = setInterval(async () => {
@@ -510,7 +504,13 @@ const Watchlist = () => {
                   </button>
                   <button 
                     onClick={() => handleOrder(false)}
-                    disabled={orderLoading || (selectedStock?.market !== 'TW' && selectedStock?.market !== 'TSE' && selectedStock?.market !== 'OTC')}
+                    disabled={orderLoading || (
+                      selectedStock?.market !== 'TW' && 
+                      selectedStock?.market !== 'TSE' && 
+                      selectedStock?.market !== 'OTC' &&
+                      selectedStock?.market !== 'US' &&
+                      selectedStock?.market !== 'CRYPTO'
+                    )}
                     className="py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-bold transition-all shadow-lg shadow-indigo-600/20 disabled:opacity-30 disabled:cursor-not-allowed"
                   >
                     實盤交易

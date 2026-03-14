@@ -109,11 +109,11 @@ async def get_market_results(
 
     all_results = pool.get("results", [])
     
-    # Optimization: Only re-score if weight is actually different from default (0.5) 
-    # Or if we want to support dynamic rescanning without full re-calculation.
-    if defense_weight is not None and abs(defense_weight - 0.5) > 0.001:
-        # Check if we already have this weight in cache to avoid CPU spike
-        cache_key = f"res_{market_type}_{defense_weight}"
+    # Dynamic re-scoring based on weight
+    if defense_weight is not None:
+        # round weight to avoid float precision issues in cache key
+        w_rounded = round(defense_weight, 2)
+        cache_key = f"res_{market_type}_{w_rounded}"
         from api.services.quant_service import results_cache
         if results_cache.get(cache_key):
              all_results = results_cache[cache_key]
