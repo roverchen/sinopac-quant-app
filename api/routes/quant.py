@@ -118,18 +118,40 @@ async def get_market_results(
         if results_cache.get(cache_key):
              all_results = results_cache[cache_key]
         else:
-            from api.services.quant_service import analyze_stock
+            from api.services.quant_service import analyze_stock, fetch_tw_symbols, fetch_us_symbols, fetch_crypto_symbols
+            from api.services.data_fetcher import fetch_batch_data
+            
             dfs = pool.get("dfs", {})
             new_results = []
+            
+            # Identify which symbols are missing from dfs
+            missing_symbols = []
+            for r in all_results:
+                code = getattr(r, 'symbol', r.get('symbol') if isinstance(r, dict) else None)
+                if code and code not in dfs:
+                    missing_symbols.append(code)
+            
+            # Fetch missing data if any
+            if missing_symbols:
+                print(f"[Quant] Fetching missing history for {len(missing_symbols)} symbols due to weight change...")
+                fetched_dfs = fetch_batch_data(missing_symbols, market_type)
+                dfs.update(fetched_dfs)
+                # Update the pool cache so it stays there
+                pool["dfs"] = dfs
+
             for r in all_results:
                 code = getattr(r, 'symbol', r.get('symbol') if isinstance(r, dict) else None)
                 df = dfs.get(code)
+                name = getattr(r, 'name', r.get('name', 'Unknown') if isinstance(r, dict) else 'Unknown')
                 if df is not None:
-                    name = getattr(r, 'name', r.get('name', 'Unknown') if isinstance(r, dict) else 'Unknown')
                     analysis = analyze_stock(df, code, name, defense_weight, market_type)
                     new_results.append(AnalysisResult(**analysis))
                 else:
-                    new_results.append(r)
+                    # Fallback or keep old result if still no data
+                    if isinstance(r, dict):
+                         new_results.append(AnalysisResult(**r))
+                    else:
+                         new_results.append(r)
             all_results = new_results
             # Cache for a short while or until next scan
             results_cache[cache_key] = all_results

@@ -165,9 +165,14 @@ def save_user_trade_logs(user_id, logs):
     db = get_db()
     if db:
         try:
-            db.collection("users").document(user_id).set({"trade_logs": json.loads(json.dumps(logs))}, merge=True)
+            def to_dict(obj):
+                if hasattr(obj, 'model_dump'): return obj.model_dump()
+                if hasattr(obj, 'dict'): return obj.dict()
+                return obj
+            plain_logs = [to_dict(L) if not isinstance(L, dict) else L for L in logs]
+            db.collection("users").document(user_id).set({"trade_logs": plain_logs}, merge=True)
         except Exception as e:
-            print(f"Firestore save trade_logs error: {e}")
+            print(f"Firestore save trade_logs error for {user_id}: {e}")
     
     try:
         path = os.path.join(CACHE_DIR, f"trade_logs_{user_id}.json")
@@ -290,13 +295,24 @@ def save_data_pool(market, data):
         try:
             # Relocate scans to system_auto/market_scans/[MARKET]
             results = data.get("results", [])
+            # Convert results to dict safely (handles Pydantic models)
+            def to_dict(obj):
+                if hasattr(obj, 'model_dump'): return obj.model_dump()
+                if hasattr(obj, 'dict'): return obj.dict()
+                return obj
+
+            plain_results = [to_dict(r) for r in results]
+            
             db.collection("users").document("system_auto").collection("market_scans").document(market).set({
-                "results": json.loads(json.dumps(results)),
+                "results": plain_results,
                 "timestamp": datetime.now().isoformat(),
                 "market": market
             })
+            print(f"[Storage] Successfully saved {len(plain_results)} scan results to Firestore for {market}")
         except Exception as e:
-            print(f"Firestore scan result save error: {e}")
+            print(f"[Storage] Firestore scan result save error for {market}: {e}")
+            import traceback
+            traceback.print_exc()
 
     try:
         path = os.path.join(CACHE_DIR, f"shared_results_{market}.pkl")

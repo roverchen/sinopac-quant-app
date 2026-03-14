@@ -264,7 +264,7 @@ class ShioajiService:
     def get_balance(cls, email: str):
         api = cls.get_api_client(email)
         if hasattr(api, 'is_mock') or type(api).__name__ == 'MockShioajiClient':
-            return 1000000.0
+            return 0.0
 
         if not api: return 0.0
 
