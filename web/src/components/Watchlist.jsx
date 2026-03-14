@@ -52,16 +52,13 @@ const Watchlist = () => {
     try {
       // 獲取追蹤清單
       if (trackedSymbols.length === 0) {
-        const [twWatch, usWatch, cryptoWatch] = await Promise.all([
-          quantService.getWatchlist('TW'),
-          quantService.getWatchlist('US'),
-          quantService.getWatchlist('CRYPTO')
-        ]);
-        setTrackedSymbols([
-          ...(twWatch.watchlist || []),
-          ...(usWatch.watchlist || []),
-          ...(cryptoWatch.watchlist || [])
-        ]);
+        const allWatch = await quantService.getWatchlist('ALL');
+        const unified = [
+          ...(allWatch.TW || []),
+          ...(allWatch.US || []),
+          ...(allWatch.CRYPTO || [])
+        ];
+        setTrackedSymbols(unified);
       }
 
       if (marketType === 'ALL') {

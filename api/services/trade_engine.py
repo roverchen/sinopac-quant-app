@@ -3,12 +3,8 @@ import threading
 from datetime import datetime
 import yfinance as yf
 from api.services.storage_service import (
-    get_user_pending_orders,
-    save_user_pending_orders,
-    get_user_mock_positions,
-    save_user_mock_positions,
-    get_user_trade_history,
-    save_user_trade_history
+    get_user_trade_logs,
+    save_user_trade_logs
 )
 from api.services.quant_service import get_yahoo_ticker
 
@@ -49,7 +45,8 @@ class MatchingEngine:
             self._check_pending_orders(user_id)
 
     def _check_pending_orders(self, user_id):
-        pending = get_user_pending_orders(user_id)
+        logs = get_user_trade_logs(user_id)
+        pending = [L for L in logs if L.get("entry_type") == "PENDING"]
         if not pending:
             return
 
@@ -131,12 +128,17 @@ class MatchingEngine:
                 new_pending.append(order)
 
         if len(new_pending) != len(pending):
-            save_user_pending_orders(user_id, new_pending)
+            # Update logs: remove old pending, add new updated list
+            logs = [L for L in logs if L.get("entry_type") != "PENDING"]
+            logs.extend(new_pending)
+            save_user_trade_logs(user_id, logs)
 
     def _execute_fill(self, user_id, order, fill_price):
-        positions = get_user_mock_positions(user_id)
-        history = get_user_trade_history(user_id)
-
+        logs = get_user_trade_logs(user_id)
+        
+        # 1. Remove this order from PENDING
+        logs = [L for L in logs if L.get("trade_id") != order.get("trade_id")]
+        
         trade_id = order.get('trade_id', f"AUTO-{int(time.time())}")
         symbol = order['symbol']
         qty = order['qty']
@@ -144,23 +146,31 @@ class MatchingEngine:
         market = order['market']
         is_simulation = order.get('is_simulation', True)
 
+        # 2. Update POSITION
+        positions = [L for L in logs if L.get("entry_type") == "POSITION"]
+        existing = next((p for p in positions if p['symbol'] == symbol), None)
+        
         if action == 'Buy':
-            existing = next((p for p in positions if p['symbol'] == symbol), None)
             if existing:
                 total_qty = existing['qty'] + qty
                 avg_price = (existing['buy_price'] * existing['qty'] + fill_price * qty) / total_qty
                 existing['qty'] = total_qty
                 existing['buy_price'] = avg_price
             else:
-                positions.append({
+                existing = {
                     "symbol": symbol,
                     "qty": qty,
                     "buy_price": fill_price,
                     "market": market,
-                    "is_simulation": is_simulation
-                })
+                    "is_simulation": is_simulation,
+                    "entry_type": "POSITION",
+                    "status": "OPEN",
+                    "timestamp": datetime.now().isoformat()
+                }
+                logs.append(existing)
 
-            history.append({
+            # 3. Add to HISTORY
+            logs.append({
                 "trade_id": trade_id,
                 "symbol": symbol,
                 "action": "Buy",
@@ -168,12 +178,12 @@ class MatchingEngine:
                 "price": fill_price,
                 "market": market,
                 "status": "Filled",
+                "entry_type": "HISTORY",
                 "is_simulation": is_simulation,
                 "timestamp": datetime.now().isoformat()
             })
 
         elif action == 'Sell':
-            existing = next((p for p in positions if p['symbol'] == symbol), None)
             realized_pl = 0
             pnl_percent = 0
             if existing:
@@ -183,11 +193,11 @@ class MatchingEngine:
                     pnl_percent = round(((fill_price - buy_price) / buy_price) * 100, 2)
                     
                 if existing['qty'] <= qty:
-                    positions = [p for p in positions if p['symbol'] != symbol]
+                    logs = [L for L in logs if L is not existing]
                 else:
                     existing['qty'] -= qty
 
-            history.append({
+            logs.append({
                 "trade_id": trade_id,
                 "symbol": symbol,
                 "action": "Sell",
@@ -195,13 +205,13 @@ class MatchingEngine:
                 "price": fill_price,
                 "market": market,
                 "status": "Filled",
+                "entry_type": "HISTORY",
                 "is_simulation": is_simulation,
                 "realized_pl": realized_pl,
                 "pnl_percent": pnl_percent,
                 "timestamp": datetime.now().isoformat()
             })
 
-        save_user_mock_positions(user_id, positions)
-        save_user_trade_history(user_id, history)
+        save_user_trade_logs(user_id, logs)
 
 engine = MatchingEngine()

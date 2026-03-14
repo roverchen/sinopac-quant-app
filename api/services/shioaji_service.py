@@ -3,7 +3,7 @@ import threading
 import random
 from datetime import datetime
 from typing import Dict, Optional
-from api.services.storage_service import get_user_credentials
+from api.services.storage_service import get_user_credentials, get_user_trade_logs, save_user_trade_logs
 
 class MockShioajiClient:
     """Mock Shioaji API for testing without credentials"""
@@ -22,8 +22,7 @@ class MockShioajiClient:
         return [MockAcc()]
 
     def place_order(self, contract, order, symbol=None, qty=None, price=None, action=None):
-        from api.services.storage_service import get_user_pending_orders, save_user_pending_orders
-        pending = get_user_pending_orders(self.user_id)
+        logs = get_user_trade_logs(self.user_id)
         order_id = f"SIM-{random.randint(1000,9999)}"
         
         target_symbol = symbol or (contract.code if contract else "Unknown")
@@ -40,7 +39,7 @@ class MockShioajiClient:
         else:
             market = "US"
 
-        pending.append({
+        logs.append({
             "trade_id": order_id,
             "symbol": target_symbol,
             "action": "Buy" if "Buy" in str(target_action) else "Sell",
@@ -48,9 +47,11 @@ class MockShioajiClient:
             "price": float(target_price),
             "market": market,
             "is_simulation": True,
+            "entry_type": "PENDING",
+            "status": "OPEN",
             "timestamp": datetime.now().isoformat()
         })
-        save_user_pending_orders(self.user_id, pending)
+        save_user_trade_logs(self.user_id, logs)
         print(f"[MockShioaji] SIM Order saved for {self.user_id}: {target_symbol} @ {target_price}")
 
         class MockTrade:
@@ -67,8 +68,8 @@ class MockShioajiClient:
 
     def get_positions(self):
         if self.user_id:
-            from api.services.storage_service import get_user_mock_positions
-            return get_user_mock_positions(self.user_id)
+            logs = get_user_trade_logs(self.user_id)
+            return [L for L in logs if L.get("entry_type") == "POSITION"]
         return []
 
 _shioaji_instances = {}
@@ -152,8 +153,7 @@ class ShioajiService:
             raise Exception(f"[ShioajiService] Live trading failed: Unable to connect to Sinopac API. Please check your credentials.")
 
         if is_mock:
-            from api.services.storage_service import get_user_pending_orders, save_user_pending_orders
-            pending = get_user_pending_orders(email)
+            logs = get_user_trade_logs(email)
             order_id = f"MOCK-{random.randint(1000,9999)}"
 
             # Detect market
@@ -173,10 +173,12 @@ class ShioajiService:
                 "price": float(price),
                 "market": market,
                 "is_simulation": True,
+                "entry_type": "PENDING",
+                "status": "OPEN",
                 "timestamp": datetime.now().isoformat()
             }
-            pending.append(pending_item)
-            save_user_pending_orders(email, pending)
+            logs.append(pending_item)
+            save_user_trade_logs(email, logs)
             print(f"[ShioajiService] MOCK Order saved for {email}: {symbol} @ {price}")
 
             class MockTrade:
@@ -219,9 +221,8 @@ class ShioajiService:
 
         trade = api.place_order(contract, order)
 
-        from api.services.storage_service import get_user_pending_orders, save_user_pending_orders
-        pending = get_user_pending_orders(email)
-        pending.append({
+        logs = get_user_trade_logs(email)
+        logs.append({
             "trade_id": str(trade.order.id),
             "symbol": symbol,
             "action": "Buy" if action == Action.Buy else "Sell",
@@ -229,9 +230,11 @@ class ShioajiService:
             "price": price,
             "market": "TW",
             "is_simulation": False,
+            "entry_type": "PENDING",
+            "status": "OPEN",
             "timestamp": datetime.now().isoformat()
         })
-        save_user_pending_orders(email, pending)
+        save_user_trade_logs(email, logs)
 
         return trade
 

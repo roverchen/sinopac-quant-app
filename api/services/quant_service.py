@@ -90,7 +90,7 @@ def fetch_crypto_symbols():
     symbols = {
         "BTC-USD": "Bitcoin", "ETH-USD": "Ethereum", "SOL-USD": "Solana",
         "BNB-USD": "Binance Coin", "DOGE-USD": "Dogecoin", "XRP-USD": "XRP",
-        "ADA-USD": "Cardano", "MATIC-USD": "Polygon", "DOT-USD": "Polkadot",
+        "ADA-USD": "Cardano", "POL-USD": "Polygon (POL)", "DOT-USD": "Polkadot",
         "LINK-USD": "Chainlink"
     }
     try:

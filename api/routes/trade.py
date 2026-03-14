@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from api.routes.auth import get_current_user
 from api.services.shioaji_service import ShioajiService
-from api.services.storage_service import get_user_credentials, update_user_credentials
+from api.services.storage_service import get_user_credentials, update_user_credentials, get_user_trade_logs
 from pydantic import BaseModel
 from typing import Optional
 
@@ -51,29 +51,27 @@ async def get_account_summary(user_id: Optional[str] = None, current_user: str =
 @router.get("/pending")
 async def get_pending_orders(user_id: Optional[str] = None, current_user: str = Depends(get_current_user)):
     """Get pending orders"""
-    from api.services.storage_service import get_user_pending_orders
     target_user = user_id if user_id else current_user
-    pending = get_user_pending_orders(target_user)
-    return {"pending": pending}
+    logs = get_user_trade_logs(target_user)
+    return {"pending": [L for L in logs if L.get("entry_type") == "PENDING"]}
 
 @router.get("/history")
 async def get_trade_history(user_id: Optional[str] = None, current_user: str = Depends(get_current_user)):
     """Get trade history"""
-    from api.services.storage_service import get_user_trade_history
     target_user = user_id if user_id else current_user
-    history = get_user_trade_history(target_user)
-    return {"history": history}
+    logs = get_user_trade_logs(target_user)
+    return {"history": [L for L in logs if L.get("entry_type") == "HISTORY"]}
 
 @router.get("/summary")
 async def get_performance_summary(user_id: Optional[str] = None, current_user: str = Depends(get_current_user)):
     """Get portfolio performance summary (P/L)"""
-    from api.services.storage_service import get_user_trade_history
     target_user = user_id if user_id else current_user
-    positions = ShioajiService.get_positions(target_user)
-    history = get_user_trade_history(target_user)
+    logs = get_user_trade_logs(target_user)
+    positions = [L for L in logs if L.get("entry_type") == "POSITION"]
+    history = [L for L in logs if L.get("entry_type") == "HISTORY"]
 
-    realized_mock = sum(item.get('realized_pnl', 0) for item in history if item.get('is_simulation') or target_user == "system_auto")
-    realized_live = sum(item.get('realized_pnl', 0) for item in history if not item.get('is_simulation') and target_user != "system_auto")
+    realized_mock = sum(item.get('realized_pl', 0) for item in history if item.get('is_simulation') or target_user == "system_auto")
+    realized_live = sum(item.get('realized_pl', 0) for item in history if not item.get('is_simulation') and target_user != "system_auto")
 
     unrealized_mock = 0.0
     unrealized_live = 0.0

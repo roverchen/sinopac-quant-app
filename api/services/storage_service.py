@@ -160,127 +160,108 @@ def get_all_user_watchlists(user_id):
         "CRYPTO": [s.split(":", 1)[1] for s in full if s.startswith("CRYPTO:")]
     }
 
-def save_user_mock_positions(user_id, positions):
-    # Save user mock positions
+def save_user_trade_logs(user_id, logs):
+    """Save unified trade logs (positions, pending, history)"""
     db = get_db()
-    success = False
     if db:
         try:
-            db.collection("users").document(user_id).set({"mock_positions": json.loads(json.dumps(positions))}, merge=True)
-            success = True
+            db.collection("users").document(user_id).set({"trade_logs": json.loads(json.dumps(logs))}, merge=True)
         except Exception as e:
-            print(f"Firestore save mock_positions error: {e}")
-
-    # Fallback/Mirror to local
+            print(f"Firestore save trade_logs error: {e}")
+    
     try:
-        path = os.path.join(CACHE_DIR, f"mock_positions_{user_id}.json")
+        path = os.path.join(CACHE_DIR, f"trade_logs_{user_id}.json")
         with open(path, "w", encoding="utf-8") as f:
-            json.dump(positions, f, ensure_ascii=False)
+            json.dump(logs, f, ensure_ascii=False, indent=2)
     except Exception as e:
-        print(f"[Storage] Local mock_positions save failed: {e}")
+        print(f"[Storage] Local trade_logs save failed: {e}")
     return True
 
-def get_user_mock_positions(user_id):
+def get_user_trade_logs(user_id):
+    """Retrieve unified trade logs. Performs lazy migration if needed."""
     db = get_db()
+    logs = None
     if db:
         try:
             doc = db.collection("users").document(user_id).get()
             if doc.exists:
-                return doc.to_dict().get("mock_positions", [])
+                data = doc.to_dict()
+                logs = data.get("trade_logs")
+                
+                # Lazy migration from old fields
+                if logs is None:
+                    print(f"[Storage] Migrating legacy data for {user_id}...")
+                    logs = []
+                    # 1. Positions
+                    for pos in data.get("mock_positions", []):
+                        logs.append({**pos, "entry_type": "POSITION", "status": "OPEN", "trade_id": pos.get("trade_id", f"POS-{int(time.time())}")})
+                    # 2. Pending
+                    for order in data.get("pending_orders", []):
+                        logs.append({**order, "entry_type": "PENDING", "status": "OPEN"})
+                    # 3. History
+                    for hist in data.get("trade_history", []):
+                        logs.append({**hist, "entry_type": "HISTORY", "status": "FILLED"})
+                    
+                    if logs:
+                        save_user_trade_logs(user_id, logs)
+                
+                # Cleanup legacy fields if logs were successfully retrieved/migrated
+                if logs is not None and any(k in data for k in ["mock_positions", "pending_orders", "trade_history"]):
+                    print(f"[Storage] Cleaning up legacy fields for {user_id}...")
+                    from google.cloud import firestore
+                    db.collection("users").document(user_id).update({
+                        "mock_positions": firestore.DELETE_FIELD,
+                        "pending_orders": firestore.DELETE_FIELD,
+                        "trade_history": firestore.DELETE_FIELD
+                    })
         except Exception as e:
-            print(f"Firestore load mock_positions error: {e}")
+            print(f"Firestore load trade_logs error: {e}")
     
-    path = os.path.join(CACHE_DIR, f"mock_positions_{user_id}.json")
-    if os.path.exists(path):
-        with open(path, "r", encoding="utf-8") as f:
-            try: return json.load(f)
-            except: return []
-    return [{"symbol": "2330", "qty": 1000, "buy_price": 1025.0, "market": "TW", "is_simulation": True}]
+    if logs is not None:
+        return logs
 
-def get_all_users_with_pending() -> List[str]:
-    # Retrieve a list of all user IDs that have pending orders
-    users = []
-    # Local scan
-    if os.path.exists(CACHE_DIR):
-        for filename in os.listdir(CACHE_DIR):
-            if filename.startswith("pending_orders_") and filename.endswith(".json"):
-                user_id = filename.replace("pending_orders_", "").replace(".json", "")
-                if user_id:
-                    users.append(user_id)
-    # Firestore scan
-    db = get_db()
-    if db:
-        try:
-            docs = db.collection("users").stream()
-            for doc in docs:
-                if doc.to_dict().get("pending_orders"):
-                    users.append(doc.id)
-        except: pass
-    return list(set(users))
-
-def save_user_pending_orders(user_id, orders):
-    db = get_db()
-    if db:
-        try:
-            db.collection("users").document(user_id).set({"pending_orders": orders}, merge=True)
-            return True
-        except Exception as e:
-            print(f"Firestore save pending_orders error: {e}")
-
-    try:
-        path = os.path.join(CACHE_DIR, f"pending_orders_{user_id}.json")
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(orders, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        print(f"[Storage] Local pending_orders save failed: {e}")
-    return True
-
-def get_user_pending_orders(user_id):
-    db = get_db()
-    if db:
-        try:
-            doc = db.collection("users").document(user_id).get()
-            if doc.exists:
-                return doc.to_dict().get("pending_orders", [])
-        except Exception as e:
-            print(f"Firestore load pending_orders error: {e}")
-    
-    path = os.path.join(CACHE_DIR, f"pending_orders_{user_id}.json")
+    # Local fallback
+    path = os.path.join(CACHE_DIR, f"trade_logs_{user_id}.json")
     if os.path.exists(path):
         with open(path, "r", encoding="utf-8") as f:
             try: return json.load(f)
             except: return []
     return []
 
-def save_user_trade_history(user_id, history):
-    # Save user trade history
-    db = get_db()
-    if db:
-        try:
-            # Firestore has a 1MB limit per document. If history is HUGE, we might need a sub-collection.
-            # But for simple trading, 1MB is enough for ~2000-5000 records.
-            db.collection("users").document(user_id).set({"trade_history": json.loads(json.dumps(history))}, merge=True)
-        except Exception as e:
-            print(f"Firestore save trade_history error: {e}")
+# Wrapper functions to maintain compatibility while shifting to trade_logs
+def save_user_mock_positions(user_id, positions):
+    logs = get_user_trade_logs(user_id)
+    # Remove old positions, add new ones
+    logs = [L for L in logs if L.get("entry_type") != "POSITION"]
+    for p in positions:
+        logs.append({**p, "entry_type": "POSITION", "status": "OPEN"})
+    return save_user_trade_logs(user_id, logs)
 
-    # Fallback/Mirror
-    try:
-        path = os.path.join(CACHE_DIR, f"trade_history_{user_id}.json")
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(history, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        print(f"[Storage] Local trade_history save failed: {e}")
-    return True
+def get_user_mock_positions(user_id):
+    logs = get_user_trade_logs(user_id)
+    return [L for L in logs if L.get("entry_type") == "POSITION"]
+
+def save_user_pending_orders(user_id, orders):
+    logs = get_user_trade_logs(user_id)
+    logs = [L for L in logs if L.get("entry_type") != "PENDING"]
+    for o in orders:
+        logs.append({**o, "entry_type": "PENDING", "status": "OPEN"})
+    return save_user_trade_logs(user_id, logs)
+
+def get_user_pending_orders(user_id):
+    logs = get_user_trade_logs(user_id)
+    return [L for L in logs if L.get("entry_type") == "PENDING"]
+
+def save_user_trade_history(user_id, history):
+    logs = get_user_trade_logs(user_id)
+    logs = [L for L in logs if L.get("entry_type") != "HISTORY"]
+    for h in history:
+        logs.append({**h, "entry_type": "HISTORY", "status": "FILLED"})
+    return save_user_trade_logs(user_id, logs)
 
 def get_user_trade_history(user_id):
-    db = get_db()
-    if db:
-        try:
-            doc = db.collection("users").document(user_id).get()
-            if doc.exists:
-                return doc.to_dict().get("trade_history", [])
-        except Exception as e:
-            print(f"Firestore load trade_history error: {e}")
+    logs = get_user_trade_logs(user_id)
+    return [L for L in logs if L.get("entry_type") == "HISTORY"]
             
     path = os.path.join(CACHE_DIR, f"trade_history_{user_id}.json")
     if os.path.exists(path):
@@ -290,21 +271,32 @@ def get_user_trade_history(user_id):
     return []
 
 def save_data_pool(market, data):
+    # GCS persist (Primary for multi-instance)
     gcs = get_gcs()
     if gcs:
         try:
             bucket_name = f"{PROJECT_ID}-data"
             bucket = gcs.bucket(bucket_name)
             if not bucket.exists():
-                print(f"[Storage] Creating missing bucket: {bucket_name}")
                 bucket = gcs.create_bucket(bucket_name, location="asia-east1")
-            
             blob = bucket.blob(f"shared_results_{market}.pkl")
-            content = pickle.dumps(data)
-            blob.upload_from_string(content)
-            return True
+            blob.upload_from_string(pickle.dumps(data))
         except Exception as e:
             print(f"GCS save error: {e}")
+
+    # Firestore persist (Alternative for results list only - lightweight)
+    db = get_db()
+    if db:
+        try:
+            # We only store the 'results' part in Firestore as it's JSON serializable
+            # and what the frontend mostly needs.
+            results = data.get("results", [])
+            db.collection("scans").document(market).set({
+                "results": json.loads(json.dumps(results)),
+                "timestamp": datetime.now().isoformat()
+            })
+        except Exception as e:
+            print(f"Firestore scan result save error: {e}")
 
     try:
         path = os.path.join(CACHE_DIR, f"shared_results_{market}.pkl")
@@ -315,16 +307,27 @@ def save_data_pool(market, data):
     return True
 
 def load_data_pool(market):
+    # Try GCS
     gcs = get_gcs()
     if gcs:
         try:
             bucket = gcs.bucket(f"{PROJECT_ID}-data")
             blob = bucket.blob(f"shared_results_{market}.pkl")
             if blob.exists():
-                content = blob.download_as_string()
-                return pickle.loads(content)
+                return pickle.loads(blob.download_as_string())
         except Exception as e:
             print(f"GCS load error: {e}")
+
+    # Try Firestore
+    db = get_db()
+    if db:
+        try:
+            doc = db.collection("scans").document(market).get()
+            if doc.exists:
+                scan_data = doc.to_dict()
+                return {"results": scan_data.get("results", []), "metadata": {"source": "firestore"}}
+        except Exception as e:
+            print(f"Firestore scan result load error: {e}")
 
     path = os.path.join(CACHE_DIR, f"shared_results_{market}.pkl")
     if os.path.exists(path):
