@@ -109,6 +109,26 @@ def fetch_crypto_symbols():
         print(f"Error fetching Crypto symbols from MAX: {e}")
         return symbols
 
+
+def get_symbol_name(symbol, market_type='TW'):
+    """Lookup symbol name from results cache or return symbol as fallback"""
+    global results_cache
+    pool = results_cache.get(market_type)
+    if pool is None:
+        # Try loading if cache is empty
+        pool = load_data_pool(market_type)
+        if pool:
+            results_cache[market_type] = pool
+    
+    if pool and 'summary' in pool:
+        # Search in summary dataframe
+        df = pool['summary']
+        match = df[df['symbol'] == symbol]
+        if not match.empty:
+            return match.iloc[0]['name']
+            
+    return symbol
+
 def get_yahoo_ticker(code, market_type='TW'):
     """Convert code to Yahoo Finance ticker format"""
     if not code: return None
