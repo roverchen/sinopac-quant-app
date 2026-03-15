@@ -247,13 +247,13 @@ const Watchlist = () => {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className="bg-slate-900/80 p-1 rounded-xl border border-slate-800 flex">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full sm:w-auto">
+          <div className="bg-slate-900/80 p-1 rounded-xl border border-slate-800 flex overflow-x-auto no-scrollbar">
             {['ALL', 'TW', 'US', 'CRYPTO'].map((m) => (
               <button
                 key={m}
                 onClick={() => setMarketType(m)}
-                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                className={`px-4 py-1.5 rounded-lg text-[10px] sm:text-xs font-bold transition-all whitespace-nowrap ${
                   marketType === m ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
@@ -262,7 +262,7 @@ const Watchlist = () => {
             ))}
           </div>
           
-          <div className="relative w-64">
+          <div className="relative w-full sm:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
             <input 
               type="text" 
