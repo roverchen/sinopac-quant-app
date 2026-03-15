@@ -56,6 +56,9 @@ class AutoRobot:
                 print(f"[AutoRobot] No data for {m}, triggering auto-scan...")
                 self._update_status("Scanning", f"Performing initial scan for {m}...")
                 asyncio.run(run_market_scan(m))
+                # PROACTIVE: Try to trade immediately after first successful scan
+                print(f"[AutoRobot] Initial scan for {m} finished. Attempting startup trade...")
+                self.perform_daily_trade(m)
         self._update_status("Idle", "Initial scans complete. System ready.")
 
     def perform_daily_trade(self, market_type):
@@ -89,12 +92,14 @@ class AutoRobot:
             entry_price = getattr(top_1, 'entry_price', top_1.get('entry_price', getattr(top_1, 'price', top_1.get('price', 0))))
             score = getattr(top_1, 'score', top_1.get('score', 0))
             
-            print(f"[AutoRobot] Top 1 found: {symbol} ({name}) | Score: {score} | Entry: {entry_price}")
+            log_msg = f"Top candidate: {symbol} ({name}) with score {score}."
+            print(f"[AutoRobot] {log_msg}")
+            self._update_status("Trading", log_msg)
 
             # Execution logic (TW: 1000 shares, US: 10, Crypto: 0.1)
             qty = 1000 if market_type == "TW" else (10 if market_type == "US" else 0.1)
 
-            ShioajiService.place_order(
+            res = ShioajiService.place_order(
                 self.user_id,
                 symbol,
                 qty,
@@ -102,7 +107,11 @@ class AutoRobot:
                 action="Buy",
                 is_simulation=True
             )
-            print(f"[AutoRobot] Order placed for {symbol}")
+            if isinstance(res, dict) and "error" in res:
+                self._update_status("Error", f"Order failed for {symbol}: {res['error']}")
+            else:
+                self._update_status("Idle", f"Successfully placed order for {symbol} @ {entry_price}")
+                print(f"[AutoRobot] Order placed for {symbol}")
         except Exception as e:
             print(f"[AutoRobot] Trade Error for {market_type}: {e}")
 

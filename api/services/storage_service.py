@@ -225,6 +225,15 @@ def get_user_trade_logs(user_id):
             print(f"Firestore load trade_logs error: {e}")
     
     if logs is not None:
+        # Repair Loop: Ensure every entry has a trade_id
+        repaired = False
+        for L in logs:
+            if not L.get("trade_id"):
+                L["trade_id"] = L.get("order_id") or f"FIX-{int(time.time())}-{random.randint(100,999)}"
+                repaired = True
+        if repaired:
+            print(f"[Storage] Repaired {user_id} logs with missing trade_ids.")
+            save_user_trade_logs(user_id, logs)
         return logs
 
     # Local fallback
