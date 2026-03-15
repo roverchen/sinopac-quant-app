@@ -205,12 +205,15 @@ class MatchingEngine:
         save_user_trade_logs(user_id, logs)
 
     def cancel_order(self, user_id, trade_id):
-        """Remove a pending order from trade logs"""
+        """Move a pending order to history as CANCELLED"""
+        from api.services.storage_service import get_user_trade_logs, save_user_trade_logs
         logs = get_user_trade_logs(user_id)
-        original_len = len(logs)
-        logs = [L for L in logs if not (L.get("trade_id") == trade_id and L.get("entry_type") == "PENDING")]
+        order = next((L for L in logs if L.get("trade_id") == trade_id and L.get("entry_type") == "PENDING"), None)
         
-        if len(logs) < original_len:
+        if order:
+            order["entry_type"] = "HISTORY"
+            order["status"] = "CANCELLED"
+            order["timestamp"] = datetime.now().isoformat()
             save_user_trade_logs(user_id, logs)
             return True
         return False

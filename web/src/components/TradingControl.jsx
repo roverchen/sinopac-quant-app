@@ -465,24 +465,34 @@ const TradingControl = () => {
                       </span>
                     </td>
                     <td className="px-8 py-6">
-                      <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
-                        h.action === 'Buy' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'
-                      }`}>
-                        {h.action === 'Buy' ? '買入' : '賣出'}
-                      </span>
+                      {h.status === 'CANCELLED' ? (
+                        <span className="px-2 py-0.5 rounded text-[9px] font-black bg-slate-700 text-slate-400 uppercase">
+                          已取消
+                        </span>
+                      ) : (
+                        <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
+                          h.action === 'Buy' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'
+                        }`}>
+                          {h.action === 'Buy' ? '買入' : '賣出'}
+                        </span>
+                      )}
                     </td>
                     <td className="px-8 py-6 text-right font-inter text-xs text-slate-300">
                       {h.qty} @ ${h.price}
                     </td>
                     <td className="px-8 py-6 text-right">
-                       {h.is_simulation ? (
-                         <span className={`font-inter font-bold ${h.pnl_percent >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                           {h.action === 'Sell' ? (h.pnl_percent != null ? `${h.pnl_percent >= 0 ? '+' : ''}${h.pnl_percent}%` : '-') : '-'}
-                         </span>
+                       {h.status === 'CANCELLED' ? (
+                         <span className="text-slate-600">-</span>
                        ) : (
-                         <span className={`font-inter font-bold ${h.realized_pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                           {h.realized_pnl ? `${h.realized_pnl >= 0 ? '+' : ''}${h.realized_pnl}` : '-'}
-                         </span>
+                         h.is_simulation ? (
+                           <span className={`font-inter font-bold ${h.pnl_percent >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                             {h.action === 'Sell' ? (h.pnl_percent != null ? `${h.pnl_percent >= 0 ? '+' : ''}${h.pnl_percent}%` : '-') : '-'}
+                           </span>
+                         ) : (
+                           <span className={`font-inter font-bold ${h.realized_pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                             {h.realized_pnl ? `${h.realized_pnl >= 0 ? '+' : ''}${h.realized_pnl}` : '-'}
+                           </span>
+                         )
                        )}
                     </td>
                   </tr>
