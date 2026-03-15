@@ -115,7 +115,14 @@ class AutoRobot:
                 self._update_status("Error", f"Order failed for {symbol}: {res['error']}")
             else:
                 self._update_status("Idle", f"Successfully placed order for {symbol} @ {entry_price}")
-                print(f"[AutoRobot] Order placed for {symbol}")
+                print(f"[AutoRobot] Simulation Trade CREATED for {symbol} at {entry_price}. Checking logs...")
+                # Verify persistence immediately in logs
+                from api.services.storage_service import get_user_trade_logs
+                all_logs = get_user_trade_logs(self.user_id)
+                if any(L.get("symbol") == symbol and L.get("entry_type") == "PENDING" for L in all_logs):
+                    print(f"[AutoRobot] SUCCESS: {symbol} is now in trade_logs.")
+                else:
+                    print(f"[AutoRobot] WARNING: {symbol} NOT found in trade_logs after save!")
         except Exception as e:
             print(f"[AutoRobot] Trade Error for {market_type}: {e}")
 
