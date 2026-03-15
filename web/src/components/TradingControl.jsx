@@ -186,7 +186,7 @@ const TradingControl = () => {
     setLoading(true);
     try {
       const resp = await tradeService.syncWithBroker();
-      alert(`同步完成！從券商補回了 ${resp.added} 筆成交紀錄。`);
+      alert(`同步完成！已從券商更新最新狀態。`);
       refreshAll();
     } catch (err) {
       alert("同步失敗: " + (err.response?.data?.detail || "未知錯誤"));

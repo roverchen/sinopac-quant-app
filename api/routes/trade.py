@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from api.routes.auth import get_current_user
 from api.services.shioaji_service import ShioajiService
+from api.services.reconciliation_service import reconciliation_service
 from api.services.storage_service import get_user_credentials, update_user_credentials, get_user_trade_logs
 from pydantic import BaseModel
 from typing import Optional
@@ -202,3 +203,13 @@ async def cancel_order(trade_id: str, current_user: str = Depends(get_current_us
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+
+@router.post("/sync")
+async def sync_broker_data(current_user: str = Depends(get_current_user)):
+    """Sync real trade data from external brokers"""
+    try:
+        from api.services.reconciliation_service import reconciliation_service
+        result = reconciliation_service.sync_broker_data(current_user)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
