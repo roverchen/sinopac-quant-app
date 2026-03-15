@@ -114,6 +114,14 @@ export const tradeService = {
   async getBalance() {
     const response = await api.get('/trade/balance');
     return response.data;
+  },
+  async getRobotStatus() {
+    const response = await api.get('/trade/robot_status');
+    return response.data;
+  },
+  async triggerAutoTradeScan(market = 'TW') {
+    const response = await api.post(`/diag/trigger_auto_trade?market=${market}`);
+    return response.data;
   }
 };
 

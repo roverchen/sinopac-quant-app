@@ -233,6 +233,54 @@ def get_user_trade_logs(user_id):
             except: return []
     return []
 
+def get_all_users_with_pending() -> List[str]:
+    """Retrieve all user IDs that have PENDING orders in their trade logs."""
+    db = get_db()
+    users_with_pending = []
+    if db:
+        try:
+            docs = db.collection("users").stream()
+            for doc in docs:
+                data = doc.to_dict()
+                logs = data.get("trade_logs", [])
+                if any(L.get("entry_type") == "PENDING" for L in logs):
+                    users_with_pending.append(doc.id)
+        except Exception as e:
+            print(f"[Storage] Error discovering pending users: {e}")
+    # Always include system_auto if it has pending orders
+    system_user = "system_auto"
+    if system_user not in users_with_pending:
+        logs = get_user_trade_logs(system_user)
+        if any(L.get("entry_type") == "PENDING" for L in logs):
+            users_with_pending.append(system_user)
+    return list(set(users_with_pending))
+
+def save_robot_status(status_dict):
+    """Persist AutoRobot state for UI visibility."""
+    db = get_db()
+    if db:
+        try:
+            db.collection("users").document("system_auto").set({
+                "robot_status": {
+                    **status_dict,
+                    "last_updated": datetime.now().isoformat()
+                }
+            }, merge=True)
+        except Exception as e:
+            print(f"[Storage] Failed to save robot status: {e}")
+
+def get_robot_status():
+    """Retrieve AutoRobot state."""
+    db = get_db()
+    if db:
+        try:
+            doc = db.collection("users").document("system_auto").get()
+            if doc.exists:
+                return doc.to_dict().get("robot_status", {})
+        except:
+            pass
+    return {}
+
 # Wrapper functions to maintain compatibility while shifting to trade_logs
 def save_user_mock_positions(user_id, positions):
     logs = get_user_trade_logs(user_id)

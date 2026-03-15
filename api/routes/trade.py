@@ -156,3 +156,8 @@ async def get_combined_balance(current_user: str = Depends(get_current_user)):
         "sinopac_twd": shioaji_bal,
         "max": max_bal
     }
+@router.get("/robot_status")
+async def get_robot_status(current_user: str = Depends(get_current_user)):
+    """Get the current status of the automated trading robot"""
+    from api.services.storage_service import get_robot_status
+    return get_robot_status()

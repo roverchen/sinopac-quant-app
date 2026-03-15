@@ -32,6 +32,16 @@ class AutoRobot:
             # Initial check at startup
             threading.Thread(target=self.ensure_fresh_scans, daemon=True).start()
             print(f"[AutoRobot] Started for {self.user_id}")
+            self._update_status("Idle", "Robot started and waiting for schedule.")
+
+    def _update_status(self, status, message):
+        from api.services.storage_service import save_robot_status
+        status_dict = {
+            "status": status,
+            "message": message,
+            "timestamp": datetime.now().isoformat()
+        }
+        save_robot_status(status_dict)
 
     def _run_scheduler(self):
         while self.running:
@@ -44,11 +54,13 @@ class AutoRobot:
             pool = get_cached_pool(m)
             if not pool or not pool.get("results"):
                 print(f"[AutoRobot] No data for {m}, triggering auto-scan...")
-                # Run scan in a new event loop since this is a thread
+                self._update_status("Scanning", f"Performing initial scan for {m}...")
                 asyncio.run(run_market_scan(m))
+        self._update_status("Idle", "Initial scans complete. System ready.")
 
     def perform_daily_trade(self, market_type):
         print(f"[AutoRobot] Running daily trade for {market_type}...")
+        self._update_status("Trading", f"Analyzing {market_type} for trade opportunities...")
         try:
             # Step 1: Ensure we have a scan (trigger one if needed)
             pool = get_cached_pool(market_type)
@@ -97,6 +109,7 @@ class AutoRobot:
     def check_exits(self):
         # TP +20% or SL -5%
         print(f"[AutoRobot] Checking exits for {self.user_id}...")
+        self._update_status("ExitCheck", "Monitoring active positions for TP/SL...")
         try:
             positions = ShioajiService.get_positions(self.user_id)
             for pos in positions:
