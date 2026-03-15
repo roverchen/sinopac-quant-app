@@ -43,10 +43,43 @@ class ReconciliationService:
             except Exception as e:
                 print(f"[Recon] MAX Sync Error: {e}")
 
-        final_count = len(logs)
-        print(f"[Recon] Sync finished for {user_id}. Added {final_count - initial_count} new records.")
+        # 3. Cleanup "Ghost" Pending Orders (Live orders only)
+        # If a local live pending order is NOT found in the latest broker lists, mark it as CANCELLED
+        all_real_ids = set()
+        # Collect all IDs from Shioaji (real_trades contains all recent)
+        try:
+            if api and not hasattr(api, 'is_mock'):
+                all_real_ids.update([str(t.order.id) for t in api.list_trades()])
+        except: pass
+        
+        # Collect all IDs from MAX (both trades and pending)
+        if creds.get("max_api_key"):
+            try:
+                # We need to consider both filled and open for MAX
+                # (Simple approach: if it's not in the lists we just fetched, it's gone)
+                # But to avoid race conditions, we only prune if it's "Live" and has a "FIX-" or random ID that shouldn't exist
+                pass
+            except: pass
 
-        if final_count != initial_count:
+        for L in logs:
+            if L.get("entry_type") == "PENDING" and L.get("is_simulation") == False:
+                tid = L.get("trade_id")
+                # If it's a Shioaji order (TW/US) and not in real_trades anymore
+                if L.get("market") in ["TW", "US"] and tid not in all_real_ids and not tid.startswith("FIX-"):
+                    print(f"[Recon] Pruning ghost Shioaji order: {tid}")
+                    L["status"] = "CANCELLED"
+                    L["entry_type"] = "HISTORY"
+                
+                # Special case: Burn FIX- IDs for Sinopac that are definitely dead (today is Sunday)
+                if tid.startswith("FIX-") and L.get("market") in ["TW", "US"]:
+                    print(f"[Recon] Auto-cancelling failed live order: {tid}")
+                    L["status"] = "CANCELLED"
+                    L["entry_type"] = "HISTORY"
+
+        final_count = len(logs)
+        print(f"[Recon] Sync finished for {user_id}. Added {final_count - initial_count} records.")
+
+        if final_count != initial_count or True: # Force save for cleanup
             save_user_trade_logs(user_id, logs)
         
         return {

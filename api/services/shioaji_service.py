@@ -237,10 +237,17 @@ class ShioajiService:
                 # [FIX] Use place_order as defined in max_api.py
                 res = max_api.place_order(m_symbol, side, qty, price)
                 
+                if "error" in res:
+                    raise Exception(f"MAX API Error: {res['error']}")
+
+                trade_id = str(res.get('id'))
+                if not trade_id or trade_id == "None":
+                    raise Exception(f"MAX API returned no order ID. Response: {res}")
+                
                 # Log to unified logs
                 logs = get_user_trade_logs(email)
                 logs.append({
-                    "trade_id": str(res.get('id', random.randint(10000, 99999))),
+                    "trade_id": trade_id,
                     "symbol": symbol,
                     "name": get_symbol_name(symbol, "CRYPTO"),
                     "action": "Buy" if side == "buy" else "Sell",
@@ -255,7 +262,7 @@ class ShioajiService:
                 save_user_trade_logs(email, logs)
                 
                 class MockTrade:
-                    class Order: id = res.get('id', 'MAX-ORDER')
+                    class Order: id = trade_id
                     order = Order()
                 return MockTrade()
             except Exception as e:
@@ -299,10 +306,22 @@ class ShioajiService:
         )
 
         trade = api.place_order(contract, order)
+        
+        # [FIX] Check for immediate rejection
+        status_str = str(trade.status.status)
+        order_id = str(trade.order.id)
+        
+        print(f"[ShioajiService] Live order result for {symbol}: ID={order_id}, Status={status_str}")
+        
+        if "Rejected" in status_str or "Failed" in status_str or not order_id:
+             error_msg = getattr(trade.status, 'status_code', 'Unknown Error')
+             # Try to get extra info if available
+             detail = f"Broker Rejected: {status_str} ({error_msg})"
+             raise Exception(detail)
 
         logs = get_user_trade_logs(email)
         logs.append({
-            "trade_id": str(trade.order.id),
+            "trade_id": order_id,
             "symbol": symbol,
             "name": get_symbol_name(symbol, market),
             "action": "Buy" if action == Action.Buy else "Sell",
