@@ -205,12 +205,12 @@ const TradingControl = () => {
                 {viewAccount === 'personal' ? '個人' : '系統'}累計損益
               </p>
               {viewAccount === 'personal' && (
-                <p className={`text-2xl font-black font-inter ${summary.mock.total >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  ${summary.mock.total.toLocaleString()}
+                <p className={`text-2xl font-black font-inter ${ (summary?.mock?.total ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  ${(summary?.mock?.total ?? 0).toLocaleString()}
                 </p>
               )}
-              <p className={`text-[10px] ${viewAccount === 'system_auto' ? 'text-2xl mt-0' : 'text-slate-500 mt-1'} font-bold ${viewAccount === 'system_auto' && summary.mock.return_rate >= 0 ? 'text-emerald-400' : viewAccount === 'system_auto' ? 'text-rose-400' : ''}`}>
-                回報率: {summary.mock.return_rate}%
+              <p className={`text-[10px] ${viewAccount === 'system_auto' ? 'text-2xl mt-0' : 'text-slate-500 mt-1'} font-bold ${viewAccount === 'system_auto' && (summary?.mock?.return_rate ?? 0) >= 0 ? 'text-emerald-400' : viewAccount === 'system_auto' ? 'text-rose-400' : ''}`}>
+                回報率: {summary?.mock?.return_rate ?? 0}%
               </p>
             </div>
           </div>
@@ -315,14 +315,15 @@ const TradingControl = () => {
                   <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">狀態</th>
                   <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">模式</th>
                   <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">數量</th>
-                  <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">價格/成本</th>
+                  <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">現價/成本</th>
                   <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">損益 (%)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/50">
                 {/* Pending Orders First */}
                 {pending.map((o, i) => (
-                  <tr key={`pending-${i}`} className="bg-indigo-500/5 hover:bg-indigo-500/10 transition-colors">
+                  <tr key={`pending-${i}`} 
+                      className="bg-indigo-500/5 hover:bg-indigo-500/10 transition-colors border-b border-slate-800/30">
                     <td className="px-8 py-6">
                       <div className="flex flex-col">
                         <span className="text-lg font-black text-white font-inter">{o.symbol}</span>
@@ -330,60 +331,62 @@ const TradingControl = () => {
                       </div>
                     </td>
                     <td className="px-8 py-6">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-black ${
-                        o.action === 'Buy' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'
-                      }`}>
-                        委託{o.action === 'Buy' ? '買入' : '賣出'}中
+                      <span className="px-3 py-1 bg-amber-500/10 text-amber-400 text-[10px] font-black rounded-full border border-amber-500/20 uppercase">
+                        {o.action === 'Buy' ? '委託買入中' : '委託賣出中'}
                       </span>
                     </td>
                     <td className="px-8 py-6">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-black ${
-                        o.is_simulation ? 'bg-amber-500/10 text-amber-500' : 'bg-rose-500/10 text-rose-500'
-                      }`}>
-                        {o.is_simulation ? '模擬' : '實盤'}
-                      </span>
+                      <span className="text-xs font-bold text-slate-400">{o.is_simulation ? '模擬' : '實盤'}</span>
                     </td>
-                    <td className="px-8 py-6 text-right font-inter font-bold text-slate-300">{o.qty.toLocaleString()}</td>
-                    <td className="px-8 py-6 text-right font-inter font-bold text-slate-400">${o.price.toLocaleString()}</td>
                     <td className="px-8 py-6 text-right">
-                       <span className="text-[10px] font-black text-amber-500 animate-pulse">PENDING</span>
+                      <span className="text-sm font-bold text-slate-300">{o.qty}</span>
+                    </td>
+                    <td className="px-8 py-6 text-right">
+                      <span className="text-sm font-black text-white font-inter">${o.price}</span>
+                    </td>
+                    <td className="px-8 py-6 text-right">
+                      <span className="text-sm font-bold text-slate-600">等待成交...</span>
                     </td>
                   </tr>
                 ))}
-                
-                {/* Current Positions */}
-                {account.positions?.map((pos) => (
-                  <tr 
-                    key={`pos-${pos.symbol}`} 
-                    onClick={() => openSellModal(pos)}
-                    className="hover:bg-slate-800/30 transition-colors group cursor-pointer"
-                  >
+
+                {/* Positions */}
+                {account.positions.map((pos, i) => (
+                  <tr key={`pos-${i}`} 
+                      onClick={() => openSellModal(pos)}
+                      className="group hover:bg-slate-800/40 cursor-pointer transition-all border-b border-slate-800/50">
                     <td className="px-8 py-6">
                       <div className="flex flex-col">
                         <span className="text-lg font-black text-white group-hover:text-indigo-400 font-inter leading-tight">{pos.symbol}</span>
-                        <span className="text-[10px] text-slate-500 font-bold mt-0.5 line-clamp-1">{pos.name || '-'}</span>
+                        <span className="text-[10px] text-slate-500 font-bold">{pos.name || '-'}</span>
                       </div>
                     </td>
                     <td className="px-8 py-6">
-                      <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px] font-black">
-                        持倉中
+                      <span className="px-3 py-1 bg-emerald-500/10 text-emerald-400 text-[10px] font-black rounded-full border border-emerald-500/20 uppercase">
+                        持倉中 (Holding)
                       </span>
                     </td>
                     <td className="px-8 py-6">
-                       <span className={`px-2 py-0.5 rounded text-[10px] font-black ${
-                         pos.is_simulation ? 'bg-amber-500/10 text-amber-500' : 'bg-rose-500/10 text-rose-500'
-                       }`}>
-                         {pos.is_simulation ? '模擬' : '實盤'}
-                       </span>
+                      <span className="text-xs font-bold text-slate-400">{pos.is_simulation ? '模擬' : '實盤'}</span>
                     </td>
-                    <td className="px-8 py-6 text-right font-inter font-bold text-slate-300">
-                      {pos.qty.toLocaleString()}
-                    </td>
-                    <td className="px-8 py-6 text-right font-inter font-bold text-slate-400">${pos.buy_price.toLocaleString()}</td>
                     <td className="px-8 py-6 text-right">
-                       <div className={`font-inter font-black text-lg ${pos.pnl_percent >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                         {pos.pnl_percent >= 0 ? '+' : ''}{pos.pnl_percent}%
-                       </div>
+                      <span className="text-sm font-black text-white font-inter">{pos.qty}</span>
+                    </td>
+                    <td className="px-8 py-6 text-right">
+                      <div className="flex flex-col items-end">
+                        <span className="text-sm font-black text-white font-inter">${pos.current_price || pos.buy_price}</span>
+                        <span className="text-[10px] text-slate-500 font-bold">成本: ${pos.buy_price}</span>
+                      </div>
+                    </td>
+                    <td className="px-8 py-6 text-right">
+                      <div className="flex flex-col items-end">
+                        <span className={`text-base font-black font-inter ${pos.realized_pl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          {pos.pnl_percent > 0 ? '+' : ''}{pos.pnl_percent}%
+                        </span>
+                        <span className={`text-[10px] font-bold ${pos.realized_pl >= 0 ? 'text-emerald-500/60' : 'text-rose-500/60'}`}>
+                          ${pos.unrealized_pl?.toLocaleString() || '0'}
+                        </span>
+                      </div>
                     </td>
                   </tr>
                 ))}

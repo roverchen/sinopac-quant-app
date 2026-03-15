@@ -48,6 +48,8 @@ const Watchlist = () => {
       // 仍然在後台偷偷更新一下，但不要切換 loading 狀態以維持流暢
     } else {
       setLoading(true);
+      // Clear data to avoid showing stale results during loading
+      setData([]);
     }
 
     try {

@@ -171,20 +171,6 @@ class MatchingEngine:
                 }
                 logs.append(existing)
 
-            # 3. Add to HISTORY
-            logs.append({
-                "trade_id": trade_id,
-                "symbol": symbol,
-                "name": name,
-                "action": "Buy",
-                "qty": qty,
-                "price": fill_price,
-                "market": market,
-                "status": "FILLED",
-                "entry_type": "HISTORY",
-                "is_simulation": is_simulation,
-                "timestamp": datetime.now().isoformat()
-            })
 
         elif action == 'Sell':
             realized_pl = 0

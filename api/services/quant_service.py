@@ -110,7 +110,8 @@ def get_yahoo_ticker(code, market_type='TW'):
     """Convert code to Yahoo Finance ticker format"""
     if not code: return None
     if market_type == 'TW' and code.isdigit():
-        return code + (".TW" if int(code) < 10000 else ".TWO")
+        # Keep base code, fetcher will try .TW then .TWO
+        return code
     if market_type == 'CRYPTO':
         c = code.upper()
         if c == "MATIC-USD" or c == "MATICUSDT": return "POL-USD"

@@ -13,7 +13,7 @@ def fetch_batch_data(symbols, market_type='TW', period="1y"):
 
     with ThreadPoolExecutor(max_workers=10) as executor:
         future_to_symbol = {
-            executor.submit(yf.Ticker(t).history, period=period): s
+            executor.submit(yf.Ticker(t + ".TW" if market_type == 'TW' and t.isdigit() else t).history, period=period): s
             for s, t in tickers_map.items() if t
         }
 
@@ -21,6 +21,13 @@ def fetch_batch_data(symbols, market_type='TW', period="1y"):
             symbol = future_to_symbol[future]
             try:
                 df = future.result()
+                if df.empty and market_type == 'TW' and symbol.isdigit():
+                    # Retry with .TWO if .TW (default) failed
+                    df = yf.Ticker(f"{symbol}.TWO").history(period=period)
+                    if df.empty:
+                        # Final try with .TW just in case
+                        df = yf.Ticker(f"{symbol}.TW").history(period=period)
+                
                 if not df.empty:
                     results[symbol] = df
             except Exception as e:
