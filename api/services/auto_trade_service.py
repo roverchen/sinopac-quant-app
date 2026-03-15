@@ -109,7 +109,8 @@ class AutoRobot:
                 qty,
                 entry_price,
                 action="Buy",
-                is_simulation=True
+                is_simulation=True,
+                name=name
             )
             if isinstance(res, dict) and "error" in res:
                 self._update_status("Error", f"Order failed for {symbol}: {res['error']}")

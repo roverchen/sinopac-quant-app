@@ -21,7 +21,7 @@ class MockShioajiClient:
         class MockAcc: account_id = "MOCK-PAPER-TRADING-001"
         return [MockAcc()]
 
-    def place_order(self, contract, order, symbol=None, qty=None, price=None, action=None):
+    def place_order(self, contract, order, symbol=None, qty=None, price=None, action=None, name=None):
         logs = get_user_trade_logs(self.user_id)
         order_id = f"SIM-{random.randint(1000,9999)}"
         
@@ -42,6 +42,7 @@ class MockShioajiClient:
         logs.append({
             "trade_id": order_id,
             "symbol": target_symbol,
+            "name": name or target_symbol, # Persist name if provided
             "action": "Buy" if "Buy" in str(target_action) else "Sell",
             "qty": float(target_qty),
             "price": float(target_price),
@@ -136,10 +137,10 @@ class ShioajiService:
                 return mock_api
 
     @classmethod
-    def place_order(cls, email: str, symbol: str, qty: float, price: float, action=None, is_simulation: bool = None):
+    def place_order(cls, email: str, symbol: str, qty: float, price: float, action=None, is_simulation: bool = None, name: str = None):
         if is_simulation is True:
             print(f"DEBUG: Forced Simulation Mode for {email}")
-            return MockShioajiClient(user_id=email).place_order(None, None, symbol=symbol, qty=qty, price=price, action=str(action) if action else "Buy")
+            return MockShioajiClient(user_id=email).place_order(None, None, symbol=symbol, qty=qty, price=price, action=str(action) if action else "Buy", name=name)
 
         api = cls.get_api_client(email)
 
