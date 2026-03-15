@@ -60,7 +60,10 @@ async def get_trade_history(user_id: Optional[str] = None, current_user: str = D
     """Get trade history"""
     target_user = user_id if user_id else current_user
     logs = get_user_trade_logs(target_user)
-    return {"history": [L for L in logs if L.get("entry_type") == "HISTORY" and (L.get("action") == "Sell" or L.get("status") == "CANCELLED")]}
+    history = [L for L in logs if L.get("entry_type") == "HISTORY" and (L.get("action") == "Sell" or L.get("status") == "CANCELLED")]
+    # Sort by timestamp (newest first)
+    history.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+    return {"history": history[:20]}
 
 @router.get("/summary")
 async def get_performance_summary(user_id: Optional[str] = None, current_user: str = Depends(get_current_user)):

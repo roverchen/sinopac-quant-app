@@ -459,7 +459,7 @@ const TradingControl = () => {
                 <div className="p-3 bg-indigo-500/10 rounded-2xl">
                   <Clock className="w-6 h-6 text-indigo-400" />
                 </div>
-                <h3 className="text-xl font-bold text-white">成交歷史紀錄 (Trade History)</h3>
+                <h3 className="text-xl font-bold text-white">歷史紀錄 (Trade History)</h3>
               </div>
           </div>
           <div className="overflow-x-auto">
