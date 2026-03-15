@@ -182,7 +182,7 @@ const TradingControl = () => {
                     : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:text-white'
                 }`}
               >
-                個人手動帳戶
+                個人
               </button>
               <button 
                 onClick={() => setViewAccount('system_auto')}
@@ -192,7 +192,7 @@ const TradingControl = () => {
                     : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:text-white'
                 }`}
               >
-                系統自動帳戶
+                系統
               </button>
             </div>
           </div>

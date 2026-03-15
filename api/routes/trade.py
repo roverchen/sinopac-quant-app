@@ -92,13 +92,13 @@ async def get_performance_summary(user_id: Optional[str] = None, current_user: s
             "realized": round(realized_mock, 2),
             "unrealized": round(unrealized_mock, 2),
             "total": round(realized_mock + unrealized_mock, 2),
-            "return_rate": 0.0 # Return rate calculation depends on initial deposit, which is now 0 by default
+            "return_rate": round(((realized_mock + unrealized_mock) / 1000000) * 100, 2)
         },
         "live": {
             "realized": round(realized_live, 2),
             "unrealized": round(unrealized_live, 2),
             "total": round(realized_live + unrealized_live, 2),
-            "return_rate": 0 
+            "return_rate": 0.0
         }
     }
 

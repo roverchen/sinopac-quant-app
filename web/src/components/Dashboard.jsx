@@ -48,7 +48,11 @@ const Dashboard = () => {
   const fetchSummary = async () => {
     try {
       const data = await tradeService.getSummary();
-      setSummary(data);
+      const autoData = await tradeService.getSummary('system_auto');
+      setSummary({
+        ...data,
+        system_auto: autoData.mock
+      });
     } catch (err) {
       console.error("Failed to fetch summary:", err);
     }
@@ -110,23 +114,30 @@ const Dashboard = () => {
       {/* Performance Summary */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard 
-          label="模擬總收益 (Mock)" 
-          value={`$${summary?.mock?.total?.toLocaleString() || '0'}`} 
+          label="模擬總盈利率" 
+          value={`${summary?.mock?.return_rate ?? 0}%`} 
           change={summary?.mock?.return_rate} 
           color="indigo" 
           icon={TrendingUp}
-          subValue={`實現: $${summary?.mock?.realized?.toLocaleString() || 0}`}
+          subValue={`累計盈虧: $${summary?.mock?.total?.toLocaleString() || 0}`}
         />
         <StatCard 
-          label="實盤總收益 (Live)" 
-          value={`$${summary?.live?.total?.toLocaleString() || '0'}`} 
-          change={summary?.live?.total !== 0 ? 0 : undefined} 
+          label="實盤總盈利率" 
+          value={`${summary?.live?.return_rate ?? 0}%`} 
+          change={summary?.live?.return_rate} 
           color="rose" 
           icon={Wallet}
-          subValue={`實現: $${summary?.live?.realized?.toLocaleString() || 0}`}
+          subValue={`累計盈虧: $${summary?.live?.total?.toLocaleString() || 0}`}
         />
-        <StatCard label="今日海選量" value="1,935" change="+0.5" color="emerald" icon={Zap} />
-        <StatCard label="策略勝率" value="78.2%" change="+2.4" color="amber" icon={BarChart3} />
+        <StatCard 
+          label="系統自動下單模擬總成效" 
+          value={`${summary?.system_auto?.return_rate ?? 0}%`} 
+          change={summary?.system_auto?.return_rate} 
+          color="emerald" 
+          icon={Zap} 
+          subValue={`回報率(百分比)`}
+        />
+        <StatCard label="策略平均勝率" value="78.2%" change="+2.4" color="amber" icon={BarChart3} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
