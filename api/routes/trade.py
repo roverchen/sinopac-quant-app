@@ -164,8 +164,8 @@ async def get_combined_balance(current_user: str = Depends(get_current_user)):
 async def sync_with_broker(current_user: str = Depends(get_current_user)):
     """Force sync trade logs with real brokerage data"""
     try:
-        from api.services.reconciliation_service import recon_service
-        result = recon_service.sync_broker_data(current_user)
+        from api.services.reconciliation_service import reconciliation_service
+        result = reconciliation_service.sync_broker_data(current_user)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -204,12 +204,3 @@ async def cancel_order(trade_id: str, current_user: str = Depends(get_current_us
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 
-@router.post("/sync")
-async def sync_broker_data(current_user: str = Depends(get_current_user)):
-    """Sync real trade data from external brokers"""
-    try:
-        from api.services.reconciliation_service import reconciliation_service
-        result = reconciliation_service.sync_broker_data(current_user)
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
