@@ -79,19 +79,23 @@ class AutoRobot:
 
             # Explicitly sort by score just in case
             try:
-                # Handle both object and dict types
-                results = sorted(results, key=lambda x: getattr(x, 'score', x.get('score', -1)) if isinstance(x, (object, dict)) else -1, reverse=True)
+                # Handle both object (Pydantic) and dict types
+                results = sorted(results, key=lambda x: getattr(x, 'score', 0) if not isinstance(x, dict) else x.get('score', 0), reverse=True)
             except:
                 pass
 
             # Pick Top 1
             top_1 = results[0]
             # Handle potential dictionary or object access
-            symbol = getattr(top_1, 'symbol', top_1.get('symbol', ''))
-            name = getattr(top_1, 'name', top_1.get('name', ''))
-            entry_price = getattr(top_1, 'entry_price', top_1.get('entry_price', getattr(top_1, 'price', top_1.get('price', 0))))
-            score = getattr(top_1, 'score', top_1.get('score', 0))
+            symbol = getattr(top_1, 'symbol', top_1.get('symbol', '') if isinstance(top_1, dict) else '')
+            name = getattr(top_1, 'name', top_1.get('name', '') if isinstance(top_1, dict) else '')
+            entry_price = getattr(top_1, 'entry_price', top_1.get('entry_price', 0) if isinstance(top_1, dict) else 0)
+            score = getattr(top_1, 'score', top_1.get('score', 0) if isinstance(top_1, dict) else 0)
             
+            # Fallback for price if entry_price is missing
+            if not entry_price:
+                entry_price = getattr(top_1, 'price', top_1.get('price', 0) if isinstance(top_1, dict) else 0)
+
             log_msg = f"Top candidate: {symbol} ({name}) with score {score}."
             print(f"[AutoRobot] {log_msg}")
             self._update_status("Trading", log_msg)
