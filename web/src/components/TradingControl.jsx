@@ -154,6 +154,7 @@ const TradingControl = () => {
       alert("賣出委託已送出");
       setSelectedPosition(null);
       fetchAccount();
+      fetchPending();
     } catch (err) {
       alert("交易失敗: " + (err.response?.data?.detail || "未知錯誤"));
     } finally {
