@@ -62,7 +62,7 @@ class MockShioajiClient:
     def get_orders(self):
         if not self._mock_orders:
             self._mock_orders = [
-                {"order_id": "MOCK-0001", "symbol": "2330", "action": "Buy", "qty": 1, "price": 1025.0, "status": "FILLED", "time": "2026-03-11"}
+                {"trade_id": "MOCK-0001", "symbol": "2330", "action": "Buy", "qty": 1, "price": 1025.0, "status": "FILLED", "time": "2026-03-11"}
             ]
         return self._mock_orders
 
@@ -372,7 +372,7 @@ class ShioajiService:
             results = []
             for t in trades:
                 results.append({
-                    "order_id": str(t.order.id),
+                    "trade_id": str(t.order.id),
                     "symbol": t.contract.code,
                     "action": str(t.order.action),
                     "qty": t.order.quantity,
@@ -384,6 +384,26 @@ class ShioajiService:
         except Exception as e:
             print(f"Error fetching orders: {e}")
             return []
+
+    @classmethod
+    def cancel_order(cls, email: str, trade_id: str):
+        api = cls.get_api_client(email)
+        if not api or hasattr(api, 'is_mock') or type(api).__name__ == 'MockShioajiClient':
+            return True # Mock always succeeds
+
+        try:
+            # Need to find the trade object from shioaji
+            api.update_status()
+            trades = api.list_trades()
+            target_trade = next((t for t in trades if str(t.order.id) == str(trade_id)), None)
+            
+            if target_trade:
+                api.cancel_order(target_trade)
+                return True
+            return False
+        except Exception as e:
+            print(f"[ShioajiService] Cancel failed for {trade_id}: {e}")
+            raise e
 
     @classmethod
     def get_positions(cls, email: str):

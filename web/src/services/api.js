@@ -124,7 +124,11 @@ export const tradeService = {
     return response.data;
   },
   async cancelOrder(tradeId) {
-    const response = await api.delete(`/trade/order/${tradeId}`);
+    if (!tradeId) {
+      console.error("cancelOrder called without tradeId");
+      return Promise.reject({ response: { data: { detail: "委託編號遺失，請重新整理" } } });
+    }
+    const response = await api.delete(`/trade/order/${encodeURIComponent(tradeId)}/`);
     return response.data;
   }
 };

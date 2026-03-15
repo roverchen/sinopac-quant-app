@@ -162,15 +162,30 @@ async def get_robot_status(current_user: str = Depends(get_current_user)):
     from api.services.storage_service import get_robot_status
     return get_robot_status()
 @router.delete("/order/{trade_id}")
+@router.delete("/order/{trade_id}/")
 async def cancel_order(trade_id: str, current_user: str = Depends(get_current_user)):
     """Cancel a pending order"""
-    from api.services.trade_engine import engine
-    success = engine.cancel_order(current_user, trade_id)
-    if not success:
-        # Also try system_auto if user is admin or if it's a system order
-        success = engine.cancel_order("system_auto", trade_id)
+    try:
+        print(f"[TradeRoute] Cancellation request for {trade_id} by {current_user}")
+        from api.services.trade_engine import engine
         
-    if success:
-        return {"status": "success", "message": "Order cancelled"}
-    else:
-        raise HTTPException(status_code=404, detail="Order not found or already filled")
+        # Try user's own orders first
+        success = engine.cancel_order(current_user, trade_id)
+        if not success:
+            # Also try system_auto
+            print(f"[TradeRoute] Order {trade_id} not found for {current_user}, checking system_auto...")
+            success = engine.cancel_order("system_auto", trade_id)
+            
+        if success:
+            print(f"[TradeRoute] Cancellation success for {trade_id}")
+            return {"status": "success", "message": "Order cancelled"}
+        else:
+            print(f"[TradeRoute] Cancellation failed: Order {trade_id} not found after checking both user and system_auto")
+            raise HTTPException(status_code=404, detail=f"Order {trade_id} not found or already filled")
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[TradeRoute] CRITICAL ERROR during cancellation: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")

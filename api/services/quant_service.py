@@ -24,6 +24,9 @@ results_cache = {
     "CRYPTO": None
 }
 
+# Revenue analysis cache (24h)
+revenue_cache = {}
+
 def get_cached_pool(market_type: str):
     global results_cache
     if results_cache.get(market_type) is None:
@@ -167,6 +170,14 @@ def calculate_technical_indicators(df):
 def check_revenue_momentum(code):
     """Check revenue momentum: last 3 months YoY trend"""
     if not code.isdigit(): return "N/A", True
+    
+    # Check cache first
+    now = datetime.now()
+    if code in revenue_cache:
+        msg, status, ts = revenue_cache[code]
+        if now - ts < timedelta(hours=24):
+            return msg, status
+
     try:
         url = "https://api.finmindtrade.com/api/v4/data"
         params = {
@@ -187,12 +198,16 @@ def check_revenue_momentum(code):
         is_declining = all(yoy_list[i] > yoy_list[i+1] for i in range(len(yoy_list)-1))
 
         if is_declining and latest_yoy < 0:
-            return f"Declining({latest_yoy:.1f}%)", False
-        return f"Normal({latest_yoy:.1f}%)", True
+            res = (f"Declining({latest_yoy:.1f}%)", False)
+        else:
+            res = (f"Normal({latest_yoy:.1f}%)", True)
+        
+        revenue_cache[code] = (*res, now)
+        return res
     except:
         return "Unavailable", True
 
-def analyze_stock(df, code, name, defense_weight=0.5, market_type='TW'):
+def analyze_stock(df, code, name, defense_weight=0.5, market_type='TW', skip_indicators=False):
     """Analyze single stock and return AnalysisResult compatible dict"""
     if df is None or len(df) < 10:
         return {
@@ -200,7 +215,18 @@ def analyze_stock(df, code, name, defense_weight=0.5, market_type='TW'):
             "level": "-", "ma240_diff": "-", "ma20_diff": "-", "macd_status": "-", "score": -1
         }
 
-    df = calculate_technical_indicators(df)
+    df = df.copy()
+    df.columns = [c.lower() for c in df.columns]
+
+    # Defensive: if skip_indicators is True but columns are missing, force calculate
+    required_cols = ['ma20', 'ma240', 'ma100', 'ma60', 'macd', 'signal', 'hist', 'atr', 'year_high', 'year_low', 'ma5', 'vol_ma5']
+    missing = [c for c in required_cols if c not in df.columns]
+    
+    if not skip_indicators or missing:
+        if skip_indicators and missing:
+            print(f"[QuantService] {code} is missing indicators {missing} despite skip_indicators=True. Forcing calculation.")
+        df = calculate_technical_indicators(df)
+    
     last_row = df.iloc[-1]
     last_price = last_row['close']
     ma20_last = last_row['ma20']
@@ -321,7 +347,9 @@ async def run_market_scan(market_type: str, defense_weight: float = 0.5):
 
             for s, df in data_map.items():
                 name = symbols_map.get(s, "Unknown")
-                analysis = analyze_stock(df, s, name, defense_weight, market_type)
+                # PRE-CALCULATE INDICATORS ONCE and save to all_dfs
+                df = calculate_technical_indicators(df)
+                analysis = analyze_stock(df, s, name, defense_weight, market_type, skip_indicators=True)
                 results.append(AnalysisResult(**analysis))
                 all_dfs[s] = df
 

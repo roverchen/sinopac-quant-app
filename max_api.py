@@ -107,6 +107,25 @@ class MaxExchangeAPI:
         except Exception as e:
             return {"error": str(e)}
 
+    def cancel_order(self, order_id: str) -> dict:
+        """
+        取消指定訂單 (使用 v2 DELETE)
+        """
+        endpoint = "/api/v2/order/delete"
+        url = self.base_url + endpoint
+        
+        payload = {"id": str(order_id)}
+        headers, json_payload = self._get_auth_payload(endpoint, payload_dict=payload)
+        
+        try:
+            response = requests.post(url, headers=headers, data=json_payload)
+            if response.status_code in [200, 201]:
+                return response.json()
+            else:
+                return {"error": f"Cancel Failed {response.status_code}: {response.text}"}
+        except Exception as e:
+            return {"error": str(e)}
+
     def get_snapshots(self) -> dict:
         """
         獲取所有市場的即時報價 (Public API)

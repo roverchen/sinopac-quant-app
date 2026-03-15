@@ -156,6 +156,7 @@ const TradingControl = () => {
       setSelectedPosition(null);
       fetchAccount();
       fetchPending();
+      fetchHistory();
     } catch (err) {
       alert("交易失敗: " + (err.response?.data?.detail || "未知錯誤"));
     } finally {
@@ -168,10 +169,12 @@ const TradingControl = () => {
     
     setLoading(true);
     try {
-      await tradeService.cancelOrder(selectedPending.trade_id);
+      const idToCancel = selectedPending.trade_id || selectedPending.order_id;
+      await tradeService.cancelOrder(idToCancel);
       alert("委託已成功撤單");
       setSelectedPending(null);
       fetchPending();
+      fetchHistory(); // Added history refresh
     } catch (err) {
       alert("撤單失敗: " + (err.response?.data?.detail || "未知錯誤"));
     } finally {
@@ -403,10 +406,10 @@ const TradingControl = () => {
                     <td className="px-8 py-6 text-right">
                       <div className="flex items-center justify-end gap-4">
                         <div className="flex flex-col items-end">
-                          <span className={`text-base font-black font-inter ${pos.realized_pl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          <span className={`text-base font-black font-inter ${pos.pnl_percent >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                             {pos.pnl_percent > 0 ? '+' : ''}{pos.pnl_percent}%
                           </span>
-                          <span className={`text-[10px] font-bold ${pos.realized_pl >= 0 ? 'text-emerald-500/60' : 'text-rose-500/60'}`}>
+                          <span className={`text-[10px] font-bold ${pos.unrealized_pnl >= 0 ? 'text-emerald-500/60' : 'text-rose-500/60'}`}>
                             ${pos.unrealized_pl?.toLocaleString() || '0'}
                           </span>
                         </div>

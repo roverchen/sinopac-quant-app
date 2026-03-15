@@ -68,7 +68,8 @@ class MatchingEngine:
                     pass
                 
                 # Fallback for Crypto: Binance
-                if price is None and ("-USD" in t or market == "CRYPTO"):
+                m_type = next((o['market'] for o in pending if o['symbol'] == s), "TW")
+                if price is None and ("-USD" in t or m_type == "CRYPTO"):
                     base = t.split("-")[0]
                     try:
                         import requests
@@ -208,13 +209,34 @@ class MatchingEngine:
         """Move a pending order to history as CANCELLED"""
         from api.services.storage_service import get_user_trade_logs, save_user_trade_logs
         logs = get_user_trade_logs(user_id)
-        order = next((L for L in logs if L.get("trade_id") == trade_id and L.get("entry_type") == "PENDING"), None)
+        
+        # Standardize trade_id to string for reliable comparison
+        target_id = str(trade_id)
+        order = next((L for L in logs if str(L.get("trade_id")) == target_id and L.get("entry_type") == "PENDING"), None)
         
         if order:
+            # If it's a Live Trade, attempt to cancel at broker level first
+            if not order.get("is_simulation", True):
+                print(f"[MatchingEngine] Attempting LIVE cancellation for {target_id} ({order.get('market')})")
+                try:
+                    if order.get("market") == "CRYPTO":
+                        from api.services.storage_service import get_user_credentials
+                        from max_api import MaxExchangeAPI
+                        creds = get_user_credentials(user_id)
+                        if creds.get("max_api_key"):
+                            max_api = MaxExchangeAPI(creds["max_api_key"], creds["max_api_secret"])
+                            max_api.cancel_order(target_id)
+                    else: # TW or US
+                        from api.services.shioaji_service import ShioajiService
+                        ShioajiService.cancel_order(user_id, target_id)
+                except Exception as e:
+                    print(f"[MatchingEngine] External cancellation error (non-blocking): {e}")
+
             order["entry_type"] = "HISTORY"
             order["status"] = "CANCELLED"
             order["timestamp"] = datetime.now().isoformat()
             save_user_trade_logs(user_id, logs)
+            print(f"[MatchingEngine] Cancelled {target_id} for {user_id}")
             return True
         return False
 

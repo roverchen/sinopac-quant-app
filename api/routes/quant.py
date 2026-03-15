@@ -111,49 +111,33 @@ async def get_market_results(
     
     # Dynamic re-scoring based on weight
     if defense_weight is not None:
-        # round weight to avoid float precision issues in cache key
         w_rounded = round(defense_weight, 2)
         cache_key = f"res_{market_type}_{w_rounded}"
+        
         from api.services.quant_service import results_cache
-        if results_cache.get(cache_key):
-             all_results = results_cache[cache_key]
+        cached_res = results_cache.get(cache_key)
+        if cached_res:
+             all_results = cached_res
         else:
-            from api.services.quant_service import analyze_stock, fetch_tw_symbols, fetch_us_symbols, fetch_crypto_symbols
-            from api.services.data_fetcher import fetch_batch_data
-            
+            from api.services.quant_service import analyze_stock
             dfs = pool.get("dfs", {})
             new_results = []
             
-            # Identify which symbols are missing from dfs
-            missing_symbols = []
-            for r in all_results:
-                code = getattr(r, 'symbol', r.get('symbol') if isinstance(r, dict) else None)
-                if code and code not in dfs:
-                    missing_symbols.append(code)
-            
-            # Fetch missing data if any
-            if missing_symbols:
-                print(f"[Quant] Fetching missing history for {len(missing_symbols)} symbols due to weight change...")
-                fetched_dfs = fetch_batch_data(missing_symbols, market_type)
-                dfs.update(fetched_dfs)
-                # Update the pool cache so it stays there
-                pool["dfs"] = dfs
-
+            # Optimization: Re-score using existing DFs without re-calculating indicators
+            # and skipping redundant revenue fetches if we're just re-weighting
             for r in all_results:
                 code = getattr(r, 'symbol', r.get('symbol') if isinstance(r, dict) else None)
                 df = dfs.get(code)
                 name = getattr(r, 'name', r.get('name', 'Unknown') if isinstance(r, dict) else 'Unknown')
                 if df is not None:
-                    analysis = analyze_stock(df, code, name, defense_weight, market_type)
+                    # skip_indicators=True prevents expensive re-calculation of MA/MACD
+                    analysis = analyze_stock(df, code, name, defense_weight, market_type, skip_indicators=True)
                     new_results.append(AnalysisResult(**analysis))
                 else:
-                    # Fallback or keep old result if still no data
-                    if isinstance(r, dict):
-                         new_results.append(AnalysisResult(**r))
-                    else:
-                         new_results.append(r)
+                    if isinstance(r, dict): new_results.append(AnalysisResult(**r))
+                    else: new_results.append(r)
+            
             all_results = new_results
-            # Cache for a short while or until next scan
             results_cache[cache_key] = all_results
     
     all_results = sorted(all_results, key=lambda x: x.score if hasattr(x, 'score') else (x.get('score', 0) if isinstance(x, dict) else 0), reverse=True)
