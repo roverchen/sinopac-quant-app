@@ -122,6 +122,10 @@ export const tradeService = {
   async triggerAutoTradeScan(market = 'TW') {
     const response = await api.post(`/diag/trigger_auto_trade?market=${market}`);
     return response.data;
+  },
+  async cancelOrder(tradeId) {
+    const response = await api.delete(`/trade/order/${tradeId}`);
+    return response.data;
   }
 };
 

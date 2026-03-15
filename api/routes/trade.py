@@ -161,3 +161,16 @@ async def get_robot_status(current_user: str = Depends(get_current_user)):
     """Get the current status of the automated trading robot"""
     from api.services.storage_service import get_robot_status
     return get_robot_status()
+@router.delete("/order/{trade_id}")
+async def cancel_order(trade_id: str, current_user: str = Depends(get_current_user)):
+    """Cancel a pending order"""
+    from api.services.trade_engine import engine
+    success = engine.cancel_order(current_user, trade_id)
+    if not success:
+        # Also try system_auto if user is admin or if it's a system order
+        success = engine.cancel_order("system_auto", trade_id)
+        
+    if success:
+        return {"status": "success", "message": "Order cancelled"}
+    else:
+        raise HTTPException(status_code=404, detail="Order not found or already filled")

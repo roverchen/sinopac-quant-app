@@ -15,6 +15,7 @@ const TradingControl = () => {
   const [summary, setSummary] = useState(null);
   const [history, setHistory] = useState([]);
   const [robotStatus, setRobotStatus] = useState({ status: 'Idle', message: 'System Ready' });
+  const [selectedPending, setSelectedPending] = useState(null);
 
   useEffect(() => {
     fetchStatus();
@@ -157,6 +158,22 @@ const TradingControl = () => {
       fetchPending();
     } catch (err) {
       alert("交易失敗: " + (err.response?.data?.detail || "未知錯誤"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCancelOrder = async () => {
+    if (!selectedPending) return;
+    
+    setLoading(true);
+    try {
+      await tradeService.cancelOrder(selectedPending.trade_id);
+      alert("委託已成功撤單");
+      setSelectedPending(null);
+      fetchPending();
+    } catch (err) {
+      alert("撤單失敗: " + (err.response?.data?.detail || "未知錯誤"));
     } finally {
       setLoading(false);
     }
@@ -324,10 +341,11 @@ const TradingControl = () => {
                 {/* Pending Orders First */}
                 {pending.map((o, i) => (
                   <tr key={`pending-${i}`} 
-                      className="bg-indigo-500/5 hover:bg-indigo-500/10 transition-colors border-b border-slate-800/30">
+                      onClick={() => setSelectedPending(o)}
+                      className="bg-indigo-500/5 hover:bg-slate-800/60 cursor-pointer transition-all border-b border-slate-800/30 group">
                     <td className="px-8 py-6">
                       <div className="flex flex-col">
-                        <span className="text-lg font-black text-white font-inter">{o.symbol}</span>
+                        <span className="text-lg font-black text-white group-hover:text-amber-400 font-inter leading-tight">{o.symbol}</span>
                         <span className="text-[10px] text-slate-500 font-bold">{o.name || '-'}</span>
                       </div>
                     </td>
@@ -346,7 +364,10 @@ const TradingControl = () => {
                       <span className="text-sm font-black text-white font-inter">${o.price}</span>
                     </td>
                     <td className="px-8 py-6 text-right">
-                      <span className="text-sm font-bold text-slate-600">等待成交...</span>
+                      <div className="flex items-center justify-end gap-2 text-amber-500/40 group-hover:text-amber-500 transition-colors">
+                        <span className="text-[10px] font-bold">點擊查看/撤單</span>
+                        <X className="w-4 h-4" />
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -380,13 +401,18 @@ const TradingControl = () => {
                       </div>
                     </td>
                     <td className="px-8 py-6 text-right">
-                      <div className="flex flex-col items-end">
-                        <span className={`text-base font-black font-inter ${pos.realized_pl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                          {pos.pnl_percent > 0 ? '+' : ''}{pos.pnl_percent}%
-                        </span>
-                        <span className={`text-[10px] font-bold ${pos.realized_pl >= 0 ? 'text-emerald-500/60' : 'text-rose-500/60'}`}>
-                          ${pos.unrealized_pl?.toLocaleString() || '0'}
-                        </span>
+                      <div className="flex items-center justify-end gap-4">
+                        <div className="flex flex-col items-end">
+                          <span className={`text-base font-black font-inter ${pos.realized_pl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                            {pos.pnl_percent > 0 ? '+' : ''}{pos.pnl_percent}%
+                          </span>
+                          <span className={`text-[10px] font-bold ${pos.realized_pl >= 0 ? 'text-emerald-500/60' : 'text-rose-500/60'}`}>
+                            ${pos.unrealized_pl?.toLocaleString() || '0'}
+                          </span>
+                        </div>
+                        <div className="p-2 bg-rose-500/10 text-rose-500 rounded-lg opacity-0 group-hover:opacity-100 transition-all transform translate-x-4 group-hover:translate-x-0">
+                          發起賣單
+                        </div>
                       </div>
                     </td>
                   </tr>
@@ -468,6 +494,87 @@ const TradingControl = () => {
           </div>
         </div>
       )}
+
+      {/* Order Cancel Modal */}
+      <AnimatePresence>
+        {selectedPending && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedPending(null)}
+              className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"
+            />
+            
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              className="relative w-full max-w-md bg-slate-900 border border-slate-800 rounded-[2.5rem] shadow-2xl overflow-hidden"
+            >
+              <div className="p-8 border-b border-slate-800 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-amber-500/10 rounded-2xl">
+                    <AlertCircle className="w-6 h-6 text-amber-500" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-white">委託詳情 (Pending)</h3>
+                    <p className="text-slate-500 text-xs mt-1">ID: {selectedPending.trade_id.slice(-8)}</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setSelectedPending(null)}
+                  className="p-2 hover:bg-slate-800 rounded-xl text-slate-500 transition-colors"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="p-8 space-y-6">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-4 bg-slate-800/50 rounded-2xl border border-slate-700">
+                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">標的/動作</p>
+                    <p className="text-lg font-bold text-white font-inter">{selectedPending.symbol} • {selectedPending.action === 'Buy' ? '買入' : '賣出'}</p>
+                  </div>
+                  <div className="p-4 bg-slate-800/50 rounded-2xl border border-slate-700">
+                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">當前狀態</p>
+                    <p className="text-lg font-bold text-amber-400 font-inter">PENDING</p>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-sm text-slate-400">
+                    委託數量：<span className="text-white font-bold">{selectedPending.qty}</span>
+                  </p>
+                  <p className="text-sm text-slate-400">
+                    委託價格：<span className="text-white font-bold">${selectedPending.price}</span>
+                  </p>
+                  <p className="text-sm text-slate-400">
+                    交易模式：<span className="text-white font-bold">{selectedPending.is_simulation ? '模擬交易' : '實盤交易'}</span>
+                  </p>
+                </div>
+
+                <div className="pt-4 border-t border-slate-800 flex flex-col gap-3">
+                  <button
+                    onClick={handleCancelOrder}
+                    disabled={loading}
+                    className="w-full bg-rose-600/10 hover:bg-rose-600/20 text-rose-400 font-black py-4 rounded-2xl transition-all border border-rose-600/20 flex items-center justify-center gap-2"
+                  >
+                    {loading ? "處理中..." : "撤銷此筆委託 (Cancel Order)"}
+                  </button>
+                  <button
+                    onClick={() => setSelectedPending(null)}
+                    className="w-full bg-slate-800 hover:bg-slate-700 text-white font-black py-4 rounded-2xl transition-all"
+                  >
+                    關閉視窗
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Sell Modal */}
       <AnimatePresence>
