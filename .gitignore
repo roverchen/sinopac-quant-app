@@ -30,3 +30,4 @@ watchlist.json
 web/node_modules/
 web/dist/
 web/.vite/
+credentials.json

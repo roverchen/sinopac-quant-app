@@ -119,25 +119,24 @@ async def get_market_results(
         if cached_res:
              all_results = cached_res
         else:
+            from concurrent.futures import ThreadPoolExecutor
             from api.services.quant_service import analyze_stock
             dfs = pool.get("dfs", {})
-            new_results = []
             
-            # Optimization: Re-score using existing DFs without re-calculating indicators
-            # and skipping redundant revenue fetches if we're just re-weighting
-            for r in all_results:
+            def rescore_task(r):
                 code = getattr(r, 'symbol', r.get('symbol') if isinstance(r, dict) else None)
                 df = dfs.get(code)
                 name = getattr(r, 'name', r.get('name', 'Unknown') if isinstance(r, dict) else 'Unknown')
                 if df is not None:
-                    # skip_indicators=True prevents expensive re-calculation of MA/MACD
-                    analysis = analyze_stock(df, code, name, defense_weight, market_type, skip_indicators=True)
-                    new_results.append(AnalysisResult(**analysis))
+                    # skip_indicators=True and skip_revenue=True for 100x speedup
+                    analysis = analyze_stock(df, code, name, defense_weight, market_type, skip_indicators=True, skip_revenue=True)
+                    return AnalysisResult(**analysis)
                 else:
-                    if isinstance(r, dict): new_results.append(AnalysisResult(**r))
-                    else: new_results.append(r)
+                    return AnalysisResult(**r) if isinstance(r, dict) else r
+
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                all_results = list(executor.map(rescore_task, all_results))
             
-            all_results = new_results
             results_cache[cache_key] = all_results
     
     all_results = sorted(all_results, key=lambda x: x.score if hasattr(x, 'score') else (x.get('score', 0) if isinstance(x, dict) else 0), reverse=True)

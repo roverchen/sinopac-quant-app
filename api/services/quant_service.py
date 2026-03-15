@@ -207,7 +207,7 @@ def check_revenue_momentum(code):
     except:
         return "Unavailable", True
 
-def analyze_stock(df, code, name, defense_weight=0.5, market_type='TW', skip_indicators=False):
+def analyze_stock(df, code, name, defense_weight=0.5, market_type='TW', skip_indicators=False, skip_revenue=False):
     """Analyze single stock and return AnalysisResult compatible dict"""
     if df is None or len(df) < 10:
         return {
@@ -271,7 +271,7 @@ def analyze_stock(df, code, name, defense_weight=0.5, market_type='TW', skip_ind
 
     final_score = (defense_weight * value_score) + ((1 - defense_weight) * pullback_score)
     is_rev_ok = True
-    if market_type == 'TW' and code.isdigit():
+    if market_type == 'TW' and code.isdigit() and not skip_revenue:
         rev_msg, is_rev_ok = check_revenue_momentum(code)
         if not is_rev_ok: final_score *= 0.1
 

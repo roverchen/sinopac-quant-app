@@ -533,7 +533,9 @@ const TradingControl = () => {
                   </div>
                   <div>
                     <h3 className="text-xl font-bold text-white">委託詳情 (Pending)</h3>
-                    <p className="text-slate-500 text-xs mt-1">ID: {selectedPending.trade_id.slice(-8)}</p>
+                    <p className="text-slate-500 text-[10px] mt-1 font-inter">
+                      ID: {(selectedPending.trade_id || selectedPending.order_id || 'UNKNOWN').slice(-8)}
+                    </p>
                   </div>
                 </div>
                 <button 

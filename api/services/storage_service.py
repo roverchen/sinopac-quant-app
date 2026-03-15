@@ -1,5 +1,6 @@
 import os
 import json
+import random
 import pickle
 import time
 from datetime import datetime
@@ -203,7 +204,7 @@ def get_user_trade_logs(user_id):
                         logs.append({**pos, "entry_type": "POSITION", "status": "OPEN", "trade_id": pos.get("trade_id", f"POS-{int(time.time())}")})
                     # 2. Pending
                     for order in data.get("pending_orders", []):
-                        logs.append({**order, "entry_type": "PENDING", "status": "OPEN"})
+                        logs.append({**order, "entry_type": "PENDING", "status": "OPEN", "trade_id": order.get("trade_id") or order.get("order_id") or f"ORDR-{int(time.time())}-{random.randint(100,999)}"})
                     # 3. History
                     for hist in data.get("trade_history", []):
                         logs.append({**hist, "entry_type": "HISTORY", "status": "FILLED"})
