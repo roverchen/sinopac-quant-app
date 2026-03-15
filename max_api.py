@@ -126,6 +126,40 @@ class MaxExchangeAPI:
         except Exception as e:
             return {"error": str(e)}
 
+    def get_trades(self, market: str = None) -> list:
+        """獲取成交紀錄 (Private API)"""
+        endpoint = "/api/v2/trades/my"
+        params = {}
+        if market: params["market"] = market.lower()
+        
+        headers, json_payload = self._get_auth_payload(endpoint, payload_dict=params)
+        url = self.base_url + endpoint
+        try:
+            # For GET requests, params are in query string
+            response = requests.get(url, headers=headers, params=json.loads(json_payload))
+            if response.status_code == 200:
+                return response.json()
+            return []
+        except:
+            return []
+
+    def get_orders(self, market: str = None, state: str = None) -> list:
+        """獲取委託紀錄 (Private API)"""
+        endpoint = "/api/v2/orders"
+        params = {}
+        if market: params["market"] = market.lower()
+        if state: params["state"] = state # e.g. "wait", "done", "cancel"
+        
+        headers, json_payload = self._get_auth_payload(endpoint, payload_dict=params)
+        url = self.base_url + endpoint
+        try:
+            response = requests.get(url, headers=headers, params=json.loads(json_payload))
+            if response.status_code == 200:
+                return response.json()
+            return []
+        except:
+            return []
+
     def get_snapshots(self) -> dict:
         """
         獲取所有市場的即時報價 (Public API)

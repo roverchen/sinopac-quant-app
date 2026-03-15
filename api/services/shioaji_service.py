@@ -384,6 +384,21 @@ class ShioajiService:
         except Exception as e:
             print(f"Error fetching orders: {e}")
             return []
+    @classmethod
+    def get_broker_trades(cls, email: str):
+        """獲取券商成交紀錄 (Real trades only)"""
+        api = cls.get_api_client(email)
+        if not api or hasattr(api, 'is_mock') or type(api).__name__ == 'MockShioajiClient':
+            return []
+
+        try:
+            api.update_status()
+            trades = api.list_trades()
+            # Filter for FILLED or partially filled trades
+            return [t for t in trades if "Filled" in str(t.status.status)]
+        except Exception as e:
+            print(f"Error fetching broker trades: {e}")
+            return []
 
     @classmethod
     def cancel_order(cls, email: str, trade_id: str):

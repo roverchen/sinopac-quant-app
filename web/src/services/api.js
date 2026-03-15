@@ -130,6 +130,10 @@ export const tradeService = {
     }
     const response = await api.delete(`/trade/order/${encodeURIComponent(tradeId)}/`);
     return response.data;
+  },
+  async syncWithBroker() {
+    const response = await api.post('/trade/sync');
+    return response.data;
   }
 };
 

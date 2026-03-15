@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Shield, Play, Pause, Wallet, TrendingUp, Send, Smartphone, Clock, X, AlertCircle } from 'lucide-react';
+import { Shield, Play, Pause, Wallet, TrendingUp, Send, Smartphone, Clock, X, AlertCircle, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { tradeService } from '../services/api';
 
@@ -182,6 +182,19 @@ const TradingControl = () => {
     }
   };
 
+  const handleSyncBroker = async () => {
+    setLoading(true);
+    try {
+      const resp = await tradeService.syncWithBroker();
+      alert(`同步完成！從券商補回了 ${resp.added} 筆成交紀錄。`);
+      refreshAll();
+    } catch (err) {
+      alert("同步失敗: " + (err.response?.data?.detail || "未知錯誤"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="max-w-6xl mx-auto space-y-8">
       {/* Performance Summary Header */}
@@ -217,6 +230,17 @@ const TradingControl = () => {
               </button>
             </div>
           </div>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={handleSyncBroker}
+            disabled={loading}
+            className="flex items-center gap-2 px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-2xl text-sm font-bold transition-all border border-slate-700 shadow-lg disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            同步券商資料
+          </button>
         </div>
         
         {summary && (

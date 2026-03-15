@@ -156,6 +156,16 @@ async def get_combined_balance(current_user: str = Depends(get_current_user)):
         "sinopac_twd": shioaji_bal,
         "max": max_bal
     }
+@router.post("/sync")
+async def sync_with_broker(current_user: str = Depends(get_current_user)):
+    """Force sync trade logs with real brokerage data"""
+    try:
+        from api.services.reconciliation_service import recon_service
+        result = recon_service.sync_broker_data(current_user)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/robot_status")
 async def get_robot_status(current_user: str = Depends(get_current_user)):
     """Get the current status of the automated trading robot"""
