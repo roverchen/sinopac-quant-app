@@ -123,7 +123,13 @@ def get_symbol_name(symbol, market_type='TW'):
     if pool and 'summary' in pool:
         # Search in summary dataframe
         df = pool['summary']
-        match = df[df['symbol'] == symbol]
+        
+        # [v2.1.43] Handle MATIC <-> POL fallback
+        query_symbols = [symbol]
+        if symbol == "MATIC-USD": query_symbols.append("POL-USD")
+        if symbol == "POL-USD": query_symbols.append("MATIC-USD")
+        
+        match = df[df['symbol'].isin(query_symbols)]
         if not match.empty:
             return match.iloc[0]['name']
             

@@ -231,6 +231,12 @@ class ShioajiService:
                 side = "buy" if "Buy" in str(action) else "sell"
                 # Symbol conversion for MAX (e.g. BTC-USD -> btcusdt)
                 m_symbol = symbol.lower().replace("-", "").replace("usd", "usdt")
+                
+                # [v2.1.43] MATIC renamed to POL on MAX
+                if "matic" in m_symbol:
+                    print(f"[ShioajiService] Mapping MATIC to POL for MAX compatibility: {m_symbol} -> {m_symbol.replace('matic', 'pol')}")
+                    m_symbol = m_symbol.replace('matic', 'pol')
+                
                 if not m_symbol.endswith("twd") and not m_symbol.endswith("usdt"):
                     m_symbol += "usdt"
                 

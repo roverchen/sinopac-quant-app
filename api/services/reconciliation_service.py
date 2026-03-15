@@ -34,9 +34,14 @@ class ReconciliationService:
 
     @staticmethod
     def _normalize_crypto_symbol(market_id: str):
-        """Convert btcusdt to BTC-USD for system consistency"""
+        """Convert btcusdt to BTC-USD and polusdt to MATIC-USD for system consistency"""
         if not market_id: return market_id
         c = market_id.upper()
+        
+        # Handle POL -> MATIC specifically
+        if c.startswith('POL'):
+            c = c.replace('POL', 'MATIC')
+            
         if c.endswith('USDT'):
             return f"{c[:-4]}-USD"
         if c.endswith('TWD'):
