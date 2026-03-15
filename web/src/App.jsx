@@ -198,7 +198,7 @@ function App() {
             className="h-full"
           >
             <ErrorBoundary>
-              {activeTab === 'dashboard' && <Dashboard />}
+              {activeTab === 'dashboard' && <Dashboard onNavigate={setActiveTab} />}
               {activeTab === 'watchlist' && <Watchlist />}
               {activeTab === 'trading' && <TradingControl />}
               {activeTab === 'settings' && <SettingsPage />}

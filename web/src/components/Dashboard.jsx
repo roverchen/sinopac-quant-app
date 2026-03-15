@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { ArrowUpRight, ArrowDownRight, Activity, Zap, Target, BarChart3, TrendingUp, Wallet, Landmark, Database } from 'lucide-react';
-import { tradeService } from '../services/api';
+import { tradeService, quantService } from '../services/api';
 
 const mockChartData = [
   { name: 'Mon', value: 4000 },
@@ -35,14 +35,16 @@ const StatCard = ({ label, value, change, color, icon: Icon, subValue }) => (
   </div>
 );
 
-const Dashboard = () => {
+const Dashboard = ({ onNavigate }) => {
   const [summary, setSummary] = useState(null);
   const [balance, setBalance] = useState(null);
+  const [focusTargets, setFocusTargets] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchSummary();
     fetchBalance();
+    fetchFocusTargets();
   }, []);
 
   const fetchSummary = async () => {
@@ -66,6 +68,25 @@ const Dashboard = () => {
       console.error("Failed to fetch balance:", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchFocusTargets = async () => {
+    try {
+      // Fetch top 1 from each market
+      const tw = await quantService.getResults('TW', 1, 1);
+      const us = await quantService.getResults('US', 1, 1);
+      const crypto = await quantService.getResults('CRYPTO', 1, 1);
+      
+      const combined = [
+        ...(tw.results || []),
+        ...(us.results || []),
+        ...(crypto.results || [])
+      ].sort((a, b) => b.score - a.score);
+      
+      setFocusTargets(combined.slice(0, 3));
+    } catch (err) {
+      console.error("Failed to fetch focus targets:", err);
     }
   };
 
@@ -180,30 +201,36 @@ const Dashboard = () => {
         <div className="p-8 bg-slate-900/40 border border-slate-800 rounded-[2.5rem] backdrop-blur-sm">
           <h3 className="text-xl font-bold text-white mb-6">今日焦點標的</h3>
           <div className="space-y-4">
-            {[
-              { code: '2330', name: '台積電', price: '1,045', score: 92 },
-              { code: 'NVDA', name: 'Nvidia', price: '141.2', score: 88 },
-              { code: 'BTC', name: 'Bitcoin', price: '98,240', score: 85 },
-            ].map((item) => (
-              <div key={item.code} className="p-4 bg-slate-800/30 rounded-2xl flex items-center justify-between border border-transparent hover:border-slate-700 transition-all">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center font-bold text-indigo-400">
-                    {item.code[0]}
+            {focusTargets.length > 0 ? (
+              focusTargets.map((item) => (
+                <div key={item.symbol} className="p-4 bg-slate-800/30 rounded-2xl flex items-center justify-between border border-transparent hover:border-slate-700 transition-all cursor-pointer group">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center font-bold text-indigo-400">
+                      {item.symbol[0]}
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-white uppercase">{item.symbol}</p>
+                      <p className="text-xs text-slate-500">{item.name}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-bold text-white uppercase">{item.code}</p>
-                    <p className="text-xs text-slate-500">{item.name}</p>
+                  <div className="text-right">
+                    <p className="text-sm font-bold text-white font-inter">{item.price.toLocaleString()}</p>
+                    <p className="text-[10px] text-emerald-400 font-bold">Score: {item.score}</p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-sm font-bold text-white font-inter">{item.price}</p>
-                  <p className="text-[10px] text-emerald-400 font-bold">Score: {item.score}</p>
-                </div>
+              ))
+            ) : (
+              <div className="py-10 text-center opacity-20">
+                <Target className="w-8 h-8 mx-auto mb-2" />
+                <p className="text-xs">等待掃描數據...</p>
               </div>
-            ))}
+            )}
           </div>
           
-          <button className="w-full mt-6 py-3 border border-indigo-500/30 text-indigo-400 rounded-xl text-sm font-bold hover:bg-indigo-500/10 transition-all">
+          <button 
+            onClick={() => onNavigate && onNavigate('watchlist')}
+            className="w-full mt-6 py-3 border border-indigo-500/30 text-indigo-400 rounded-xl text-sm font-bold hover:bg-indigo-500/10 transition-all"
+          >
             查看更多機會
           </button>
         </div>
