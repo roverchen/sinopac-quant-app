@@ -15,9 +15,13 @@ class ReconciliationService:
 
         # 1. Shioaji (TW/US)
         try:
-            real_trades = ShioajiService.get_broker_trades(user_id)
-            for t in real_trades:
-                self._merge_shioaji_trade(logs, t)
+            # Shioaji returns all recent trades, including filled and active
+            api = ShioajiService.get_api_client(user_id)
+            if api and not hasattr(api, 'is_mock'):
+                api.update_status()
+                real_trades = api.list_trades()
+                for t in real_trades:
+                    self._merge_shioaji_trade(logs, t)
         except Exception as e:
             print(f"[Recon] Shioaji Sync Error: {e}")
 
@@ -25,11 +29,17 @@ class ReconciliationService:
         if creds.get("max_api_key") and creds.get("max_api_secret"):
             try:
                 max_api = MaxExchangeAPI(creds["max_api_key"], creds["max_api_secret"])
-                # Fetch recent trades
+                # A. Fetch filled trades
                 max_trades = max_api.get_trades()
                 if isinstance(max_trades, list):
                     for mt in max_trades:
                         self._merge_max_trade(logs, mt)
+                
+                # B. Fetch active orders (Pending)
+                max_orders = max_api.get_orders(state="wait")
+                if isinstance(max_orders, list):
+                    for mo in max_orders:
+                        self._merge_max_order_pending(logs, mo)
             except Exception as e:
                 print(f"[Recon] MAX Sync Error: {e}")
 
@@ -48,7 +58,21 @@ class ReconciliationService:
     def _merge_shioaji_trade(self, logs, trade):
         trade_id = str(trade.order.id)
         # Check if already exists in logs
-        if any(L.get("trade_id") == trade_id for L in logs):
+        existing = next((L for L in logs if L.get("trade_id") == trade_id), None)
+        
+        status_str = str(trade.status.status)
+        is_filled = "Filled" in status_str
+        is_pending = any(s in status_str for s in ["Submitted", "PreAccepted", "PendingSubmit"])
+
+        if existing:
+            # Update status if changed (e.g. from PENDING to FILLED)
+            if is_filled and existing.get("entry_type") == "PENDING":
+                print(f"[Recon] Shioaji Order {trade_id} FILLED. Updating log.")
+                existing["entry_type"] = "HISTORY"
+                existing["status"] = "FILLED"
+            return
+
+        if not (is_filled or is_pending):
             return
 
         # Determine market
@@ -57,7 +81,7 @@ class ReconciliationService:
         if len(symbol) > 4 and not symbol.isdigit():
             market = "US"
 
-        print(f"[Recon] Merging missing Shioaji trade: {symbol} ID:{trade_id}")
+        print(f"[Recon] Merging missing Shioaji {status_str}: {symbol} ID:{trade_id}")
         
         new_entry = {
             "trade_id": trade_id,
@@ -68,8 +92,8 @@ class ReconciliationService:
             "price": float(trade.order.price),
             "market": market,
             "is_simulation": False,
-            "entry_type": "HISTORY",
-            "status": "FILLED",
+            "entry_type": "HISTORY" if is_filled else "PENDING",
+            "status": "FILLED" if is_filled else "OPEN",
             "timestamp": str(trade.status.order_datetime) if hasattr(trade.status, 'order_datetime') else datetime.now().isoformat()
         }
         logs.append(new_entry)
@@ -81,7 +105,6 @@ class ReconciliationService:
             return
 
         symbol = mt.get("market", "crypto").upper()
-        # Convert btctwd -> BTC-TWD
         if symbol.endswith("TWD"):
             symbol = symbol[:-3] + "-TWD"
         elif symbol.endswith("USDT"):
@@ -101,6 +124,34 @@ class ReconciliationService:
             "entry_type": "HISTORY",
             "status": "FILLED",
             "timestamp": mt.get("created_at", datetime.now().isoformat())
+        }
+        logs.append(new_entry)
+
+    def _merge_max_order_pending(self, logs, mo):
+        trade_id = str(mo.get("id"))
+        if any(L.get("trade_id") == trade_id for L in logs):
+            return
+
+        symbol = mo.get("market", "crypto").upper()
+        if symbol.endswith("TWD"):
+            symbol = symbol[:-3] + "-TWD"
+        elif symbol.endswith("USDT"):
+            symbol = symbol[:-4] + "-USDT"
+
+        print(f"[Recon] Merging missing MAX Pending order: {symbol} ID:{trade_id}")
+
+        new_entry = {
+            "trade_id": trade_id,
+            "symbol": symbol,
+            "name": symbol,
+            "action": "Buy" if mo.get("side") == "buy" else "Sell",
+            "qty": float(mo.get("volume", 0)),
+            "price": float(mo.get("price", 0)),
+            "market": "CRYPTO",
+            "is_simulation": False,
+            "entry_type": "PENDING",
+            "status": "OPEN",
+            "timestamp": mo.get("created_at", datetime.now().isoformat())
         }
         logs.append(new_entry)
 
