@@ -59,78 +59,106 @@ class ReconciliationService:
         try:
             max_api = MaxExchangeAPI(creds["max_api_key"], creds["max_api_secret"])
             
-            # Fetch Active Orders
-            remote_orders = max_api.get_orders(state="wait") or []
-            print(f"[Sync] MAX: Found {len(remote_orders)} remote pending orders.")
+            # 1. Market Discovery: Identify which markets to check
+            # We check markets related to: 
+            # a) Assets currently in balance (with non-zero balance or locked)
+            # b) Symbols in the user's watchlist
+            relevant_currencies = set()
+            balances = max_api.get_account_balance()
+            if isinstance(balances, dict) and "error" not in balances:
+                for curr, detail in balances.items():
+                    if detail.get('balance', 0) > 0 or detail.get('locked', 0) > 0:
+                        relevant_currencies.add(curr.lower())
             
-            # Fetch Recent Trades (Filled)
-            remote_trades = max_api.get_trades() or []
-            print(f"[Sync] MAX: Found {len(remote_trades)} remote execution records.")
+            from api.services.storage_service import get_user_watchlist
+            watchlist = get_user_watchlist(user_id) or []
+            for item in watchlist:
+                if item.startswith("CRYPTO:"):
+                    code = item.split(":")[1].split("-")[0].lower()
+                    relevant_currencies.add(code)
             
-            # Reconciliation Logic:
-            # a) Identify existing real trade IDs in local logs
+            # Fetch all available markets to match against relevant currencies
+            all_markets = max_api.get_markets()
+            markets_to_sync = []
+            for m in all_markets:
+                # If either base or quote currency is interesting to us
+                if m['base_unit'] in relevant_currencies or m['quote_unit'] in relevant_currencies:
+                    markets_to_sync.append(m['id'])
+            
+            # Add defaults if nothing found
+            if not markets_to_sync:
+                markets_to_sync = ["btcusdt", "ethusdt"]
+            
+            markets_to_sync = list(set(markets_to_sync))
+            print(f"[Sync] MAX: Discovered {len(markets_to_sync)} relevant markets for sync: {markets_to_sync[:5]}...")
+
             local_ids = {str(L.get("trade_id")) for L in real_logs if L.get("trade_id")}
             
-            # b) Add missing Pending orders from broker
-            for o in remote_orders:
-                tid = str(o.get('id'))
-                if tid not in local_ids:
-                    market_id = o.get('market', 'btcusdt')
-                    symbol = ReconciliationService._normalize_crypto_symbol(market_id)
-                    print(f"[Sync] Found missing MAX order: {tid} ({symbol})")
-                    real_logs.append({
-                        "trade_id": tid,
-                        "symbol": symbol,
-                        "name": get_symbol_name(symbol, "CRYPTO"),
-                        "action": "Buy" if o.get('side') == 'buy' else "Sell",
-                        "qty": float(o.get('volume', 0)),
-                        "price": float(o.get('price', 0)),
-                        "market": "CRYPTO",
-                        "is_simulation": False,
-                        "entry_type": "PENDING",
-                        "status": "OPEN",
-                        "timestamp": o.get('created_at', datetime.now().isoformat())
-                    })
-                    local_ids.add(tid)
+            # 2. Iterate through markets to fetch orders and trades
+            # Note: MAX API v2 typically requires 'market' for private order/trade endpoints
+            for market_id in markets_to_sync:
+                try:
+                    # Fetch Active Orders
+                    remote_orders = max_api.get_orders(market=market_id, state="wait") or []
+                    if remote_orders:
+                        print(f"[Sync] MAX: Found {len(remote_orders)} pending orders in {market_id}")
+                    
+                    for o in remote_orders:
+                        tid = str(o.get('id'))
+                        if tid not in local_ids:
+                            symbol = ReconciliationService._normalize_crypto_symbol(market_id)
+                            print(f"[Sync] Found missing MAX order: {tid} ({symbol})")
+                            real_logs.append({
+                                "trade_id": tid,
+                                "symbol": symbol,
+                                "name": get_symbol_name(symbol, "CRYPTO"),
+                                "action": "Buy" if o.get('side') == 'buy' else "Sell",
+                                "qty": float(o.get('volume', 0)),
+                                "price": float(o.get('price', 0)),
+                                "market": "CRYPTO",
+                                "is_simulation": False,
+                                "entry_type": "PENDING",
+                                "status": "OPEN",
+                                "timestamp": datetime.fromtimestamp(o.get('created_at')).isoformat() if isinstance(o.get('created_at'), int) else o.get('created_at')
+                            })
+                            local_ids.add(tid)
 
-            # c) Add missing Filled history from broker
-            for t in remote_trades:
-                tid = str(t.get('id'))
-                # For history, we check if this specific trade record exists
-                if tid not in local_ids:
-                     # Check if it was a PENDING order we already have
-                     order_id = str(t.get('order_id'))
-                     existing_pending = next((L for L in real_logs if str(L.get("trade_id")) == order_id and L.get("entry_type") == "PENDING"), None)
-                     
-                     if existing_pending:
-                         # Update existing pending to history
-                         print(f"[Sync] Updating local pending {order_id} to FILLED via trade {tid}")
-                         existing_pending["entry_type"] = "HISTORY"
-                         existing_pending["status"] = "FILLED"
-                         existing_pending["price"] = float(t.get('price', existing_pending["price"]))
-                         existing_pending["timestamp"] = t.get('created_at', existing_pending["timestamp"])
-                     else:
-                         # New history item
-                         market_id = t.get('market', 'UNKNOWN')
-                         symbol = ReconciliationService._normalize_crypto_symbol(market_id)
-                         print(f"[Sync] Found missing MAX trade record: {tid} ({symbol})")
-                         real_logs.append({
-                            "trade_id": tid, # or order_id
-                            "symbol": symbol,
-                            "name": get_symbol_name(symbol, "CRYPTO"),
-                            "action": "Buy" if t.get('side') == 'buy' else "Sell",
-                            "qty": float(t.get('volume', 0)),
-                            "price": float(t.get('price', 0)),
-                            "market": "CRYPTO",
-                            "is_simulation": False,
-                            "entry_type": "HISTORY",
-                            "status": "FILLED",
-                            "timestamp": t.get('created_at', datetime.now().isoformat())
-                         })
-                         local_ids.add(tid)
+                    # Fetch Recent Trades (Filled)
+                    remote_trades = max_api.get_trades(market=market_id) or []
+                    for t in remote_trades:
+                        tid = str(t.get('id'))
+                        if tid not in local_ids:
+                             order_id = str(t.get('order_id'))
+                             existing_pending = next((L for L in real_logs if str(L.get("trade_id")) == order_id and L.get("entry_type") == "PENDING"), None)
+                             
+                             if existing_pending:
+                                 print(f"[Sync] Updating local pending {order_id} to FILLED via trade {tid}")
+                                 existing_pending["entry_type"] = "HISTORY"
+                                 existing_pending["status"] = "FILLED"
+                                 existing_pending["price"] = float(t.get('price', existing_pending["price"]))
+                                 existing_pending["timestamp"] = datetime.fromtimestamp(t.get('created_at')).isoformat() if isinstance(t.get('created_at'), int) else t.get('created_at')
+                             else:
+                                 symbol = ReconciliationService._normalize_crypto_symbol(market_id)
+                                 print(f"[Sync] Found missing MAX trade record: {tid} ({symbol})")
+                                 real_logs.append({
+                                    "trade_id": tid,
+                                    "symbol": symbol,
+                                    "name": get_symbol_name(symbol, "CRYPTO"),
+                                    "action": "Buy" if t.get('side') == 'buy' else "Sell",
+                                    "qty": float(t.get('volume', 0)),
+                                    "price": float(t.get('price', 0)),
+                                    "market": "CRYPTO",
+                                    "is_simulation": False,
+                                    "entry_type": "HISTORY",
+                                    "status": "FILLED",
+                                    "timestamp": datetime.fromtimestamp(t.get('created_at')).isoformat() if isinstance(t.get('created_at'), int) else t.get('created_at')
+                                 })
+                                 local_ids.add(tid)
+                except Exception as market_err:
+                    print(f"[Sync] Error syncing market {market_id}: {market_err}")
             
         except Exception as e:
-            print(f"[Sync] MAX Sync Error: {e}")
+            print(f"[Sync] MAX Overall Sync Error: {e}")
             
         return real_logs
 
