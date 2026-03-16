@@ -210,10 +210,15 @@ class ShioajiService:
         if not api:
             raise Exception("Unable to establish API connection.")
 
+        # Strip market prefix if it exists (e.g. CRYPTO:BTC-USD -> BTC-USD)
+        clean_symbol = symbol
+        if ":" in symbol:
+            clean_symbol = symbol.split(":", 1)[1]
+
         # Detect market
-        c = symbol.upper()
+        c = clean_symbol.upper()
         market = "US"
-        if symbol.isdigit() and len(symbol) >= 4:
+        if clean_symbol.isdigit() and len(clean_symbol) >= 4:
             market = "TW"
         elif "-" in c or c.endswith("USDT") or c.endswith("TWD") or c in ["BTC", "ETH", "SOL"]:
             market = "CRYPTO"
@@ -229,15 +234,19 @@ class ShioajiService:
                 max_api = MaxExchangeAPI(creds["max_api_key"], creds["max_api_secret"])
                 # MAX integration: needs specific side and market
                 side = "buy" if "Buy" in str(action) else "sell"
-                # Symbol conversion for MAX (e.g. BTC-USD -> btcusdt)
-                m_symbol = symbol.lower().replace("-", "").replace("usd", "usdt")
+                
+                # Robust symbol conversion for MAX (e.g. BTC-USD -> btcusdt)
+                m_symbol = clean_symbol.lower().replace("-", "")
                 
                 # [v2.1.43] MATIC renamed to POL on MAX
                 if "matic" in m_symbol:
                     print(f"[ShioajiService] Mapping MATIC to POL for MAX compatibility: {m_symbol} -> {m_symbol.replace('matic', 'pol')}")
                     m_symbol = m_symbol.replace('matic', 'pol')
                 
-                if not m_symbol.endswith("twd") and not m_symbol.endswith("usdt"):
+                # Handle USD/USDT suffix safely
+                if m_symbol.endswith("usd"):
+                    m_symbol = m_symbol[:-3] + "usdt"
+                elif not m_symbol.endswith("usdt") and not m_symbol.endswith("twd"):
                     m_symbol += "usdt"
                 
                 print(f"[MAX] Placing {side} order for {m_symbol} qty {qty} @ {price}")
