@@ -37,6 +37,7 @@ const Watchlist = () => {
   // Chart & Details State
   const [history, setHistory] = useState([]);
   const [isChartLoading, setIsChartLoading] = useState(false);
+  const [loadProgress, setLoadProgress] = useState(0); 
   const [trackedSymbols, setTrackedSymbols] = useState([]); // 追蹤中的代碼列表
   
   const fetchData = async (forceScan = false) => {
@@ -183,14 +184,31 @@ const Watchlist = () => {
     
     // 異步抓取歷史資料
     setIsChartLoading(true);
+    setLoadProgress(10);
+    
+    // Simulating progress while fetching
+    const progressTimer = setInterval(() => {
+      setLoadProgress(prev => {
+        if (prev >= 90) {
+          clearInterval(progressTimer);
+          return 90;
+        }
+        return prev + 15;
+      });
+    }, 150);
+
     try {
       const hist = await quantService.getHistory(stock.symbol, m);
       setHistory(hist);
+      setLoadProgress(100);
     } catch (err) {
       console.error("Failed to load history", err);
       setHistory([]);
+      setLoadProgress(0);
     } finally {
-      setIsChartLoading(false);
+      clearInterval(progressTimer);
+      // Give some time to see 100% before closing
+      setTimeout(() => setIsChartLoading(false), 300);
     }
   };
 
@@ -448,10 +466,31 @@ const Watchlist = () => {
                     <h3 className="text-2xl font-black text-white">{selectedStock.name}</h3>
                     <p className="text-slate-400 font-mono text-sm">{selectedStock.symbol}</p>
                   </div>
-                  <button onClick={() => setIsModalOpen(false)} className="text-slate-500 hover:text-white transition-colors">
+                  <button onClick={() => setIsModalOpen(false)} className="text-slate-500 hover:text-white transition-colors p-2">
                     <X className="w-6 h-6" />
                   </button>
                 </div>
+
+                {isChartLoading && (
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="space-y-2"
+                  >
+                    <div className="flex justify-between text-[10px] font-bold text-indigo-400 uppercase tracking-widest">
+                      <span>正在獲取最新數據...</span>
+                      <span>{loadProgress}%</span>
+                    </div>
+                    <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
+                      <motion.div 
+                        className="h-full bg-indigo-500"
+                        initial={{ width: 0 }}
+                        animate={{ width: `${loadProgress}%` }}
+                        transition={{ type: "spring", stiffness: 50, damping: 15 }}
+                      />
+                    </div>
+                  </motion.div>
+                )}
 
 
                 <div className="flex justify-between items-end bg-slate-800/20 p-4 rounded-2xl border border-slate-800/50">
