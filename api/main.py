@@ -18,7 +18,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 app = FastAPI(
     title="Sinopac Quant Pro API",
     description="Professional backend for quantitative stock analysis and trading.",
-    version="2.1.45"
+    version="2.1.46"
 )
 
 @app.on_event("startup")
@@ -53,7 +53,6 @@ async def global_exception_handler(request: Request, exc: Exception):
     print(f"CRITICAL ERROR: {str(exc)}\n{error_trace}")
     return JSONResponse(
         status_code=500,
-        content={
             "detail": str(exc),
             "traceback": error_trace,
             "path": request.url.path

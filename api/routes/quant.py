@@ -40,9 +40,9 @@ async def analyze_watchlist(request: StockAnalysisRequest, current_user: str = D
         target_market = request.market_type
         if ":" in s:
             target_market, symbol_only = s.split(":", 1)
-            code = extract_stock_code(symbol_only)
+            code = extract_stock_code(symbol_only, target_market)
         else:
-            code = extract_stock_code(s)
+            code = extract_stock_code(s, target_market)
             
         pool = get_cached_pool(target_market) or {}
         pool_results = {r.symbol: r for r in pool.get("results", [])}
@@ -68,7 +68,7 @@ async def analyze_watchlist(request: StockAnalysisRequest, current_user: str = D
         crypto_symbols = fetch_crypto_symbols()
         
         for symbol_raw, m in data_map_needed:
-            code = extract_stock_code(symbol_raw)
+            code = extract_stock_code(symbol_raw, m)
             # Re-fetch data if not in pool
             from api.services.data_fetcher import fetch_batch_data
             data_pool = fetch_batch_data([code], m)

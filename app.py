@@ -60,18 +60,24 @@ import pickle
 import requests
 import re
 
-def extract_stock_code(raw_str):
+def extract_stock_code(raw_str, market_type=None):
     """強大代碼提取器：處理 '台積電(2330)', '2330', 'ETH-USD' 等各種格式"""
     if not raw_str: return ""
     raw_str = str(raw_str).strip()
     
     # 範本 1: 含有括號的代碼，例如 "台積電(2330)" -> "2330"
     match = re.search(r'\((.*?)\)', raw_str)
-    if match: return match.group(1).upper()
+    code = match.group(1).upper() if match else raw_str.upper()
     
-    # 範本 2: 含有點的代碼 (美股/Yahoo)，例如 "AAPL.US"
-    # 直接清理空白並轉大寫
-    return raw_str.upper()
+    # [v2.1.45] Normalize Crypto for consistency with MAX format
+    if market_type == "CRYPTO" or "-USD" in code or "-TWD" in code:
+        c = code.upper()
+        if c.endswith("-USD"): return f"{c[:-4].lower()}usdt"
+        if c.endswith("-TWD"): return f"{c[:-4].lower()}twd"
+        if c.endswith("USDT") or c.endswith("TWD"): return c.lower()
+        if market_type == "CRYPTO": return f"{c.lower()}usdt"
+        
+    return code
 
 # --- 🚀 Yahoo Finance 強化功能 (針對雲端環境優化) ---
 # 建立帶有現代瀏覽器特徵的持久 Session，降低被 Yahoo 判定為爬蟲的機率
@@ -1102,12 +1108,13 @@ watchlist = st.session_state.watchlist
 def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
     # --- [NEW] 嚴格過濾清單，確保代碼符合市場所屬，防止交叉污染 ---
     if market_type == 'CRYPTO':
-        watchlist = [t for t in watchlist if "-USD" in str(t)]
+        # [v2.1.45] Support both MAX format and legacy Yahoo format
+        watchlist = [t for t in watchlist if "-USD" in str(t) or "-TWD" in str(t) or "USDT" in str(t).upper() or "TWD" in str(t).upper()]
     elif market_type == 'TW':
         # [修正] 使用 extract_stock_code 提取後再判斷開頭是否為數字，確保 "名稱(代碼)" 不會被過濾
-        watchlist = [t for t in watchlist if extract_stock_code(t)[0:1].isdigit()]
+        watchlist = [t for t in watchlist if extract_stock_code(t, market_type)[0:1].isdigit()]
     elif market_type == 'US':
-        watchlist = [t for t in watchlist if extract_stock_code(t)[0:1].isalpha() and "-USD" not in str(t)]
+        watchlist = [t for t in watchlist if extract_stock_code(t, market_type)[0:1].isalpha() and "-USD" not in str(t)]
         
     data_list = []
     is_rate_limited = False 
@@ -1164,7 +1171,7 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
         st.session_state.pooled_dfs = {}
         
     # 檢查是否有名單中的代碼不在現有池子裡，若有則嘗試從磁碟「精準補完」
-    normalized_watchlist = [extract_stock_code(c) for c in watchlist]
+    normalized_watchlist = [extract_stock_code(c, market_type) for c in watchlist]
     missing_codes = [c for c in normalized_watchlist if c not in st.session_state.pooled_dfs]
     
     if missing_codes:
@@ -1182,8 +1189,8 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
     
     # 1. 優先從同步池中提取基礎歷史資料
     need_download = []
-    for c_raw in watchlist:
-        c = extract_stock_code(c_raw)
+    for i, c_raw in enumerate(watchlist):
+        c = extract_stock_code(c_raw, market_type)
         if c and c in pool:
             # 必須重置索引並規範欄位，因為 Pooled 裡的可能是原始格式
             d = pool[c].copy()
@@ -1303,7 +1310,7 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
                 max_api = MaxExchangeAPI(m_key, m_secret)
                 snaps = max_api.get_snapshots()
                 for c in watchlist:
-                    mid = c.replace("-USD", "usdt").lower()
+                    mid = extract_stock_code(c, "CRYPTO")
                     if mid in snaps and c in all_dfs:
                         target = all_dfs[c]
                         if not target.empty:
@@ -1314,7 +1321,7 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
 
     for i, code_raw in enumerate(watchlist):
         # 0. 代碼正規化 (提取純代碼)
-        code = extract_stock_code(code_raw)
+        code = extract_stock_code(code_raw, market_type)
         
         progress_info = f"🕒 正在分析 ({i+1}/{len(watchlist)}): {code} ..."
         status_placeholder.info(progress_info)

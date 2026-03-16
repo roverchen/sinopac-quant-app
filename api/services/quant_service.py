@@ -36,14 +36,22 @@ def get_cached_pool(market_type: str):
             results_cache[market_type] = pool
     return results_cache.get(market_type)
 
-def extract_stock_code(raw_str):
-    """Extract stock code from format 'Name(Code)', 'Code', or 'ETH-USD'"""
+def extract_stock_code(raw_str, market_type=None):
+    """Extract stock code and normalize (e.g., convert BTC-USD to btcusdt for CRYPTO)"""
     import re
     if not raw_str: return ""
     raw_str = str(raw_str).strip()
     match = re.search(r'\((.*?)\)', raw_str)
-    if match: return match.group(1).upper()
-    return raw_str.upper()
+    code = match.group(1).upper() if match else raw_str.upper()
+    
+    # [v2.1.45] Normalize Crypto for consistency with MAX format
+    if market_type == "CRYPTO":
+        c = code.upper()
+        if c.endswith("-USD"): return f"{c[:-4].lower()}usdt"
+        if c.endswith("-TWD"): return f"{c[:-4].lower()}twd"
+        if c.endswith("USDT") or c.endswith("TWD"): return c.lower()
+        return f"{c.lower()}usdt"
+    return code
 
 def fetch_tw_symbols():
     """Fetch all TW stock symbols (Listed, OTC, Emerging, ETFs)"""
