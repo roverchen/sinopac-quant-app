@@ -73,7 +73,11 @@ export const quantService = {
     return response.data;
   },
   removeFromWatchlist: async (symbol, marketType = 'TW') => {
-    const response = await api.delete(`/quant/watchlist?symbol=${symbol}&market_type=${market_type}`);
+    const response = await api.delete(`/quant/watchlist?symbol=${symbol}&market_type=${marketType}`);
+    return response.data;
+  },
+  getTrend: async (marketType = 'TW', days = 7) => {
+    const response = await api.get(`/quant/trend?market_type=${marketType}&days=${days}`);
     return response.data;
   }
 };

@@ -184,7 +184,7 @@ def get_yahoo_ticker(code, market_type='TW'):
     code_upper = code.upper()
     
     if market_type == 'TW' and code.isdigit():
-        return code
+        return f"{code}.TW"
         
     if market_type == 'CRYPTO':
         # 1. Handle special migrations
