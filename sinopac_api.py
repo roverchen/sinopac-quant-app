@@ -101,6 +101,16 @@ def fetch_tw_tickers():
             parts = str(val).split('\u3000')
             if len(parts) == 2 and parts[0].isdigit() and len(parts[0]) == 4:
                 mapping[parts[0]] = parts[1]
+        # Emerging (興櫃)
+        url_em = "https://isin.twse.com.tw/isin/C_public.jsp?strMode=5"
+        response_em = requests.get(url_em, verify=False, timeout=15)
+        response_em.encoding = 'big5'
+        tables_em = pd.read_html(response_em.text)
+        df_em = tables_em[0]
+        for val in df_em[0].dropna():
+            parts = str(val).split('\u3000')
+            if len(parts) == 2 and parts[0].isdigit() and len(parts[0]) == 4:
+                mapping[parts[0]] = parts[1]
                 
         return mapping
     except Exception as e:
