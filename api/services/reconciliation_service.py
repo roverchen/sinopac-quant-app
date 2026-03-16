@@ -119,8 +119,9 @@ class ReconciliationService:
                                 "is_simulation": False,
                                 "entry_type": "PENDING",
                                 "status": "OPEN",
-                                "timestamp": datetime.fromtimestamp(o.get('created_at')).isoformat() if isinstance(o.get('created_at'), int) else o.get('created_at')
-                            })
+                                "timestamp": datetime.fromtimestamp(o.get('created_at')).isoformat() if isinstance(o.get('created_at'), int) else o.get('created_at'),
+                                "order_time": datetime.now().isoformat() # Fallback order time if missing
+                             })
                             local_ids.add(tid)
 
                     # Fetch Recent Trades (Filled)
@@ -136,7 +137,11 @@ class ReconciliationService:
                                  existing_pending["entry_type"] = "HISTORY"
                                  existing_pending["status"] = "FILLED"
                                  existing_pending["price"] = float(t.get('price', existing_pending["price"]))
-                                 existing_pending["timestamp"] = datetime.fromtimestamp(t.get('created_at')).isoformat() if isinstance(t.get('created_at'), int) else t.get('created_at')
+                                 # [v2.1.65] Record fill_time and preserve timestamp as order_time fallback
+                                 if "order_time" not in existing_pending:
+                                     existing_pending["order_time"] = existing_pending.get("timestamp")
+                                 existing_pending["fill_time"] = datetime.fromtimestamp(t.get('created_at')).isoformat() if isinstance(t.get('created_at'), int) else t.get('created_at')
+                                 existing_pending["timestamp"] = existing_pending["fill_time"]
                              else:
                                  symbol = ReconciliationService._normalize_crypto_symbol(market_id)
                                  print(f"[Sync] Found missing MAX trade record: {tid} ({symbol})")
@@ -151,7 +156,9 @@ class ReconciliationService:
                                     "is_simulation": False,
                                     "entry_type": "HISTORY",
                                     "status": "FILLED",
-                                    "timestamp": datetime.fromtimestamp(t.get('created_at')).isoformat() if isinstance(t.get('created_at'), int) else t.get('created_at')
+                                    "timestamp": datetime.fromtimestamp(t.get('created_at')).isoformat() if isinstance(t.get('created_at'), int) else t.get('created_at'),
+                                    "order_time": datetime.fromtimestamp(t.get('created_at')).isoformat() if isinstance(t.get('created_at'), int) else t.get('created_at'),
+                                    "fill_time": datetime.fromtimestamp(t.get('created_at')).isoformat() if isinstance(t.get('created_at'), int) else t.get('created_at')
                                  })
                                  local_ids.add(tid)
                 except Exception as market_err:
@@ -193,7 +200,9 @@ class ReconciliationService:
                         "is_simulation": False,
                         "entry_type": entry_type,
                         "status": "FILLED" if "Filled" in status else ("CANCELLED" if "Cancelled" in status else "OPEN"),
-                        "timestamp": item.get("time", datetime.now().isoformat())
+                        "timestamp": item.get("time", datetime.now().isoformat()),
+                        "order_time": item.get("time", datetime.now().isoformat()),
+                        "fill_time": item.get("time") if "Filled" in status else None
                     })
                     local_ids.add(tid)
                 else:
@@ -204,6 +213,9 @@ class ReconciliationService:
                         if "Filled" in remote_status:
                             local_item["entry_type"] = "HISTORY"
                             local_item["status"] = "FILLED"
+                            if "order_time" not in local_item:
+                                local_item["order_time"] = local_item.get("timestamp")
+                            local_item["fill_time"] = item.get("time", datetime.now().isoformat())
                         elif "Cancelled" in remote_status:
                             local_item["entry_type"] = "HISTORY"
                             local_item["status"] = "CANCELLED"

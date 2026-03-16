@@ -190,7 +190,8 @@ class ShioajiService:
                 "is_simulation": True,
                 "entry_type": "PENDING",
                 "status": "OPEN",
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
+                "order_time": datetime.now().isoformat()
             }
             logs.append(pending_item)
             save_user_trade_logs(email, logs)
@@ -275,7 +276,8 @@ class ShioajiService:
                     "is_simulation": False,
                     "entry_type": "PENDING",
                     "status": "OPEN",
-                    "timestamp": datetime.now().isoformat()
+                    "timestamp": datetime.now().isoformat(),
+                    "order_time": datetime.now().isoformat()
                 })
                 save_user_trade_logs(email, logs)
                 
@@ -349,7 +351,8 @@ class ShioajiService:
             "is_simulation": False,
             "entry_type": "PENDING",
             "status": "OPEN",
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
+            "order_time": datetime.now().isoformat()
         })
         save_user_trade_logs(email, logs)
 
@@ -495,6 +498,21 @@ class ShioajiService:
             except:
                 p['current_price'] = p['buy_price']
                 p['pnl_percent'] = 0.0
+
+        # [v2.1.65] Join with trade_logs to get buy timestamps
+        from api.services.storage_service import get_user_trade_logs
+        logs = get_user_trade_logs(email)
+        
+        for p in positions:
+            # Find the MOST RECENT 'Buy' trade for this symbol that is FILLED
+            buy_record = next((L for L in reversed(logs) if L.get("symbol") == p["symbol"] and L.get("action") == "Buy" and L.get("status") == "FILLED"), None)
+            
+            if buy_record:
+                p["buy_order_time"] = buy_record.get("order_time") or buy_record.get("timestamp")
+                p["buy_filled_time"] = buy_record.get("fill_time") or buy_record.get("timestamp")
+            else:
+                p["buy_order_time"] = None
+                p["buy_filled_time"] = None
 
         return positions
 
