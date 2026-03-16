@@ -123,18 +123,31 @@ def fetch_crypto_symbols():
             print("[QuantService] MAX API returned empty market list, using MAX-formatted fallback.")
             return symbols
             
-        # If API succeeds, we can rebuild the map from live data
-        live_symbols = {}
+        # [v2.1.52] Deduplicate by base currency to avoid redundant pairs (prefer USDT)
+        unique_live = {}
         for m in markets:
-            # Filter for TWD or USDT pairs as per user trading preference
             if m['id'].endswith('twd') or m['id'].endswith('usdt'):
-                key = m['id'].lower() # Ensure lowercase for consistency
-                live_symbols[key] = f"{m['name']} ({m['base_unit'].upper()}/{m['quote_unit'].upper()})"
+                base = m['base_unit'].lower()
+                is_usdt = m['id'].endswith('usdt')
+                
+                # If we haven't seen this coin, or this is the USDT pair (overriding TWD)
+                if base not in unique_live or is_usdt:
+                    key = m['id'].lower()
+                    unique_live[base] = (key, f"{m['name']} ({m['base_unit'].upper()}/{m['quote_unit'].upper()})")
         
+        live_symbols = {v[0]: v[1] for v in unique_live.values()}
+
         # Merge live data into symbols (live data takes precedence)
         if live_symbols:
             return live_symbols
-        return symbols
+        
+        # Deduplicate fallback list as well
+        unique_fallback = {}
+        for k, v in symbols.items():
+            base = k.replace('usdt', '').replace('twd', '')
+            if base not in unique_fallback or k.endswith('usdt'):
+                unique_fallback[base] = (k, v)
+        return {v[0]: v[1] for v in unique_fallback.values()}
     except Exception as e:
         print(f"Error fetching Crypto symbols from MAX API: {e}. Using MAX-formatted fallback.")
         return symbols

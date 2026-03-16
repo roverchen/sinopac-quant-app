@@ -148,11 +148,26 @@ def get_user_watchlist(user_id):
     return ["TW:2330", "TW:2317", "US:AAPL", "US:NVDA", "CRYPTO:BTC-USD"]
 
 def get_user_watchlist_filtered(user_id, market):
-    """Helper to get only symbols for a specific market from unified list"""
+    """Helper to get only symbols for a specific market from unified list with legacy fallback"""
     full = get_user_watchlist(user_id)
     if market == "ALL":
         return [s for s in full if ":" in s]
-    return [s.split(":", 1)[1] for s in full if s.startswith(f"{market}:")]
+        
+    results = []
+    for s in full:
+        if ":" in s:
+            m, sym = s.split(":", 1)
+            if m == market:
+                results.append(sym)
+        else:
+            # [v2.1.52] Fallback for entries without ":" prefix
+            if market == "TW" and s.isdigit():
+                results.append(s)
+            elif market == "CRYPTO" and ("-" in s or "USDT" in s.upper() or "TWD" in s.upper()):
+                results.append(s)
+            elif market == "US" and not s.isdigit() and "-" not in s:
+                results.append(s)
+    return results
 
 def get_all_user_watchlists(user_id):
     full = get_user_watchlist(user_id)

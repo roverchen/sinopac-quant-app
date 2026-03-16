@@ -35,36 +35,52 @@ async def analyze_watchlist(request: StockAnalysisRequest, current_user: str = D
     if not watchlist:
         return AnalysisResponse(results=[], timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
+    # [v2.1.52] Deduplicate watchlist based on normalized codes
+    unique_items = []
+    seen = set()
     for s in watchlist:
-        # Support MARKET:SYMBOL format
         target_market = request.market_type
         if ":" in s:
             target_market, symbol_only = s.split(":", 1)
             code = extract_stock_code(symbol_only, target_market)
         else:
             code = extract_stock_code(s, target_market)
-            
+        
+        check_key = f"{target_market}:{code}"
+        if check_key not in seen:
+            unique_items.append((s, target_market, code))
+            seen.add(check_key)
+
+    for s, target_market, code in unique_items:
         pool = get_cached_pool(target_market) or {}
-        # [v2.1.49] Robust handling for both dict and objects
+        # [v2.1.52] Robust handling for both dict (from Firestore) and objects (from Pickle)
         pool_results = {}
         for r in pool.get("results", []):
-            sym = getattr(r, 'symbol', r.get('symbol') if isinstance(r, dict) else None)
+            # Safer attribute access logic
+            if isinstance(r, dict):
+                sym = r.get('symbol')
+            else:
+                sym = getattr(r, 'symbol', None)
             if sym: pool_results[sym] = r
+            
         dfs = pool.get("dfs", {})
 
         if code in pool_results and request.defense_weight == 0.5:
             # Add market info if missing
             res = pool_results[code]
-            res_market = getattr(res, 'market', res.get('market') if isinstance(res, dict) else None)
-            if not res_market:
-                if isinstance(res, dict): res['market'] = target_market
-                else: setattr(res, 'market', target_market)
+            if isinstance(res, dict):
+                res_market = res.get('market')
+                if not res_market: res['market'] = target_market
+            else:
+                res_market = getattr(res, 'market', None)
+                if not res_market: setattr(res, 'market', target_market)
             results.append(res)
         elif code in dfs:
             res = pool_results.get(code)
             name = "Unknown"
             if res:
-                name = getattr(res, 'name', res.get('name') if isinstance(res, dict) else "Unknown")
+                if isinstance(res, dict): name = res.get('name', 'Unknown')
+                else: name = getattr(res, 'name', 'Unknown')
             analysis = analyze_stock(dfs[code], code, name, request.defense_weight, target_market)
             results.append(AnalysisResult(**analysis))
         else:
