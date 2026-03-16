@@ -511,8 +511,21 @@ class ShioajiService:
                 p["buy_order_time"] = buy_record.get("order_time") or buy_record.get("timestamp")
                 p["buy_filled_time"] = buy_record.get("fill_time") or buy_record.get("timestamp")
             else:
-                p["buy_order_time"] = None
-                p["buy_filled_time"] = None
+                # [v2.1.66] Fallback for legacy positions without explicit buy records
+                fallback_time = None
+                if p.get("trade_id") and str(p.get("trade_id")).startswith("POS-"):
+                    try:
+                        ts = int(str(p["trade_id"]).split("-")[1])
+                        from datetime import datetime
+                        fallback_time = datetime.fromtimestamp(ts).isoformat()
+                    except:
+                        pass
+                
+                if not fallback_time and p.get("timestamp"):
+                    fallback_time = p.get("timestamp")
+                    
+                p["buy_order_time"] = fallback_time
+                p["buy_filled_time"] = fallback_time
 
         return positions
 
