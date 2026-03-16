@@ -512,6 +512,12 @@ const TradingControl = () => {
                   <p className="text-sm text-slate-400">
                     交易模式：<span className="text-white font-bold">{selectedPending.is_simulation ? '模擬交易' : '實盤交易'}</span>
                   </p>
+                  <p className="text-sm text-slate-400">
+                    委託時間：<span className="text-white font-bold whitespace-nowrap">
+                      {selectedPending.order_time ? new Date(selectedPending.order_time).toLocaleString() : 
+                       (selectedPending.timestamp ? new Date(selectedPending.timestamp).toLocaleString() : '系統升級前')}
+                    </span>
+                  </p>
                 </div>
 
                 <div className="pt-4 border-t border-slate-800 flex flex-col gap-3">
@@ -586,13 +592,13 @@ const TradingControl = () => {
                 {/* [v2.1.65] Added Buy Timestamps */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="p-4 bg-slate-800/30 rounded-2xl border border-slate-700/50">
-                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">委託買入時間</p>
+                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">買入委託時間</p>
                     <p className="text-xs font-bold text-slate-300 font-inter">
                       {selectedPosition.buy_order_time ? new Date(selectedPosition.buy_order_time).toLocaleString() : '系統升級前'}
                     </p>
                   </div>
                   <div className="p-4 bg-slate-800/30 rounded-2xl border border-slate-700/50">
-                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">買入成交時間</p>
+                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">買入確認時間</p>
                     <p className="text-xs font-bold text-slate-300 font-inter">
                       {selectedPosition.buy_filled_time ? new Date(selectedPosition.buy_filled_time).toLocaleString() : '系統升級前'}
                     </p>
