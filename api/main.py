@@ -53,7 +53,8 @@ async def global_exception_handler(request: Request, exc: Exception):
     print(f"CRITICAL ERROR: {str(exc)}\n{error_trace}")
     return JSONResponse(
         status_code=500,
-            "version": "v2.1.47",
+        content={
+            "detail": str(exc),
             "traceback": error_trace,
             "path": request.url.path
         }
