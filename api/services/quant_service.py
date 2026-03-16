@@ -123,17 +123,17 @@ def fetch_crypto_symbols():
             print("[QuantService] MAX API returned empty market list, using MAX-formatted fallback.")
             return symbols
             
-        # [v2.1.52] Deduplicate by base currency to avoid redundant pairs (prefer USDT)
+        # [v2.1.61] Deduplicate by base currency: Prioritize TWD over USDT for local users
         unique_live = {}
         for m in markets:
-            if m['id'].endswith('twd') or m['id'].endswith('usdt'):
+            market_id = m['id'].lower()
+            if market_id.endswith('twd') or market_id.endswith('usdt'):
                 base = m['base_unit'].lower()
-                is_usdt = m['id'].endswith('usdt')
+                is_twd = market_id.endswith('twd')
                 
-                # If we haven't seen this coin, or this is the USDT pair (overriding TWD)
-                if base not in unique_live or is_usdt:
-                    key = m['id'].lower()
-                    unique_live[base] = (key, f"{m['name']} ({m['base_unit'].upper()}/{m['quote_unit'].upper()})")
+                # Logic: If we haven't seen this coin, OR this is a TWD pair (overriding existing USDT)
+                if base not in unique_live or is_twd:
+                    unique_live[base] = (market_id, f"{m['name']} ({m['base_unit'].upper()}/{m['quote_unit'].upper()})")
         
         live_symbols = {v[0]: v[1] for v in unique_live.values()}
 
