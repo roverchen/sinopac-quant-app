@@ -136,7 +136,28 @@ def get_user_watchlist(user_id):
             print(f"Firestore load watchlist error: {e}")
     
     if watchlist is not None:
-        return watchlist
+        # [v2.1.53] Ensure all entries are normalized with MARKET: prefix
+        normalized = []
+        changed = False
+        for s in watchlist:
+            if ":" in s:
+                normalized.append(s)
+            else:
+                # Deduce market
+                from api.services.quant_service import extract_stock_code
+                if s.isdigit(): m = "TW"
+                elif "-" in s or "USDT" in s.upper() or "TWD" in s.upper(): m = "CRYPTO"
+                else: m = "US"
+                # Standardize
+                normalized.append(f"{m}:{s}")
+                changed = True
+        
+        if changed:
+            # Deduplicate while preserving order (using dict as an ordered set)
+            unique_normalized = list(dict.fromkeys(normalized))
+            save_user_watchlist(user_id, unique_normalized)
+            return unique_normalized
+        return normalized
 
     # Local fallback
     path = os.path.join(CACHE_DIR, f"watchlist_{user_id}.json")
@@ -151,7 +172,7 @@ def get_user_watchlist_filtered(user_id, market):
     """Helper to get only symbols for a specific market from unified list with legacy fallback"""
     full = get_user_watchlist(user_id)
     if market == "ALL":
-        return [s for s in full if ":" in s]
+        return full
         
     results = []
     for s in full:

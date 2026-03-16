@@ -14,7 +14,6 @@ const TradingControl = () => {
   const [pending, setPending] = useState([]);
   const [summary, setSummary] = useState(null);
   const [history, setHistory] = useState([]);
-  const [robotStatus, setRobotStatus] = useState({ status: 'Idle', message: 'System Ready' });
   const [selectedPending, setSelectedPending] = useState(null);
 
   useEffect(() => {
@@ -33,36 +32,6 @@ const TradingControl = () => {
       fetchHistory();
     }
     fetchSummary();
-    if (viewAccount === 'system_auto') {
-      fetchRobotStatus();
-    }
-  };
-
-  const fetchRobotStatus = async () => {
-    try {
-      const resp = await tradeService.getRobotStatus();
-      if (resp && resp.status) setRobotStatus(resp);
-    } catch (err) {
-      console.error("Failed to fetch robot status", err);
-    }
-  };
-
-  const triggerRobot = async (market) => {
-    setLoading(true);
-    try {
-      await tradeService.triggerAutoTradeScan(market);
-      alert(`${market} 自動掃描與交易已手動觸發！`);
-      // Start polling for status
-      const poll = setInterval(async () => {
-        const resp = await tradeService.getRobotStatus();
-        setRobotStatus(resp);
-        if (resp.status === 'Idle' || resp.status === 'error') clearInterval(poll);
-      }, 3000);
-    } catch (err) {
-      alert("觸發失敗: " + err.message);
-    } finally {
-      setLoading(false);
-    }
   };
 
   const fetchStatus = async () => {
@@ -195,6 +164,7 @@ const TradingControl = () => {
     }
   };
 
+
   return (
     <div className="max-w-6xl mx-auto space-y-8">
       {/* Performance Summary Header */}
@@ -262,56 +232,6 @@ const TradingControl = () => {
         )}
       </div>
 
-      {/* Robot Status Bar (Only for system_auto) */}
-      <AnimatePresence>
-        {viewAccount === 'system_auto' && (
-          <motion.div 
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="p-6 bg-indigo-600/10 border border-indigo-500/20 rounded-[2rem] flex items-center justify-between"
-          >
-            <div className="flex items-center gap-4">
-              <div className={`p-2 rounded-full ${robotStatus.status === 'Idle' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400 animate-pulse'}`}>
-                <Smartphone className="w-5 h-5" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-bold text-white">機器人狀態: {robotStatus.status}</span>
-                  <span className="px-2 py-0.5 rounded text-[10px] bg-slate-800 text-slate-400 font-inter">
-                    更新: {robotStatus.last_updated ? new Date(robotStatus.last_updated).toLocaleTimeString() : 'N/A'}
-                  </span>
-                </div>
-                <p className="text-xs text-slate-400 mt-0.5">{robotStatus.message}</p>
-              </div>
-            </div>
-            
-            <div className="flex gap-2">
-              <button 
-                onClick={() => triggerRobot('TW')}
-                disabled={loading || robotStatus.status !== 'Idle'}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-xl transition-all disabled:opacity-50"
-              >
-                手動觸發台股
-              </button>
-              <button 
-                onClick={() => triggerRobot('US')}
-                disabled={loading || robotStatus.status !== 'Idle'}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-xl transition-all disabled:opacity-50"
-              >
-                手動觸發美股
-              </button>
-              <button 
-                onClick={() => triggerRobot('CRYPTO')}
-                disabled={loading || robotStatus.status !== 'Idle'}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-xl transition-all disabled:opacity-50"
-              >
-                手動觸發加密
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* Operation Tabs */}
       <div className="flex items-center gap-4 border-b border-slate-800 pb-1">
