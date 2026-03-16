@@ -77,12 +77,24 @@ class ReconciliationService:
                     code = item.split(":")[1].split("-")[0].lower()
                     relevant_currencies.add(code)
             
+            # c) Currencies found in existing trade_logs
+            for L in real_logs:
+                sym = str(L.get("symbol", ""))
+                if "-" in sym:
+                    code = sym.split("-")[0].lower()
+                    relevant_currencies.add(code)
+            
+            # Ensure major ones are always present
+            relevant_currencies.add("btc")
+            relevant_currencies.add("eth")
+            relevant_currencies.add("dot") # Explicitly add DOT as requested
+            
             # Fetch all available markets to match against relevant currencies
             all_markets = max_api.get_markets()
             markets_to_sync = []
             for m in all_markets:
-                # If either base or quote currency is interesting to us
-                if m['base_unit'] in relevant_currencies or m['quote_unit'] in relevant_currencies:
+                # If the base currency is interesting to us, we want to see its trades
+                if m['base_unit'] in relevant_currencies:
                     markets_to_sync.append(m['id'])
             
             # Add defaults if nothing found
@@ -112,7 +124,7 @@ class ReconciliationService:
                                 "trade_id": tid,
                                 "symbol": symbol,
                                 "name": get_symbol_name(symbol, "CRYPTO"),
-                                "action": "Buy" if o.get('side') == 'buy' else "Sell",
+                                "action": "Buy" if o.get('side') in ['buy', 'bid'] else "Sell",
                                 "qty": float(o.get('volume', 0)),
                                 "price": float(o.get('price', 0)),
                                 "market": "CRYPTO",
@@ -149,7 +161,7 @@ class ReconciliationService:
                                     "trade_id": tid,
                                     "symbol": symbol,
                                     "name": get_symbol_name(symbol, "CRYPTO"),
-                                    "action": "Buy" if t.get('side') == 'buy' else "Sell",
+                                    "action": "Buy" if t.get('side') in ['buy', 'bid'] else "Sell",
                                     "qty": float(t.get('volume', 0)),
                                     "price": float(t.get('price', 0)),
                                     "market": "CRYPTO",

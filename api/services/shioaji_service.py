@@ -396,21 +396,32 @@ class ShioajiService:
 
     @classmethod
     def get_balance(cls, email: str):
+        # 1. Start with Shioaji balance
+        shioaji_balance = 0.0
         api = cls.get_api_client(email)
-        if hasattr(api, 'is_mock') or type(api).__name__ == 'MockShioajiClient':
-            return 0.0
-
-        if not api: return 0.0
-
-        try:
-            balance_data = api.account_balance()
-            if balance_data:
-                if hasattr(balance_data, 'acc_balance'):
-                    return float(balance_data.acc_balance)
-            return 0.0
-        except Exception as e:
-            print(f"[ShioajiService] Failed to fetch balance for {email}: {e}")
-            return 0.0
+        if api and not (hasattr(api, 'is_mock') or type(api).__name__ == 'MockShioajiClient'):
+            try:
+                balance_data = api.account_balance()
+                if balance_data and hasattr(balance_data, 'acc_balance'):
+                    shioaji_balance = float(balance_data.acc_balance)
+            except Exception as e:
+                print(f"[ShioajiService] Shioaji balance error: {e}")
+        
+        # 2. Add MAX TWD balance
+        max_twd_balance = 0.0
+        from api.services.storage_service import get_user_credentials
+        creds = get_user_credentials(email)
+        if creds.get("max_api_key"):
+            try:
+                from max_api import MaxExchangeAPI
+                max_api = MaxExchangeAPI(creds["max_api_key"], creds["max_api_secret"])
+                balances = max_api.get_account_balance()
+                if "twd" in balances:
+                    max_twd_balance = float(balances["twd"].get("balance", 0))
+            except Exception as e:
+                print(f"[ShioajiService] MAX balance error: {e}")
+                
+        return shioaji_balance + max_twd_balance
 
     @classmethod
     def get_orders(cls, email: str):
@@ -538,8 +549,64 @@ class ShioajiService:
                 if not fallback_time and p.get("timestamp"):
                     fallback_time = p.get("timestamp")
                     
-                p["buy_order_time"] = fallback_time
-                p["buy_filled_time"] = fallback_time
+                if fallback_time:
+                    p["buy_order_time"] = p.get("buy_order_time") or fallback_time
+                    p["buy_filled_time"] = p.get("buy_filled_time") or fallback_time
+
+        # [v2.1.69] Inject MAX crypto holdings into positions
+        from api.services.storage_service import get_user_credentials
+        creds = get_user_credentials(email)
+        if creds.get("max_api_key"):
+            try:
+                # Fetch exchange rate for conversion if needed
+                exchange_rate = 1.0
+                try:
+                    import yfinance as yf
+                    rate_df = yf.Ticker("TWD=X").history(period="1d")
+                    if not rate_df.empty:
+                        exchange_rate = float(rate_df['Close'].iloc[-1])
+                except: pass
+
+                from max_api import MaxExchangeAPI
+                max_api = MaxExchangeAPI(creds["max_api_key"], creds["max_api_secret"])
+                balances = max_api.get_account_balance()
+                for curr, detail in balances.items():
+                    if curr.lower() == "twd": continue
+                    qty = float(detail.get("balance", 0)) + float(detail.get("locked", 0))
+                    if qty > 0:
+                        symbol = f"{curr.upper()}-TWD"
+                        # Check if already exists (might have been added via mock or sync)
+                        if any(pos.get("symbol") == symbol for pos in positions):
+                            continue
+                            
+                        # Try to find cost basis from trade_logs (recent FILLED Buy)
+                        buy_record = next((L for L in reversed(logs) if L.get("symbol") == symbol and L.get("action") == "Buy" and L.get("status") == "FILLED"), None)
+                        buy_price = float(buy_record.get("price", 0)) if buy_record else 0.0
+                        
+                        # Fetch current price via Yahoo
+                        ticker = get_yahoo_ticker(symbol, "CRYPTO")
+                        current_price_twd = buy_price
+                        try:
+                            df = fetch_stock_data(symbol, ticker, period="1d")
+                            if df is not None and not df.empty:
+                                raw_price = float(df['Close'].iloc[-1])
+                                # Most Crypto on Yahoo are in USD, convert to TWD
+                                current_price_twd = round(raw_price * exchange_rate, 2)
+                        except: pass
+                        
+                        positions.append({
+                            "symbol": symbol,
+                            "qty": qty,
+                            "buy_price": buy_price,
+                            "market": "CRYPTO",
+                            "is_simulation": False,
+                            "current_price": current_price_twd,
+                            "pnl_percent": round(((current_price_twd - buy_price) / buy_price * 100), 2) if buy_price > 0 else 0.0,
+                            "buy_order_time": buy_record.get("order_time") if buy_record else None,
+                            "buy_filled_time": buy_record.get("fill_time") if buy_record else None
+                        })
+            except Exception as e:
+                print(f"[ShioajiService] MAX positions injection error: {e}")
 
         return positions
 

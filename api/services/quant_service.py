@@ -197,7 +197,8 @@ def get_yahoo_ticker(code, market_type='TW'):
         # [v2.1.63] Reverting to -USD for Yahoo Finance because -TWD pairs are not available
         if code_upper.endswith('USDT') or code_upper.endswith('TWD'):
             suffix = code_upper[-4:] if code_upper.endswith('USDT') else code_upper[-3:]
-            return f"{code_upper[:-len(suffix)]}-USD"
+            clean_code = code_upper[:-len(suffix)].rstrip('-')
+            return f"{clean_code}-USD"
             
         # 3. YF direct or fallback
         if "-" not in code_upper:
