@@ -335,8 +335,22 @@ class ShioajiService:
         
         if "Rejected" in status_str or "Failed" in status_str or not order_id:
              error_msg = getattr(trade.status, 'status_code', 'Unknown Error')
-             # Try to get extra info if available
-             detail = f"Broker Rejected: {status_str} ({error_msg})"
+             detail_msg = getattr(trade.status, 'msg', getattr(trade.status, 'detail', ''))
+             
+             # [v2.1.67] Extract hidden Shioaji API JSON errors from logger output or __dict__ if available
+             if not detail_msg or detail_msg == "None":
+                 import json
+                 try:
+                     # Shioaji might bury the detail in the raw json string of the status
+                     status_dict = trade.status.__dict__
+                     if 'msg' in status_dict and status_dict['msg']:
+                         detail_msg = str(status_dict['msg'])
+                     else:
+                         detail_msg = "Account Not Acceptable OR Balance Insufficient."
+                 except:
+                     detail_msg = "Unknown Shioaji Rejection Reason"
+                     
+             detail = f"Broker Rejected: {status_str} ({detail_msg})"
              raise Exception(detail)
 
         logs = get_user_trade_logs(email)
