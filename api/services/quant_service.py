@@ -289,7 +289,7 @@ def check_revenue_momentum(code):
     except:
         return "Unavailable", True
 
-def analyze_stock(df, code, name, defense_weight=0.5, market_type='TW', skip_indicators=False, skip_revenue=False):
+def analyze_stock(df, code, name, defense_weight=0.5, market_type='TW', skip_indicators=False, skip_revenue=False, exchange_rate: float = 1.0):
     """Analyze single stock and return AnalysisResult compatible dict"""
     if df is None or len(df) < 10:
         return {
@@ -385,6 +385,16 @@ def analyze_stock(df, code, name, defense_weight=0.5, market_type='TW', skip_ind
         stop_loss = year_low * 0.95
         if has_vol_momentum: type_prefix += "+"
 
+    # [v2.1.64] Convert prices to TWD if exchange_rate provided
+    if market_type == 'CRYPTO' and exchange_rate > 1.0:
+        last_price *= exchange_rate
+        entry_price *= exchange_rate
+        target_price *= exchange_rate
+        stop_loss *= exchange_rate
+        ma20_last *= exchange_rate
+        defense_base *= exchange_rate
+        atr *= exchange_rate
+
     suggestion = f"{type_prefix} | Buy:{entry_price:.1f} | TP:{target_price:.1f} | SL:{sanitize(stop_loss):.1f}"
     if not is_rev_ok: suggestion = "REVENUE_WARNING | " + suggestion
 
@@ -418,6 +428,18 @@ async def run_market_scan(market_type: str, defense_weight: float = 0.5):
 
         print(f"[QuantService] Starting {market_type} market scan (Defense Weight: {defense_weight}). Filtered Symbols: {total}")
         
+        # [v2.1.64] Fetch USD/TWD rate if Crypto
+        exchange_rate = 1.0
+        if market_type == "CRYPTO":
+            try:
+                import yfinance as yf
+                rate_df = yf.Ticker("TWD=X").history(period="1d")
+                if not rate_df.empty:
+                    exchange_rate = float(rate_df['Close'].iloc[-1])
+                    print(f"[QuantService] Using USD/TWD rate: {exchange_rate}")
+            except Exception as e:
+                print(f"[QuantService] Failed to fetch TWD rate: {e}")
+
         chunk_size = 30 # Smaller batches for more frequent updates
         results = []
         all_dfs = {}
@@ -431,7 +453,7 @@ async def run_market_scan(market_type: str, defense_weight: float = 0.5):
                 name = symbols_map.get(s, "Unknown")
                 # PRE-CALCULATE INDICATORS ONCE and save to all_dfs
                 df = calculate_technical_indicators(df)
-                analysis = analyze_stock(df, s, name, defense_weight, market_type, skip_indicators=True)
+                analysis = analyze_stock(df, s, name, defense_weight, market_type, skip_indicators=True, exchange_rate=exchange_rate)
                 results.append(AnalysisResult(**analysis))
                 all_dfs[s] = df
 
