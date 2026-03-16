@@ -243,11 +243,13 @@ class ShioajiService:
                     print(f"[ShioajiService] Mapping MATIC to POL for MAX compatibility: {m_symbol} -> {m_symbol.replace('matic', 'pol')}")
                     m_symbol = m_symbol.replace('matic', 'pol')
                 
-                # Handle USD/USDT suffix safely
+                # [v2.1.62] Handle TWD/USD/USDT suffix safely (Prioritize TWD)
                 if m_symbol.endswith("usd"):
-                    m_symbol = m_symbol[:-3] + "usdt"
-                elif not m_symbol.endswith("usdt") and not m_symbol.endswith("twd"):
-                    m_symbol += "usdt"
+                    m_symbol = m_symbol[:-3] + "twd"
+                elif m_symbol.endswith("usdt"):
+                    m_symbol = m_symbol[:-4] + "twd"
+                elif not m_symbol.endswith("twd"):
+                    m_symbol += "twd"
                 
                 print(f"[MAX] Placing {side} order for {m_symbol} qty {qty} @ {price}")
                 # [FIX] Use place_order as defined in max_api.py

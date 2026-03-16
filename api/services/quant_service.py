@@ -45,12 +45,14 @@ def extract_stock_code(raw_str, market_type=None):
     code = match.group(1).upper() if match else raw_str.upper()
     
     # [v2.1.45] Normalize Crypto for consistency with MAX format
+    # [v2.1.62] Default to TWD for Crypto to match MAX user balances
     if market_type == "CRYPTO":
         c = code.upper()
-        if c.endswith("-USD"): return f"{c[:-4].lower()}usdt"
-        if c.endswith("-TWD"): return f"{c[:-4].lower()}twd"
-        if c.endswith("USDT") or c.endswith("TWD"): return c.lower()
-        return f"{c.lower()}usdt"
+        if c.endswith("-USD") or c.endswith("-TWD"): 
+            return f"{c[:-4].lower()}twd"
+        if c.endswith("USDT") or c.endswith("TWD"): 
+            return c.lower()
+        return f"{c.lower()}twd"
     return code
 
 def fetch_tw_symbols():
@@ -191,15 +193,14 @@ def get_yahoo_ticker(code, market_type='TW'):
         if code_upper in ["MATIC-USD", "MATICUSDT", "MATIC"]: return "POL-USD"
         if code_upper in ["POL-USD", "POLUSDT", "POL"]: return "POL-USD"
         
-        # 2. Convert MAX format (btcusdt, btctwd) to YF format (BTC-USD, BTC-TWD)
-        if code_upper.endswith('USDT'):
-            return f"{code_upper[:-4]}-USD"
-        if code_upper.endswith('TWD'):
-            return f"{code_upper[:-3]}-TWD"
+        # [v2.1.62] Prefer -TWD for Yahoo Finance to match account base currency
+        if code_upper.endswith('USDT') or code_upper.endswith('TWD'):
+            suffix = code_upper[-4:] if code_upper.endswith('USDT') else code_upper[-3:]
+            return f"{code_upper[:-len(suffix)]}-TWD"
             
         # 3. YF direct or fallback
         if "-" not in code_upper:
-            return f"{code_upper}-USD"
+            return f"{code_upper}-TWD"
         return code_upper
         
     return code
