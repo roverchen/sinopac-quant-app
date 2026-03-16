@@ -253,12 +253,12 @@ def get_mass_scan_list(api, market='TW'):
     """從數萬檔合約中過濾出真正的股票、ETF、美股。"""
     if market == 'CRYPTO':
         return [
-            "BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "XRP-USD", 
-            "ADA-USD", "DOGE-USD", "AVAX-USD", "DOT-USD", "TRX-USD",
-            "LINK-USD", "POL28321-USD", "NEAR-USD", "LTC-USD", "BCH-USD",
-            "SHIB-USD", "DAI-USD", "UNI7083-USD", "LEO-USD", "APT21794-USD",
-            "STX4847-USD", "OKB-USD", "ATOM-USD", "IMX10603-USD", "HBAR-USD",
-            "KAS-USD", "ETC-USD", "RENDER-USD", "FIL-USD", "LDO-USD"
+            "btcusdt", "ethusdt", "solusdt", "bnbusdt", "xrpusdt", 
+            "adausdt", "dogeusdt", "avaxusdt", "dotusdt", "trxusdt",
+            "linkusdt", "polusdt", "nearusdt", "ltcusdt", "bchusdt",
+            "shibusdt", "daiusdt", "uniusdt", "leousdt", "aptusdt",
+            "stxusdt", "okbusdt", "atomusdt", "imxusdt", "hbarusdt",
+            "kasusdt", "etcusdt", "renderusdt", "filusdt", "ldousdt"
         ]
 
     all_map = get_stock_name_map(api)

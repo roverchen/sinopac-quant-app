@@ -89,24 +89,41 @@ def fetch_us_symbols():
         return {"AAPL": "Apple", "MSFT": "Microsoft", "NVDA": "Nvidia"}
 
 def fetch_crypto_symbols():
-    """Fetch major crypto symbols and MAX exchange pairs"""
+    """Fetch major crypto symbols and MAX exchange pairs, prioritizing MAX naming (e.g., btcusdt)"""
+    # [v2.1.44] Reinforced Fallback with MAX naming convention
     symbols = {
-        "BTC-USD": "Bitcoin", "ETH-USD": "Ethereum", "SOL-USD": "Solana",
-        "BNB-USD": "Binance Coin", "DOGE-USD": "Dogecoin", "XRP-USD": "XRP",
-        "ADA-USD": "Cardano", "POL-USD": "Polygon (POL)", "DOT-USD": "Polkadot",
-        "LINK-USD": "Chainlink"
+        "btcusdt": "Bitcoin (BTC/USDT)", 
+        "ethusdt": "Ethereum (ETH/USDT)", 
+        "solusdt": "Solana (SOL/USDT)",
+        "bnbusdt": "Binance Coin (BNB/USDT)", 
+        "dogeusdt": "Dogecoin (DOGE/USDT)", 
+        "xrpusdt": "XRP (XRP/USDT)",
+        "adausdt": "Cardano (ADA/USDT)", 
+        "polusdt": "Polygon (POL/USDT)", 
+        "dotusdt": "Polkadot (DOT/USDT)",
+        "linkusdt": "Chainlink (LINK/USDT)"
     }
     try:
         api = MaxExchangeAPI("", "")
         markets = api.get_markets()
+        if not markets:
+            print("[QuantService] MAX API returned empty market list, using MAX-formatted fallback.")
+            return symbols
+            
+        # If API succeeds, we can rebuild the map from live data
+        live_symbols = {}
         for m in markets:
+            # Filter for TWD or USDT pairs as per user trading preference
             if m['id'].endswith('twd') or m['id'].endswith('usdt'):
-                key = m['id']
-                if key.upper() not in symbols:
-                    symbols[key] = f"{m['name']} ({m['base_unit'].upper()}/{m['quote_unit'].upper()})"
+                key = m['id'].lower() # Ensure lowercase for consistency
+                live_symbols[key] = f"{m['name']} ({m['base_unit'].upper()}/{m['quote_unit'].upper()})"
+        
+        # Merge live data into symbols (live data takes precedence)
+        if live_symbols:
+            return live_symbols
         return symbols
     except Exception as e:
-        print(f"Error fetching Crypto symbols from MAX: {e}")
+        print(f"Error fetching Crypto symbols from MAX API: {e}. Using MAX-formatted fallback.")
         return symbols
 
 
@@ -136,18 +153,29 @@ def get_symbol_name(symbol, market_type='TW'):
     return symbol
 
 def get_yahoo_ticker(code, market_type='TW'):
-    """Convert code to Yahoo Finance ticker format"""
+    """Convert code to Yahoo Finance ticker format (supporting MAX symbols)"""
     if not code: return None
+    code_upper = code.upper()
+    
     if market_type == 'TW' and code.isdigit():
-        # Keep base code, fetcher will try .TW then .TWO
         return code
+        
     if market_type == 'CRYPTO':
-        c = code.upper()
-        if c == "MATIC-USD" or c == "MATICUSDT": return "POL-USD"
-        if c.endswith('TWD'): return f"{c[:-3]}-TWD"
-        if c.endswith('USDT'): return f"{c[:-4]}-USD"
-        if "-" not in c: return f"{c}-USD"
-        return c
+        # 1. Handle special migrations
+        if code_upper in ["MATIC-USD", "MATICUSDT", "MATIC"]: return "POL-USD"
+        if code_upper in ["POL-USD", "POLUSDT", "POL"]: return "POL-USD"
+        
+        # 2. Convert MAX format (btcusdt, btctwd) to YF format (BTC-USD, BTC-TWD)
+        if code_upper.endswith('USDT'):
+            return f"{code_upper[:-4]}-USD"
+        if code_upper.endswith('TWD'):
+            return f"{code_upper[:-3]}-TWD"
+            
+        # 3. YF direct or fallback
+        if "-" not in code_upper:
+            return f"{code_upper}-USD"
+        return code_upper
+        
     return code
 
 def fetch_stock_data(code, ticker_str, period="1y"):
