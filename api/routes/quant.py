@@ -45,11 +45,11 @@ async def analyze_watchlist(request: StockAnalysisRequest, current_user: str = D
             code = extract_stock_code(s, target_market)
             
         pool = get_cached_pool(target_market) or {}
-        # [v2.1.47] Handle both dict (from Firestore) and objects (from Pickle)
-        pool_results = {
-            (r.symbol if hasattr(r, 'symbol') else r.get('symbol')): r 
-            for r in pool.get("results", [])
-        }
+        # [v2.1.49] Robust handling for both dict and objects
+        pool_results = {}
+        for r in pool.get("results", []):
+            sym = getattr(r, 'symbol', r.get('symbol') if isinstance(r, dict) else None)
+            if sym: pool_results[sym] = r
         dfs = pool.get("dfs", {})
 
         if code in pool_results and request.defense_weight == 0.5:
