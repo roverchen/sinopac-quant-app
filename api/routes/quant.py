@@ -115,7 +115,7 @@ async def analyze_watchlist(request: StockAnalysisRequest, current_user: str = D
                     ma_base=0, ma20=0, atr=0, market=m
                 ))
 
-    results = sorted(results, key=lambda x: x.score, reverse=True)
+    results = sorted(results, key=lambda x: x.score if hasattr(x, 'score') else (x.get('score', 0) if isinstance(x, dict) else 0), reverse=True)
     return AnalysisResponse(results=results, timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
 @router.get("/results", response_model=PaginatedAnalysisResponse)
