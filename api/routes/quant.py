@@ -45,16 +45,26 @@ async def analyze_watchlist(request: StockAnalysisRequest, current_user: str = D
             code = extract_stock_code(s, target_market)
             
         pool = get_cached_pool(target_market) or {}
-        pool_results = {r.symbol: r for r in pool.get("results", [])}
+        # [v2.1.47] Handle both dict (from Firestore) and objects (from Pickle)
+        pool_results = {
+            (r.symbol if hasattr(r, 'symbol') else r.get('symbol')): r 
+            for r in pool.get("results", [])
+        }
         dfs = pool.get("dfs", {})
 
         if code in pool_results and request.defense_weight == 0.5:
             # Add market info if missing
             res = pool_results[code]
-            if hasattr(res, 'market') and not res.market: res.market = target_market
+            res_market = getattr(res, 'market', res.get('market') if isinstance(res, dict) else None)
+            if not res_market:
+                if isinstance(res, dict): res['market'] = target_market
+                else: setattr(res, 'market', target_market)
             results.append(res)
         elif code in dfs:
-            name = pool_results[code].name if code in pool_results else "Unknown"
+            res = pool_results.get(code)
+            name = "Unknown"
+            if res:
+                name = getattr(res, 'name', res.get('name') if isinstance(res, dict) else "Unknown")
             analysis = analyze_stock(dfs[code], code, name, request.defense_weight, target_market)
             results.append(AnalysisResult(**analysis))
         else:
