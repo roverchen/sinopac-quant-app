@@ -4,6 +4,11 @@ This document tracks all version changes and feature updates for the Sinopac Qua
 
 ## Version 2.1 Series
 
+### v2.1.70 (2026-03-16)
+- **Balance Separation Fix**: Resolved double-counting and incorrect data linkage between Sinopac and MAX balances.
+- **Improved USDT Estimate**: Implemented real-time exchange rate fetching for more accurate TWD/USDT asset valuation.
+- **Shioaji Decoupling**: Reverted Sinopac balance getter to be independent of MAX credentials.
+
 ### v2.1.69 (2026-03-16)
 - **MAX Multi-Asset Integration**: Integrated MAX TWD balances into the total account balance.
 - **Crypto Position Injection**: Non-zero holdings from MAX (e.g., BTC, DOT) are now automatically injected into the position list.

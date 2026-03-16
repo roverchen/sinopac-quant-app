@@ -396,32 +396,15 @@ class ShioajiService:
 
     @classmethod
     def get_balance(cls, email: str):
-        # 1. Start with Shioaji balance
-        shioaji_balance = 0.0
         api = cls.get_api_client(email)
         if api and not (hasattr(api, 'is_mock') or type(api).__name__ == 'MockShioajiClient'):
             try:
                 balance_data = api.account_balance()
                 if balance_data and hasattr(balance_data, 'acc_balance'):
-                    shioaji_balance = float(balance_data.acc_balance)
+                    return float(balance_data.acc_balance)
             except Exception as e:
-                print(f"[ShioajiService] Shioaji balance error: {e}")
-        
-        # 2. Add MAX TWD balance
-        max_twd_balance = 0.0
-        from api.services.storage_service import get_user_credentials
-        creds = get_user_credentials(email)
-        if creds.get("max_api_key"):
-            try:
-                from max_api import MaxExchangeAPI
-                max_api = MaxExchangeAPI(creds["max_api_key"], creds["max_api_secret"])
-                balances = max_api.get_account_balance()
-                if "twd" in balances:
-                    max_twd_balance = float(balances["twd"].get("balance", 0))
-            except Exception as e:
-                print(f"[ShioajiService] MAX balance error: {e}")
-                
-        return shioaji_balance + max_twd_balance
+                print(f"[ShioajiService] Failed to fetch balance for {email}: {e}")
+        return 0.0
 
     @classmethod
     def get_orders(cls, email: str):

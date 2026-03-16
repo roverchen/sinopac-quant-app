@@ -22,7 +22,7 @@ async def get_trading_status(current_user: str = Depends(get_current_user)):
     return {
         "auto_trade_enabled": creds.get("auto_trade_enabled", False),
         "mode": "Simulation" if creds.get("simulation_mode", True) else "Live",
-        "backend_version": "2.1.69"
+        "backend_version": "2.1.70"
     }
 
 @router.post("/toggle")
@@ -139,19 +139,30 @@ async def get_combined_balance(current_user: str = Depends(get_current_user)):
 
     shioaji_bal = ShioajiService.get_balance(current_user)
 
-    max_bal = {"total_twd": 0.0, "details": {}}
+    max_bal = {"twd": 0.0, "usdt": 0.0, "total_twd_estimate": 0.0}
     try:
         creds = get_user_credentials(current_user)
         if creds.get("max_api_key") and creds.get("max_api_secret"):
+            from max_api import MaxExchangeAPI
             max_api = MaxExchangeAPI(creds["max_api_key"], creds["max_api_secret"])
             balances = max_api.get_account_balance()
             if isinstance(balances, dict) and "error" not in balances:
                 twd = balances.get('twd', {}).get('balance', 0.0)
                 usdt = balances.get('usdt', {}).get('balance', 0.0)
+                
+                # Fetch real rate if possible
+                rate = 32.5
+                try:
+                    import yfinance as yf
+                    rate_df = yf.Ticker("TWD=X").history(period="1d")
+                    if not rate_df.empty:
+                        rate = float(rate_df['Close'].iloc[-1])
+                except: pass
+
                 max_bal = {
                     "twd": round(twd, 2),
                     "usdt": round(usdt, 2),
-                    "total_twd_estimate": round(twd + (usdt * 32), 2)
+                    "total_twd_estimate": round(twd + (usdt * rate), 2)
                 }
     except:
         pass
