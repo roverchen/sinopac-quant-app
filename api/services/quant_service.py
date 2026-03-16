@@ -143,11 +143,12 @@ def fetch_crypto_symbols():
         if live_symbols:
             return live_symbols
         
-        # Deduplicate fallback list as well
+        # [v2.1.63] Deduplicate fallback list: Prioritize TWD
         unique_fallback = {}
         for k, v in symbols.items():
             base = k.replace('usdt', '').replace('twd', '')
-            if base not in unique_fallback or k.endswith('usdt'):
+            is_twd = k.endswith('twd')
+            if base not in unique_fallback or is_twd:
                 unique_fallback[base] = (k, v)
         return {v[0]: v[1] for v in unique_fallback.values()}
     except Exception as e:
@@ -193,14 +194,14 @@ def get_yahoo_ticker(code, market_type='TW'):
         if code_upper in ["MATIC-USD", "MATICUSDT", "MATIC"]: return "POL-USD"
         if code_upper in ["POL-USD", "POLUSDT", "POL"]: return "POL-USD"
         
-        # [v2.1.62] Prefer -TWD for Yahoo Finance to match account base currency
+        # [v2.1.63] Reverting to -USD for Yahoo Finance because -TWD pairs are not available
         if code_upper.endswith('USDT') or code_upper.endswith('TWD'):
             suffix = code_upper[-4:] if code_upper.endswith('USDT') else code_upper[-3:]
-            return f"{code_upper[:-len(suffix)]}-TWD"
+            return f"{code_upper[:-len(suffix)]}-USD"
             
         # 3. YF direct or fallback
         if "-" not in code_upper:
-            return f"{code_upper}-TWD"
+            return f"{code_upper}-USD"
         return code_upper
         
     return code

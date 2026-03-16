@@ -248,8 +248,8 @@ async def get_market_trend(market_type: str = "TW", days: int = 7):
     import pandas as pd
     
     # 1. Selection: Pick Index
-    # [v2.1.62] Using BTC-TWD as index to match user's TWD-centric account base
-    indices = {"TW": "^TWII", "US": "^GSPC", "CRYPTO": "BTC-TWD"}
+    # [v2.1.63] Using BTC-USD for data availability (Yahoo Finance lacks BTC-TWD history)
+    indices = {"TW": "^TWII", "US": "^GSPC", "CRYPTO": "BTC-USD"}
     index_symbol = indices.get(market_type, "^TWII")
     
     # 2. Selection: Pick Top 5 from Selection Pool
