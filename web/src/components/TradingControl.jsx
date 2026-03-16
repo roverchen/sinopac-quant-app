@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { tradeService } from '../services/api';
 
 const TradingControl = () => {
-  const [status, setStatus] = useState({ auto_trade_enabled: false, mode: 'Simulation' });
+  const [status, setStatus] = useState({ auto_trade_enabled: false, mode: 'Simulation', backend_version: "2.1.68" });
   const [account, setAccount] = useState({ balance: 0, positions: [], status: 'loading' });
   const [loading, setLoading] = useState(false);
   const [selectedPosition, setSelectedPosition] = useState(null);
@@ -176,6 +176,7 @@ const TradingControl = () => {
           <div className="flex flex-col">
             <h2 className="text-2xl font-bold text-white tracking-tight">
               交易環境控管
+              <span className="ml-3 text-[10px] font-black text-slate-500 uppercase tracking-widest bg-slate-800/50 px-2 py-1 rounded-lg">v{status.backend_version || '?.?.?'}</span>
             </h2>
             <div className="flex gap-2 mt-2">
               <button 
@@ -514,8 +515,8 @@ const TradingControl = () => {
                   </p>
                   <p className="text-sm text-slate-400">
                     委託時間：<span className="text-white font-bold whitespace-nowrap">
-                      {selectedPending.order_time ? new Date(selectedPending.order_time).toLocaleString() : 
-                       (selectedPending.timestamp ? new Date(selectedPending.timestamp).toLocaleString() : '系統升級前')}
+                      {selectedPending.order_time && selectedPending.order_time !== 'None' ? new Date(selectedPending.order_time).toLocaleString() : 
+                       (selectedPending.timestamp && selectedPending.timestamp !== 'None' ? new Date(selectedPending.timestamp).toLocaleString() : '系統升級前')}
                     </span>
                   </p>
                 </div>
@@ -594,13 +595,13 @@ const TradingControl = () => {
                   <div className="p-4 bg-slate-800/30 rounded-2xl border border-slate-700/50">
                     <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">買入委託時間</p>
                     <p className="text-xs font-bold text-slate-300 font-inter">
-                      {selectedPosition.buy_order_time ? new Date(selectedPosition.buy_order_time).toLocaleString() : '系統升級前'}
+                      {selectedPosition.buy_order_time && selectedPosition.buy_order_time !== 'None' ? new Date(selectedPosition.buy_order_time).toLocaleString() : '系統升級前'}
                     </p>
                   </div>
                   <div className="p-4 bg-slate-800/30 rounded-2xl border border-slate-700/50">
                     <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">買入確認時間</p>
                     <p className="text-xs font-bold text-slate-300 font-inter">
-                      {selectedPosition.buy_filled_time ? new Date(selectedPosition.buy_filled_time).toLocaleString() : '系統升級前'}
+                      {selectedPosition.buy_filled_time && selectedPosition.buy_filled_time !== 'None' ? new Date(selectedPosition.buy_filled_time).toLocaleString() : '系統升級前'}
                     </p>
                   </div>
                 </div>
