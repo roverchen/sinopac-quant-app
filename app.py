@@ -1115,6 +1115,15 @@ def fetch_and_analyze(watchlist, defense_weight=0.5, market_type=None):
         watchlist = [t for t in watchlist if extract_stock_code(t, market_type)[0:1].isdigit()]
     elif market_type == 'US':
         watchlist = [t for t in watchlist if extract_stock_code(t, market_type)[0:1].isalpha() and "-USD" not in str(t)]
+    # [v2.1.48] Deduplicate watchlist based on normalized codes
+    unique_watchlist = []
+    seen_codes = set()
+    for item in watchlist:
+        code = extract_stock_code(item, market_type)
+        if code not in seen_codes:
+            unique_watchlist.append(item)
+            seen_codes.add(code)
+    watchlist = unique_watchlist
         
     data_list = []
     is_rate_limited = False 

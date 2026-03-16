@@ -100,16 +100,21 @@ def fetch_crypto_symbols():
     """Fetch major crypto symbols and MAX exchange pairs, prioritizing MAX naming (e.g., btcusdt)"""
     # [v2.1.44] Reinforced Fallback with MAX naming convention
     symbols = {
-        "btcusdt": "Bitcoin (BTC/USDT)", 
-        "ethusdt": "Ethereum (ETH/USDT)", 
-        "solusdt": "Solana (SOL/USDT)",
-        "bnbusdt": "Binance Coin (BNB/USDT)", 
-        "dogeusdt": "Dogecoin (DOGE/USDT)", 
-        "xrpusdt": "XRP (XRP/USDT)",
-        "adausdt": "Cardano (ADA/USDT)", 
-        "polusdt": "Polygon (POL/USDT)", 
-        "dotusdt": "Polkadot (DOT/USDT)",
-        "linkusdt": "Chainlink (LINK/USDT)"
+        "btcusdt": "Bitcoin (BTC/USDT)", "ethusdt": "Ethereum (ETH/USDT)", 
+        "solusdt": "Solana (SOL/USDT)", "bnbusdt": "Binance Coin (BNB/USDT)", 
+        "xrpusdt": "XRP (XRP/USDT)", "adausdt": "Cardano (ADA/USDT)", 
+        "dogeusdt": "Dogecoin (DOGE/USDT)", "avaxusdt": "Avalanche (AVAX/USDT)", 
+        "dotusdt": "Polkadot (DOT/USDT)", "trxusdt": "TRON (TRX/USDT)",
+        "linkusdt": "Chainlink (LINK/USDT)", "polusdt": "Polygon (POL/USDT)", 
+        "nearusdt": "NEAR Protocol (NEAR/USDT)", "ltcusdt": "Litecoin (LTC/USDT)", 
+        "bchusdt": "Bitcoin Cash (BCH/USDT)", "shibusdt": "Shiba Inu (SHIB/USDT)", 
+        "daiusdt": "Dai (DAI/USDT)", "uniusdt": "Uniswap (UNI/USDT)", 
+        "leousdt": "UNUS SED LEO (LEO/USDT)", "aptusdt": "Aptos (APT/USDT)",
+        "stxusdt": "Stacks (STX/USDT)", "okbusdt": "OKB (OKB/USDT)", 
+        "atomusdt": "Cosmos (ATOM/USDT)", "imxusdt": "Immutable (IMX/USDT)", 
+        "hbarusdt": "Hedera (HBAR/USDT)", "kasusdt": "Kaspa (KAS/USDT)", 
+        "etcusdt": "Ethereum Classic (ETC/USDT)", "renderusdt": "Render (RENDER/USDT)", 
+        "filusdt": "Filecoin (FIL/USDT)", "ldousdt": "Lido DAO (LDO/USDT)"
     }
     try:
         api = MaxExchangeAPI("", "")
