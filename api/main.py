@@ -7,6 +7,10 @@ from api.routes import auth, quant, trade, diag
 import uvicorn
 import os
 import sys
+import certifi
+
+# Fix SSL Certificate Verification Error on Mac
+os.environ['SSL_CERT_FILE'] = certifi.where()
 
 # Ensure project root is in Python path for subpackage imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -14,7 +18,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 app = FastAPI(
     title="Sinopac Quant Pro API",
     description="Professional backend for quantitative stock analysis and trading.",
-    version="2.1.43"
+    version="2.1.44"
 )
 
 @app.on_event("startup")

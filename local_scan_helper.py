@@ -8,6 +8,10 @@ from datetime import timedelta, datetime
 import requests
 import random
 import argparse
+import certifi
+
+# Fix SSL Certificate Verification Error on Mac
+os.environ['SSL_CERT_FILE'] = certifi.where()
 
 # 導入 Sinopac API 邏輯
 import sinopac_api
