@@ -7,6 +7,7 @@ This document tracks all version changes and feature updates for the Sinopac Qua
 ### v2.1.72 (2026-03-17)
 - **Auto-Trade Startup Makeup Logic**: Implemented a compensatory mechanism that checks for missed trade windows upon robot startup. If a scheduled market (TW, US, CRYPTO) was missed due to downtime/deployment, the robot will perform a one-time "makeup" trade immediately, ensuring no day is skipped.
 - **Improved Robot Tracking**: Added a daily execution check to prevent duplicate automated trades within the same calendar day.
+- **Order Visibility Note**: Robot trades are currently executed as **Simulation Orders** and will appear in the "Pending" list of the **System Account** until the market price matches the target.
 
 ### v2.1.71 (2026-03-17)
 - **UI Column Reordering**: Moved the "Mode" (模式/實盤) column to the first position in both the Positions and History tables for better visibility and faster identification of simulation vs. live trades.
