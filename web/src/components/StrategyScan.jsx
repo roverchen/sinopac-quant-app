@@ -31,10 +31,10 @@ const StrategyScan = () => {
             // 將後端回傳的真實 Top 10 更新至畫面
             if (resp.top_results && resp.top_results.length > 0) {
               const formattedResults = resp.top_results.map(r => ({
-                code: r.代碼,
-                name: r.名稱,
-                score: r.綜合評分,
-                reason: r.操作建議
+                code: r.symbol,
+                name: r.name,
+                score: r.score,
+                reason: r.suggestion
               }));
               setResults(formattedResults);
             }
