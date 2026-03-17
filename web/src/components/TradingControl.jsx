@@ -277,9 +277,9 @@ const TradingControl = () => {
             <table className="w-full text-left">
               <thead>
                 <tr className="bg-slate-800/20 border-b border-slate-800">
+                  <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">模式</th>
                   <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">標的/名稱</th>
                   <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">狀態</th>
-                  <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">模式</th>
                   <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">數量</th>
                   <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">現價/成本</th>
                   <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">損益 (%)</th>
@@ -292,6 +292,9 @@ const TradingControl = () => {
                       onClick={() => setSelectedPending(o)}
                       className="bg-indigo-500/5 hover:bg-slate-800/60 cursor-pointer transition-all border-b border-slate-800/30 group">
                     <td className="px-8 py-6">
+                      <span className="text-xs font-bold text-slate-400">{o.is_simulation ? '模擬' : '實盤'}</span>
+                    </td>
+                    <td className="px-8 py-6">
                       <div className="flex flex-col">
                         <span className="text-lg font-black text-white group-hover:text-amber-400 font-inter leading-tight">{o.symbol}</span>
                         <span className="text-[10px] text-slate-500 font-bold">{o.name || '-'}</span>
@@ -301,9 +304,6 @@ const TradingControl = () => {
                       <span className="px-3 py-1 bg-amber-500/10 text-amber-400 text-[10px] font-black rounded-full border border-amber-500/20 uppercase">
                         {o.action === 'Buy' ? '委託買入中' : '委託賣出中'}
                       </span>
-                    </td>
-                    <td className="px-8 py-6">
-                      <span className="text-xs font-bold text-slate-400">{o.is_simulation ? '模擬' : '實盤'}</span>
                     </td>
                     <td className="px-8 py-6 text-right">
                       <span className="text-sm font-bold text-slate-300">{o.qty}</span>
@@ -326,6 +326,9 @@ const TradingControl = () => {
                       onClick={() => openSellModal(pos)}
                       className="group hover:bg-slate-800/40 cursor-pointer transition-all border-b border-slate-800/50">
                     <td className="px-8 py-6">
+                      <span className="text-xs font-bold text-slate-400">{pos.is_simulation ? '模擬' : '實盤'}</span>
+                    </td>
+                    <td className="px-8 py-6">
                       <div className="flex flex-col">
                         <span className="text-lg font-black text-white group-hover:text-indigo-400 font-inter leading-tight">{pos.symbol}</span>
                         <span className="text-[10px] text-slate-500 font-bold">{pos.name || '-'}</span>
@@ -335,9 +338,6 @@ const TradingControl = () => {
                       <span className="px-3 py-1 bg-emerald-500/10 text-emerald-400 text-[10px] font-black rounded-full border border-emerald-500/20 uppercase">
                         持倉中 (Holding)
                       </span>
-                    </td>
-                    <td className="px-8 py-6">
-                      <span className="text-xs font-bold text-slate-400">{pos.is_simulation ? '模擬' : '實盤'}</span>
                     </td>
                     <td className="px-8 py-6 text-right">
                       <span className="text-sm font-black text-white font-inter">{pos.qty}</span>
@@ -387,9 +387,9 @@ const TradingControl = () => {
             <table className="w-full text-left">
               <thead>
                 <tr className="bg-slate-800/20 border-b border-slate-800">
+                  <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">模式</th>
                   <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">時間</th>
                   <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">標的/名稱</th>
-                  <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">模式</th>
                   <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">動作</th>
                   <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">數量/價格</th>
                   <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">實現損益</th>
@@ -398,19 +398,19 @@ const TradingControl = () => {
               <tbody className="divide-y divide-slate-800/50">
                 {history.length > 0 ? history.map((h, i) => (
                   <tr key={i} className="hover:bg-slate-800/30 transition-colors">
-                    <td className="px-8 py-6 text-xs text-slate-500 font-inter">{h.timestamp?.split('T')[0] || '-'}</td>
-                    <td className="px-8 py-6">
-                      <div className="flex flex-col">
-                        <span className="font-bold text-white font-inter leading-tight">{h.symbol}</span>
-                        <span className="text-[10px] text-slate-500 font-bold mt-0.5 line-clamp-1">{h.name || '-'}</span>
-                      </div>
-                    </td>
                     <td className="px-8 py-6">
                       <span className={`px-2 py-0.5 rounded text-[9px] font-black ${
                         h.is_simulation ? 'bg-amber-500/10 text-amber-500' : 'bg-rose-500/10 text-rose-500'
                       }`}>
                         {h.is_simulation ? '模擬' : '實盤'}
                       </span>
+                    </td>
+                    <td className="px-8 py-6 text-xs text-slate-500 font-inter">{h.timestamp?.split('T')[0] || '-'}</td>
+                    <td className="px-8 py-6">
+                      <div className="flex flex-col">
+                        <span className="font-bold text-white font-inter leading-tight">{h.symbol}</span>
+                        <span className="text-[10px] text-slate-500 font-bold mt-0.5 line-clamp-1">{h.name || '-'}</span>
+                      </div>
                     </td>
                     <td className="px-8 py-6">
                       {h.status === 'CANCELLED' ? (

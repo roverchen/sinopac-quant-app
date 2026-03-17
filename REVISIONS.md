@@ -4,6 +4,9 @@ This document tracks all version changes and feature updates for the Sinopac Qua
 
 ## Version 2.1 Series
 
+### v2.1.71 (2026-03-17)
+- **UI Column Reordering**: Moved the "Mode" (模式/實盤) column to the first position in both the Positions and History tables for better visibility and faster identification of simulation vs. live trades.
+
 ### v2.1.70 (2026-03-16)
 - **Balance Separation Fix**: Resolved double-counting and incorrect data linkage between Sinopac and MAX balances.
 - **Improved USDT Estimate**: Implemented real-time exchange rate fetching for more accurate TWD/USDT asset valuation.
