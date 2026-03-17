@@ -4,6 +4,11 @@ This document tracks all version changes and feature updates for the Sinopac Qua
 
 ## Version 2.1 Series
 
+### v2.1.73 (2026-03-17)
+- **TradeEngine Architecture Refactor**: Fixed a critical race condition where multiple concurrent log updates (e.g., matching a pending order while polling) could overwrite each other with stale data. Updates are now atomic per user cycle.
+- **Storage Resilience Upgrade**: Enhanced `get_user_trade_logs` with a localized fallback mechanism. If Firestore returns an empty or missing list (due to latency or sync delays), the system will automatically recover data from the local cache.
+- **Data Integrity**: Improved log maintenance to ensure position consistency and prevent accidental record deletion during state transitions.
+
 ### v2.1.72 (2026-03-17)
 - **Auto-Trade Startup Makeup Logic**: Implemented a compensatory mechanism that checks for missed trade windows upon robot startup. If a scheduled market (TW, US, CRYPTO) was missed due to downtime/deployment, the robot will perform a one-time "makeup" trade immediately, ensuring no day is skipped.
 - **Improved Robot Tracking**: Added a daily execution check to prevent duplicate automated trades within the same calendar day.

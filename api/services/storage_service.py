@@ -260,7 +260,7 @@ def get_user_trade_logs(user_id):
         except Exception as e:
             print(f"Firestore load trade_logs error: {e}")
     
-    if logs is not None:
+    if logs:
         # Repair Loop: Ensure every entry has a trade_id
         repaired = False
         for L in logs:
@@ -272,12 +272,17 @@ def get_user_trade_logs(user_id):
             save_user_trade_logs(user_id, logs)
         return logs
 
-    # Local fallback
+    # Local fallback: Only if Firestore returned nothing or empty list
     path = os.path.join(CACHE_DIR, f"trade_logs_{user_id}.json")
     if os.path.exists(path):
         with open(path, "r", encoding="utf-8") as f:
-            try: return json.load(f)
-            except: return []
+            try:
+                local_logs = json.load(f)
+                if local_logs:
+                    print(f"[Storage] Using local fallback for {user_id} (count: {len(local_logs)})")
+                    return local_logs
+            except:
+                pass
     return []
 
 def get_all_users_with_pending() -> List[str]:

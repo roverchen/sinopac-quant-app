@@ -45,12 +45,13 @@ class MatchingEngine:
             self._check_pending_orders(user_id)
 
     def _check_pending_orders(self, user_id):
+        # 1. Fetch logs once at the start
         logs = get_user_trade_logs(user_id)
         pending = [L for L in logs if L.get("entry_type") == "PENDING"]
         if not pending:
             return
 
-        new_pending = []
+        modified = False
         symbols = list(set([o['symbol'] for o in pending]))
         tickers = {s: get_yahoo_ticker(s, next(o['market'] for o in pending if o['symbol'] == s)) for s in symbols}
 
@@ -59,7 +60,6 @@ class MatchingEngine:
         if has_sim:
             for s, t in tickers.items():
                 price = None
-                # Try Yahoo
                 try:
                     data = yf.download(t, period="1d", interval="1m", progress=False)
                     if not data.empty:
@@ -67,7 +67,6 @@ class MatchingEngine:
                 except:
                     pass
                 
-                # Fallback for Crypto: Binance
                 m_type = next((o['market'] for o in pending if o['symbol'] == s), "TW")
                 if price is None and ("-USD" in t or m_type == "CRYPTO"):
                     base = t.split("-")[0]
@@ -88,17 +87,16 @@ class MatchingEngine:
             from api.services.shioaji_service import ShioajiService
             api = ShioajiService.get_api_client(user_id)
             if api and not hasattr(api, 'is_mock'):
-                try:
-                    api.update_status()
-                except:
-                    pass
+                try: api.update_status()
+                except: pass
 
+        # 2. Process matches without intermediate saves
+        results = [] # Store which orders matched
         for order in pending:
             symbol = order['symbol']
             limit_price = order.get('price')
             action = order['action']
             current_price = prices.get(symbol)
-
             is_matched = False
             is_simulation = order.get('is_simulation', True)
 
@@ -124,23 +122,29 @@ class MatchingEngine:
 
             if is_matched:
                 print(f"[TradeEngine] Order MATCHED for {user_id}: {action} {symbol} @ {current_price} (Limit: {limit_price})")
-                self._execute_fill(user_id, order, current_price or limit_price)
-            else:
-                new_pending.append(order)
+                results.append((order, current_price or limit_price))
+                modified = True
 
-        if len(new_pending) != len(pending):
-            # Update logs: remove old pending, add new updated list
-            logs = [L for L in logs if L.get("entry_type") != "PENDING"]
-            logs.extend(new_pending)
+        # 3. Apply all matches to the SAME logs object
+        if modified:
+            for order, fill_price in results:
+                # IMPORTANT: Pass logs and set should_save=False
+                self._execute_fill(user_id, order, fill_price, logs=logs, should_save=False)
+            
+            # Final atomic save
             save_user_trade_logs(user_id, logs)
+            print(f"[TradeEngine] Saved {len(results)} fills for {user_id}")
 
-    def _execute_fill(self, user_id, order, fill_price):
-        logs = get_user_trade_logs(user_id)
+    def _execute_fill(self, user_id, order, fill_price, logs=None, should_save=True):
+        if logs is None:
+            logs = get_user_trade_logs(user_id)
         
-        # 1. Remove this order from PENDING
-        logs = [L for L in logs if L.get("trade_id") != order.get("trade_id")]
+        # 1. Remove this specific order from logs (using reference or ID)
+        target_id = order.get("trade_id")
+        orig_len = len(logs)
+        logs[:] = [L for L in logs if not (L.get("entry_type") == "PENDING" and L.get("trade_id") == target_id)]
         
-        trade_id = order.get('trade_id', f"AUTO-{int(time.time())}")
+        trade_id = target_id or f"AUTO-{int(time.time())}"
         symbol = order['symbol']
         name = order.get('name', symbol)
         qty = order['qty']
@@ -168,10 +172,10 @@ class MatchingEngine:
                     "is_simulation": is_simulation,
                     "entry_type": "POSITION",
                     "status": "OPEN",
-                    "timestamp": datetime.now().isoformat()
+                    "timestamp": datetime.now().isoformat(),
+                    "buy_order_time": order.get("order_time") or order.get("timestamp")
                 }
                 logs.append(existing)
-
 
         elif action == 'Sell':
             realized_pl = 0
@@ -183,7 +187,7 @@ class MatchingEngine:
                     pnl_percent = round(((fill_price - buy_price) / buy_price) * 100, 2)
                     
                 if existing['qty'] <= qty:
-                    logs = [L for L in logs if L is not existing]
+                    logs[:] = [L for L in logs if L is not existing]
                 else:
                     existing['qty'] -= qty
 
@@ -200,10 +204,13 @@ class MatchingEngine:
                 "is_simulation": is_simulation,
                 "realized_pl": realized_pl,
                 "pnl_percent": pnl_percent,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
+                "order_time": order.get("timestamp"),
+                "fill_time": datetime.now().isoformat()
             })
 
-        save_user_trade_logs(user_id, logs)
+        if should_save:
+            save_user_trade_logs(user_id, logs)
 
     def cancel_order(self, user_id, trade_id):
         """Move a pending order to history as CANCELLED"""
