@@ -48,18 +48,54 @@ class AutoRobot:
             schedule.run_pending()
             time.sleep(60)
 
+    def has_traded_today(self, market_type):
+        """Check if system_auto has already placed a trade for this market today"""
+        try:
+            from api.services.storage_service import get_user_trade_logs
+            logs = get_user_trade_logs(self.user_id)
+            today_str = datetime.now().strftime("%Y-%m-%d")
+            
+            for L in logs:
+                # Check for either PENDING or HISTORY entries from today for this market
+                ts = L.get("timestamp", "")
+                if ts.startswith(today_str) and L.get("market") == market_type:
+                    return True
+            return False
+        except Exception as e:
+            print(f"[AutoRobot] Error checking daily status: {e}")
+            return False
+
     def ensure_fresh_scans(self):
-        """Check if cache exists for all markets, trigger if missing"""
+        """Check for missing data OR missed trade windows (Makeup logic)"""
+        now = datetime.now()
+        current_time_str = now.strftime("%H:%M")
+        
+        # Market schedule map
+        schedule_times = {
+            "US": "06:10",
+            "TW": "14:10",
+            "CRYPTO": "23:15"
+        }
+
         for m in ["TW", "US", "CRYPTO"]:
             pool = get_cached_pool(m)
+            # 1. Ensure we have data
             if not pool or not pool.get("results"):
                 print(f"[AutoRobot] No data for {m}, triggering auto-scan...")
                 self._update_status("Scanning", f"Performing initial scan for {m}...")
                 asyncio.run(run_market_scan(m))
-                # PROACTIVE: Try to trade immediately after first successful scan
-                print(f"[AutoRobot] Initial scan for {m} finished. Attempting startup trade...")
-                self.perform_daily_trade(m)
-        self._update_status("Idle", "Initial scans complete. System ready.")
+            
+            # 2. Makeup Logic: If time has passed but no trade recorded today
+            scheduled_time = schedule_times.get(m)
+            if scheduled_time and current_time_str >= scheduled_time:
+                if not self.has_traded_today(m):
+                    print(f"[AutoRobot] Missed window detected for {m} ({scheduled_time}). Triggering makeup trade...")
+                    self._update_status("Trading", f"Makeup trade for {m} (Scheduled: {scheduled_time})")
+                    self.perform_daily_trade(m)
+                else:
+                    print(f"[AutoRobot] {m} already traded today. Skipping makeup.")
+
+        self._update_status("Idle", "Startup checks and makeup trades complete.")
 
     def perform_daily_trade(self, market_type):
         print(f"[AutoRobot] Running daily trade for {market_type}...")
