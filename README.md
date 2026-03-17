@@ -1,6 +1,29 @@
 # Sinopac Quant Pro (金融商品市場報明牌系統)
 
-[![Version](https://img.shields.io/badge/version-2.1.68-blue.svg)](REVISIONS.md)
+[![Version](https://img.shields.io/badge/version-2.1.72-blue.svg)](REVISIONS.md)
+---
+
+## 📈 交易機制說明 (Trading Lifecycle)
+
+系統區分為 **「虛擬模擬 (Simulation)」** 與 **「實盤交易 (Live)」** 兩種模式，其生命週期如下：
+
+### 1. 委託下單 (Order Placement)
+*   **模擬模式**：僅在系統資料庫建立 `PENDING` 紀錄，顯示「委託買入中」。
+*   **實盤模式**：同步發送 API 請求至永豐金 (Shioaji) 或 MAX 交易所，取得真實委託代碼。
+
+### 2. 成交轉換 (Confirmation & Matching)
+由後端 **Matching Engine** 每 30 秒自動偵測：
+*   **模擬撮合**：對比第三方即時市價 (Yahoo/Binance)。若 `現價 <= 買入價` (或 `現價 >= 賣出價`)，判定成交並轉為 **Position (持倉)**。
+*   **實盤撮合**：透過券商 API 輪詢委託狀態。當回報為 `Filled (已成交)` 時，更新為正式持倉。
+
+### 3. 結案與損益計算 (History & PnL)
+*   **結案歸檔**：賣單成交後，系統自動將標的移除持倉清單，並轉入 **History (歷史)** 清單。
+*   **績效計算**：
+    *   **實現損益**：`(賣出成交價 - 買入成本) * 數量`。
+    *   **獲利率 %**：`((賣出成交價 - 買入成本) / 買入成本) * 100%`。
+    *   實盤交易會額外透過定期對帳服務 (Reconciliation) 修正真實的手續費與稅金支出。
+
+---
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
 
 Sinopac Quant Pro 是一個強大的多市場資產篩選與自動化交易系統，支援 **台股 (TW)**、**美股 (US)** 以及 **加密貨幣 (Crypto)**。本系統結合了動態權重配置策略、技術面計分引擎與基本面濾網，為量化交易者提供從選股、分析到下單的一站式解決方案。
