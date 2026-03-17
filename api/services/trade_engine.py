@@ -135,13 +135,28 @@ class MatchingEngine:
             save_user_trade_logs(user_id, logs)
             print(f"[TradeEngine] Saved {len(results)} fills for {user_id}")
 
+    def _calculate_costs(self, market, action, total_value):
+        """Calculate simulated fees and taxes based on market and action"""
+        fee = 0
+        tax = 0
+        
+        if market == "TW":
+            # TW: 0.1425% fee (Buy/Sell), 0.3% tax (Sell only)
+            fee = total_value * 0.001425
+            if action == "Sell":
+                tax = total_value * 0.003
+        else:
+            # US/Crypto: 0.1% flat fee
+            fee = total_value * 0.001
+            
+        return round(fee, 2), round(tax, 2)
+
     def _execute_fill(self, user_id, order, fill_price, logs=None, should_save=True):
         if logs is None:
             logs = get_user_trade_logs(user_id)
         
         # 1. Remove this specific order from logs (using reference or ID)
         target_id = order.get("trade_id")
-        orig_len = len(logs)
         logs[:] = [L for L in logs if not (L.get("entry_type") == "PENDING" and L.get("trade_id") == target_id)]
         
         trade_id = target_id or f"AUTO-{int(time.time())}"
@@ -151,6 +166,12 @@ class MatchingEngine:
         action = order['action']
         market = order['market']
         is_simulation = order.get('is_simulation', True)
+        total_value = fill_price * qty
+
+        # Calculate costs for simulation
+        fee, tax = 0, 0
+        if is_simulation:
+            fee, tax = self._calculate_costs(market, action, total_value)
 
         # 2. Update POSITION
         positions = [L for L in logs if L.get("entry_type") == "POSITION"]
@@ -159,21 +180,26 @@ class MatchingEngine:
         if action == 'Buy':
             if existing:
                 total_qty = existing['qty'] + qty
-                avg_price = (existing['buy_price'] * existing['qty'] + fill_price * qty) / total_qty
+                # Include buy fee in cost basis
+                total_cost = (existing['buy_price'] * existing['qty']) + total_value + fee
+                avg_price = total_cost / total_qty
                 existing['qty'] = total_qty
                 existing['buy_price'] = avg_price
             else:
+                # Include buy fee in initial cost basis
+                avg_price = (total_value + fee) / qty
                 existing = {
                     "symbol": symbol,
                     "name": name,
                     "qty": qty,
-                    "buy_price": fill_price,
+                    "buy_price": avg_price,
                     "market": market,
                     "is_simulation": is_simulation,
                     "entry_type": "POSITION",
                     "status": "OPEN",
                     "timestamp": datetime.now().isoformat(),
-                    "buy_order_time": order.get("order_time") or order.get("timestamp")
+                    "buy_order_time": order.get("order_time") or order.get("timestamp"),
+                    "fee": fee
                 }
                 logs.append(existing)
 
@@ -181,10 +207,11 @@ class MatchingEngine:
             realized_pl = 0
             pnl_percent = 0
             if existing:
-                buy_price = existing.get('buy_price', 0)
-                realized_pl = (fill_price - buy_price) * min(qty, existing['qty'])
-                if buy_price > 0:
-                    pnl_percent = round(((fill_price - buy_price) / buy_price) * 100, 2)
+                buy_cost = existing.get('buy_price', 0) * qty
+                # Realized PL = (Sell Value - Fees - Tax) - Buy Cost
+                realized_pl = (total_value - fee - tax) - buy_cost
+                if buy_cost > 0:
+                    pnl_percent = round((realized_pl / buy_cost) * 100, 2)
                     
                 if existing['qty'] <= qty:
                     logs[:] = [L for L in logs if L is not existing]
@@ -202,8 +229,10 @@ class MatchingEngine:
                 "status": "FILLED",
                 "entry_type": "HISTORY",
                 "is_simulation": is_simulation,
-                "realized_pl": realized_pl,
+                "realized_pl": round(realized_pl, 2),
                 "pnl_percent": pnl_percent,
+                "fee": fee,
+                "tax": tax,
                 "timestamp": datetime.now().isoformat(),
                 "order_time": order.get("timestamp"),
                 "fill_time": datetime.now().isoformat()

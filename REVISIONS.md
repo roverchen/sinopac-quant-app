@@ -4,7 +4,17 @@ This document tracks all version changes and feature updates for the Sinopac Qua
 
 ## Version 2.1 Series
 
-### v2.1.73 (2026-03-17)
+### v2.1.75 (2026-03-17)
+- **Implemented Simulation Trading Costs**: 
+    - TW Market: 0.1425% commission (Buy/Sell) + 0.3% tax (Sell only).
+    - US/Crypto Market: 0.1% flat commission.
+- **UI Refactor - Trading Control**: 
+    - Replaced the bulky header block with a sleek, top-level **Tab Switcher** to distinguish between "Personal" and "System" accounts.
+    - Integrated ROI summaries and Sync actions into a streamlined banner design.
+- **Enhanced P/L Calculation**: Simulation profit and loss is now calculated as "Net Profit" after all transaction costs.
+- **Improved Transparency**: Added `fee` and `tax` fields to trade history logs for clearer performance analysis.
+
+## v2.1.73 (2026-03-17)
 - **TradeEngine Architecture Refactor**: Fixed a critical race condition where multiple concurrent log updates (e.g., matching a pending order while polling) could overwrite each other with stale data. Updates are now atomic per user cycle.
 - **Storage Resilience Upgrade**: Enhanced `get_user_trade_logs` with a localized fallback mechanism. If Firestore returns an empty or missing list (due to latency or sync delays), the system will automatically recover data from the local cache.
 - **Data Integrity**: Improved log maintenance to ensure position consistency and prevent accidental record deletion during state transitions.

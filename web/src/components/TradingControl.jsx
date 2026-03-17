@@ -167,39 +167,17 @@ const TradingControl = () => {
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">
-      {/* Performance Summary Header */}
-      <div className="p-8 bg-slate-900/40 border border-slate-800 rounded-[2.5rem] flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="flex items-center gap-6">
-          <div className="w-16 h-16 rounded-2xl bg-indigo-600/10 flex items-center justify-center text-indigo-400">
-            <TrendingUp className="w-8 h-8" />
+      {/* Top Header & Actions */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 px-4">
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-indigo-500/10 rounded-2xl border border-indigo-500/20">
+            <TrendingUp className="w-6 h-6 text-indigo-400" />
           </div>
-          <div className="flex flex-col">
-            <h2 className="text-2xl font-bold text-white tracking-tight">
-              交易環境控管
-              <span className="ml-3 text-[10px] font-black text-slate-500 uppercase tracking-widest bg-slate-800/50 px-2 py-1 rounded-lg">v{status.backend_version || '?.?.?'}</span>
-            </h2>
-            <div className="flex gap-2 mt-2">
-              <button 
-                onClick={() => setViewAccount('personal')}
-                className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all border ${
-                  viewAccount === 'personal' 
-                    ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-600/20' 
-                    : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:text-white'
-                }`}
-              >
-                個人
-              </button>
-              <button 
-                onClick={() => setViewAccount('system_auto')}
-                className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all border ${
-                  viewAccount === 'system_auto' 
-                    ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-600/20' 
-                    : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:text-white'
-                }`}
-              >
-                系統
-              </button>
-            </div>
+          <div>
+            <h2 className="text-2xl font-black text-white tracking-tight">交易環境控管</h2>
+            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mt-1">
+              Backend Version: <span className="text-slate-400">v{status.backend_version || '2.1.75'}</span>
+            </p>
           </div>
         </div>
 
@@ -207,31 +185,76 @@ const TradingControl = () => {
           <button 
             onClick={handleSyncBroker}
             disabled={loading}
-            className="flex items-center gap-2 px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-2xl text-sm font-bold transition-all border border-slate-700 shadow-lg disabled:opacity-50"
+            className="flex items-center gap-2 px-6 py-3 bg-slate-800/80 hover:bg-slate-700 text-white rounded-2xl text-xs font-bold transition-all border border-slate-700 shadow-xl disabled:opacity-50"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             同步券商資料
           </button>
         </div>
-        
-        {summary && (
-          <div className="flex gap-8">
-            <div className="text-right">
-              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
-                {viewAccount === 'personal' ? '個人' : '系統'}累計損益
-              </p>
-              {viewAccount === 'personal' && (
-                <p className={`text-2xl font-black font-inter ${ (summary?.mock?.total ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  ${(summary?.mock?.total ?? 0).toLocaleString()}
-                </p>
-              )}
-              <p className={`text-[10px] ${viewAccount === 'system_auto' ? 'text-2xl mt-0' : 'text-slate-500 mt-1'} font-bold ${viewAccount === 'system_auto' && (summary?.mock?.return_rate ?? 0) >= 0 ? 'text-emerald-400' : viewAccount === 'system_auto' ? 'text-rose-400' : ''}`}>
-                回報率: {summary?.mock?.return_rate ?? 0}%
-              </p>
+      </div>
+
+      {/* Account Type Tabs */}
+      <div className="bg-slate-900/40 p-1.5 border border-slate-800 rounded-3xl flex w-fit mx-auto md:mx-4">
+        <button 
+          onClick={() => setViewAccount('personal')}
+          className={`flex items-center gap-2 px-8 py-3 rounded-2xl text-sm font-black transition-all ${
+            viewAccount === 'personal' 
+              ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-600/30' 
+              : 'text-slate-500 hover:text-slate-300'
+          }`}
+        >
+          <Wallet className="w-4 h-4" />
+          個人實盤/模擬
+        </button>
+        <button 
+          onClick={() => setViewAccount('system_auto')}
+          className={`flex items-center gap-2 px-8 py-3 rounded-2xl text-sm font-black transition-all ${
+            viewAccount === 'system_auto' 
+              ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-600/30' 
+              : 'text-slate-500 hover:text-slate-300'
+          }`}
+        >
+          <RefreshCw className="w-4 h-4" />
+          系統自動跟單
+        </button>
+      </div>
+
+      {/* ROI & Status Banner */}
+      {summary && (
+        <div className="mx-4 p-8 bg-gradient-to-br from-slate-900/60 to-slate-900/20 border border-slate-800 rounded-[2.5rem] flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-8 opacity-[0.03] group-hover:scale-110 transition-transform">
+             <TrendingUp className="w-32 h-32 text-white" />
+          </div>
+          
+          <div className="relative z-10">
+            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-2">
+              <span className={`w-2 h-2 rounded-full ${viewAccount === 'personal' ? 'bg-indigo-500' : 'bg-emerald-500'} animate-pulse`} />
+              {viewAccount === 'personal' ? '個人帳戶' : '系統自動'} 績效快報
+            </p>
+            <div className="flex items-baseline gap-4">
+              <h3 className={`text-4xl font-black font-inter tracking-tight ${ (summary?.mock?.total ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                ${(summary?.mock?.total ?? 0).toLocaleString()}
+                <span className="text-sm font-medium text-slate-500 ml-2">TWD</span>
+              </h3>
+              <div className={`px-4 py-1.5 rounded-xl text-sm font-black border ${
+                (summary?.mock?.return_rate ?? 0) >= 0 
+                  ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' 
+                  : 'bg-rose-500/10 border-rose-500/20 text-rose-400'
+              }`}>
+                {summary?.mock?.return_rate ?? 0}% ROI
+              </div>
             </div>
           </div>
-        )}
-      </div>
+
+          <div className="flex items-center gap-8 relative z-10">
+            <div className="h-12 w-px bg-slate-800 hidden md:block" />
+            <div className="text-right">
+              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">今日交易活躍度</p>
+              <p className="text-lg font-bold text-white font-inter">穩定運作中</p>
+            </div>
+          </div>
+        </div>
+      )}
 
 
       {/* Operation Tabs */}
