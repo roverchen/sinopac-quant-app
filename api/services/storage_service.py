@@ -97,14 +97,25 @@ def save_user_settings(user_id, settings):
 
 def get_user_settings(user_id):
     db = get_db()
+    default_settings = {
+        "email_notifications_enabled": True,
+        "mirror_trading_confirmed": False,
+        "value_score_weight": 0.1,
+        "pullback_score_weight": 0.1,
+        "max_order_limit": 50000.0,
+        "tp_pct": 20.0,
+        "sl_pct": -5.0
+    }
     if db:
         try:
             doc = db.collection("users").document(user_id).get()
             if doc.exists:
-                return doc.to_dict().get("settings", {"email_notifications_enabled": True})
+                data = doc.to_dict().get("settings", {})
+                # Merge with defaults
+                return {**default_settings, **data}
         except Exception as e:
             print(f"Firestore load settings error: {e}")
-    return {"email_notifications_enabled": True}
+    return default_settings
 
 def get_all_users_for_notifications():
     """Returns list of (email, user_id) for users with notifications enabled."""
@@ -124,6 +135,22 @@ def get_all_users_for_notifications():
                         targets.append((user_id, user_id))
         except Exception as e:
             print(f"Error fetching notification targets: {e}")
+    return targets
+
+def get_all_users_with_auto_trade():
+    """Returns list of user IDs for users with auto_trade_enabled."""
+    db = get_db()
+    targets = []
+    if db:
+        try:
+            docs = db.collection("users").stream()
+            for doc in docs:
+                data = doc.to_dict()
+                creds = data.get("credentials", {})
+                if creds.get("auto_trade_enabled", False):
+                    targets.append(doc.id)
+        except Exception as e:
+            print(f"Error fetching auto-trade users: {e}")
     return targets
 
 def save_user_watchlist(user_id, watchlist):

@@ -405,7 +405,8 @@ def analyze_stock(df, code, name, defense_weight=0.5, market_type='TW', skip_ind
         "ma20_diff": f"{sanitize(dist_to_ma20)*100:.1f}%", "macd_status": macd_status,
         "score": round(final_score, 1), "market": market_type, "ma_base": defense_base,
         "ma20": ma20_last, "atr": atr, "entry_price": round(sanitize(entry_price), 2),
-        "stop_loss": round(sanitize(stop_loss), 2), "target_price": round(sanitize(target_price), 2)
+        "stop_loss": round(sanitize(stop_loss), 2), "target_price": round(sanitize(target_price), 2),
+        "value_score": round(sanitize(value_score), 1), "pullback_score": round(sanitize(pullback_score), 1)
     }
 
 async def run_market_scan(market_type: str, defense_weight: float = 0.5):

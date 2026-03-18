@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { authService, tradeService } from '../services/api';
-import { Save, Shield, Key, Landmark, Database, CheckCircle2, Settings as SettingsIcon, Clock, Mail } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { Save, Shield, Key, Landmark, Database, CheckCircle2, Settings as SettingsIcon, Clock, Mail, ShieldAlert, TrendingUp, TrendingDown, Target, Activity, X, Percent, AlertTriangle } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const Skeleton = ({ className }) => (
   <div className={`animate-pulse bg-slate-800/50 rounded-2xl ${className}`} />
@@ -15,8 +15,15 @@ const Settings = () => {
     max_api_secret: '',
   });
   const [settings, setSettings] = useState({
-    email_notifications_enabled: true
+    email_notifications_enabled: true,
+    mirror_trading_confirmed: false,
+    value_score_weight: 0.1,
+    pullback_score_weight: 0.1,
+    max_order_limit: 50000,
+    tp_pct: 20.0,
+    sl_pct: -5.0
   });
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [balance, setBalance] = useState(null);
   const [loading, setLoading] = useState(false);
   const [balanceLoading, setBalanceLoading] = useState(true);
@@ -259,6 +266,141 @@ const Settings = () => {
           </div>
         </section>
       </div>
+      {/* Mirror Trading Settings */}
+      <section className="p-8 bg-slate-900/40 border border-slate-800 rounded-[2rem] space-y-8">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Activity className="w-5 h-5 text-indigo-400" />
+            <h3 className="text-lg font-semibold text-white">自動跟單設定 (Mirror Trading)</h3>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${settings.mirror_trading_confirmed ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-slate-800 text-slate-500'}`}>
+              {settings.mirror_trading_confirmed ? '已授權交易' : '未授權'}
+            </span>
+            <button 
+              onClick={() => {
+                if (!settings.mirror_trading_confirmed) {
+                  setShowConfirmModal(true);
+                } else {
+                  setSettings({ ...settings, mirror_trading_confirmed: false });
+                }
+              }}
+              className={`w-14 h-8 rounded-full transition-all relative ${settings.mirror_trading_confirmed ? 'bg-indigo-600' : 'bg-slate-700'}`}
+            >
+              <div className={`absolute top-1 w-6 h-6 bg-white rounded-full transition-all ${settings.mirror_trading_confirmed ? 'left-7' : 'left-1'}`} />
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          {/* Weights */}
+          <div className="space-y-6">
+            <div className="space-y-4">
+              <label className="text-xs font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                <Target className="w-4 h-4 text-indigo-400" />
+                策略分配權重 (Weight Allocation)
+              </label>
+              
+              <div className="grid grid-cols-1 gap-4">
+                <div className="p-4 bg-slate-800/30 rounded-2xl border border-slate-700/50 space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-bold text-slate-300">價值防禦 (Value Score)</span>
+                    <span className="text-indigo-400 font-bold font-inter">{Math.round(settings.value_score_weight * 100)}%</span>
+                  </div>
+                  <input 
+                    type="range" min="0" max="1" step="0.05"
+                    value={settings.value_score_weight}
+                    onChange={(e) => setSettings({...settings, value_score_weight: parseFloat(e.target.value)})}
+                    className="w-full accent-indigo-500"
+                  />
+                  <p className="text-[10px] text-slate-500">當系統判定為「價值型」買入訊號時，投入資金比例。</p>
+                </div>
+
+                <div className="p-4 bg-slate-800/30 rounded-2xl border border-slate-700/50 space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-bold text-slate-300">強勢拉回 (Pullback Score)</span>
+                    <span className="text-purple-400 font-bold font-inter">{Math.round(settings.pullback_score_weight * 100)}%</span>
+                  </div>
+                  <input 
+                    type="range" min="0" max="1" step="0.05"
+                    value={settings.pullback_score_weight}
+                    onChange={(e) => setSettings({...settings, pullback_score_weight: parseFloat(e.target.value)})}
+                    className="w-full accent-purple-500"
+                  />
+                  <p className="text-[10px] text-slate-500">當系統判定為「動能拉回」買入訊號時，投入資金比例。</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">單筆交易上限 (Max Order Limit)</label>
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold">$</span>
+                <input 
+                  type="number"
+                  className="w-full pl-10 pr-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all font-inter font-bold"
+                  value={settings.max_order_limit}
+                  onChange={(e) => setSettings({...settings, max_order_limit: parseInt(e.target.value) || 0})}
+                />
+              </div>
+              <p className="text-[10px] text-slate-500 ml-1">無論權重計算結果如何，單筆委託金額絕不會超過此數值。</p>
+            </div>
+          </div>
+
+          {/* Risk Controls */}
+          <div className="space-y-6">
+             <label className="text-xs font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                < ShieldAlert className="w-4 h-4 text-rose-400" />
+                出場與風險控制 (Exit Strategy)
+              </label>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-4 bg-slate-800/30 rounded-2xl border border-slate-700/50 space-y-3">
+                  <div className="flex items-center gap-2 text-emerald-400">
+                    <TrendingUp className="w-4 h-4" />
+                    <span className="text-xs font-bold uppercase">停利目標 (TP)</span>
+                  </div>
+                  <div className="relative">
+                    <input 
+                      type="number"
+                      className="w-full pr-10 py-3 bg-slate-800/50 border border-slate-700 rounded-xl focus:outline-none font-inter font-bold text-white"
+                      value={settings.tp_pct}
+                      onChange={(e) => setSettings({...settings, tp_pct: parseFloat(e.target.value) || 0})}
+                    />
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold">%</span>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-slate-800/30 rounded-2xl border border-slate-700/50 space-y-3">
+                  <div className="flex items-center gap-2 text-rose-400">
+                    <TrendingDown className="w-4 h-4" />
+                    <span className="text-xs font-bold uppercase">停損限制 (SL)</span>
+                  </div>
+                  <div className="relative">
+                    <input 
+                      type="number"
+                      className="w-full pr-10 py-3 bg-slate-800/50 border border-slate-700 rounded-xl focus:outline-none font-inter font-bold text-white"
+                      value={settings.sl_pct}
+                      onChange={(e) => setSettings({...settings, sl_pct: parseFloat(e.target.value) || 0})}
+                    />
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold">%</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-6 bg-rose-500/5 border border-rose-500/10 rounded-2xl">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-rose-500 mt-0.5" />
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    <span className="text-rose-400 font-bold">重要提醒：</span> 
+                    自動跟單為全自動執行。系統將根據上述參數自動在您的券商帳戶下單。
+                    請務必確認權重與停損設定符合您的風險承受能力。
+                  </p>
+                </div>
+              </div>
+          </div>
+        </div>
+      </section>
 
       {/* Notification Settings */}
       <section className="p-8 bg-slate-900/40 border border-slate-800 rounded-[2rem] space-y-6">
@@ -293,6 +435,7 @@ const Settings = () => {
       </div>
 
       <div className="flex justify-end pt-4">
+        {/* ... (Keep existing Save button) */}
         <button
           onClick={handleSave}
           disabled={loading}
@@ -312,6 +455,69 @@ const Settings = () => {
           {saved ? '已成功儲存' : '儲存所有設定'}
         </button>
       </div>
+
+      {/* Mandatory Confirmation Modal */}
+      <AnimatePresence>
+        {showConfirmModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowConfirmModal(false)}
+              className="absolute inset-0 bg-slate-950/90 backdrop-blur-md"
+            />
+            
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="relative w-full max-w-xl bg-slate-900 border-2 border-rose-500/30 rounded-[3rem] shadow-2xl overflow-hidden"
+            >
+              <div className="p-10 text-center space-y-6">
+                <div className="w-20 h-20 bg-rose-500/10 rounded-full flex items-center justify-center mx-auto mb-2">
+                  <ShieldAlert className="w-10 h-10 text-rose-500" />
+                </div>
+                
+                <div className="space-y-2">
+                  <h3 className="text-3xl font-black text-white italic">危險行為警告</h3>
+                  <p className="text-rose-400 font-bold uppercase tracking-widest text-sm">高風險實盤自動交易授權</p>
+                </div>
+
+                <div className="bg-slate-800/50 p-6 rounded-3xl border border-slate-700 text-left space-y-4">
+                  <p className="text-sm text-slate-300 leading-relaxed font-medium">
+                    您正在授權系統在您的 <span className="text-white font-bold">實盤券商帳戶</span> 中自動執行交易。
+                  </p>
+                  <ul className="text-xs text-slate-400 space-y-2 list-disc pl-4">
+                    <li>系統將根據選股結果自動送出買入與賣出委託。</li>
+                    <li>任何自動交易皆存在本金損失風險，包含但不限於滑價或系統延遲。</li>
+                    <li>Quant Pro 團隊不對任何交易損失負責，您需自行承擔交易結果。</li>
+                  </ul>
+                </div>
+
+                <div className="flex flex-col gap-4">
+                  <button 
+                    onClick={() => {
+                      setSettings({ ...settings, mirror_trading_confirmed: true });
+                      setShowConfirmModal(false);
+                    }}
+                    className="w-full py-5 bg-rose-600 hover:bg-rose-500 text-white font-black rounded-2xl shadow-xl shadow-rose-600/30 transition-all flex items-center justify-center gap-3"
+                  >
+                    <CheckCircle2 className="w-6 h-6" />
+                    我已了解風險，授權啟動自動跟單
+                  </button>
+                  <button 
+                    onClick={() => setShowConfirmModal(false)}
+                    className="w-full py-4 text-slate-500 font-bold hover:text-white transition-colors"
+                  >
+                    取消授權
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

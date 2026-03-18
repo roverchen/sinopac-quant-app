@@ -155,11 +155,10 @@ class AutoRobot:
             entry_price = getattr(top_1, 'entry_price', top_1.get('entry_price', 0) if isinstance(top_1, dict) else 0)
             score = getattr(top_1, 'score', top_1.get('score', 0) if isinstance(top_1, dict) else 0)
             
-            # Fallback for price if entry_price is missing
-            if not entry_price:
-                entry_price = getattr(top_1, 'price', top_1.get('price', 0) if isinstance(top_1, dict) else 0)
+            pullback_score = getattr(top_1, 'pullback_score', top_1.get('pullback_score', 0) if isinstance(top_1, dict) else 0)
+            value_score = getattr(top_1, 'value_score', top_1.get('value_score', 0) if isinstance(top_1, dict) else 0)
 
-            log_msg = f"Top candidate: {symbol} ({name}) with score {score}."
+            log_msg = f"Top candidate: {symbol} ({name}) with score {score} (V:{value_score}/P:{pullback_score})."
             print(f"[AutoRobot] {log_msg}")
             self._update_status("Trading", log_msg)
 
@@ -180,9 +179,12 @@ class AutoRobot:
             else:
                 self._update_status("Idle", f"Successfully placed order for {symbol} @ {entry_price}")
                 print(f"[AutoRobot] Simulation Trade CREATED for {symbol} at {entry_price}. Checking logs...")
-                # Notify users
+                # Notify users (Email)
                 self._notify_users(symbol, "Buy", entry_price, market_type, score)
                 
+                # MIRROR TRADING: Follow-up for other users
+                self._execute_mirror_buys(symbol, entry_price, market_type, name, value_score, pullback_score)
+
                 # Verify persistence immediately in logs
                 from api.services.storage_service import get_user_trade_logs
                 all_logs = get_user_trade_logs(self.user_id)
@@ -193,30 +195,118 @@ class AutoRobot:
         except Exception as e:
             print(f"[AutoRobot] Trade Error for {market_type}: {e}")
 
+    def _execute_mirror_buys(self, symbol, entry_price, market_type, name, value_score=0, pullback_score=0):
+        """Execute mirror trades for all authorized followers based on their weights and balances."""
+        from api.services.storage_service import get_all_users_with_auto_trade, get_user_settings, get_user_credentials
+        follower_ids = get_all_users_with_auto_trade()
+        
+        for uid in follower_ids:
+            if uid == self.user_id: continue # Already traded
+            
+            settings = get_user_settings(uid)
+            # SAFETY CHECK: Must be confirmed
+            if not settings.get("mirror_trading_confirmed", False):
+                print(f"[AutoRobot] Mirror trading NOT confirmed for {uid}. Skipping.")
+                continue
+            
+            creds = get_user_credentials(uid)
+            is_simulation = creds.get("simulation_mode", True)
+            
+            # BALANCE CHECK & QTY CALCULATION
+            try:
+                # Use Shioaji balance for now (extensible to MAX)
+                balance = ShioajiService.get_balance(uid)
+                if not isinstance(balance, (int, float)) or balance <= 0:
+                    print(f"[AutoRobot] Invalid balance for {uid}: {balance}. Skipping.")
+                    continue
+                
+                # [v2.1.85] Granular Weights: Decide which weight to use
+                # We use a 0.5 defense weight logic consistent with quant_service to pick the dominant strategy
+                if pullback_score * 0.5 >= value_score * 0.5:
+                    weight = settings.get("pullback_score_weight", 0.1)
+                else:
+                    weight = settings.get("value_score_weight", 0.1)
+
+                order_value = balance * weight
+                
+                # [v2.1.85] Absolute Trade Limit
+                max_limit = settings.get("max_order_limit", 50000.0)
+                if order_value > max_limit:
+                    print(f"[AutoRobot] Order value {order_value} exceeds limit {max_limit} for {uid}. Capping.")
+                    order_value = max_limit
+
+                if order_value < 100: # Threshold for too small order
+                    print(f"[AutoRobot] Balance too low for {uid} to mirror trade {symbol}")
+                    continue
+                
+                # Calc Qty (TW: round to nearest 1000/1, US: floor, Crypto: floor)
+                if market_type == "TW":
+                    # Simple estimation: price * 1.005 to cover fees
+                    qty = int(order_value / (entry_price * 1.005)) 
+                    qty = (qty // 1000) * 1000 if qty >= 1000 else qty
+                elif market_type == "US":
+                    qty = int(order_value / entry_price)
+                else:
+                    qty = round(order_value / entry_price, 4)
+
+                if qty <= 0: continue
+
+                print(f"[AutoRobot] Mirror trading for {uid}: {symbol} x {qty} (@{entry_price})")
+                ShioajiService.place_order(
+                    uid, symbol, qty, entry_price, action="Buy",
+                    is_simulation=is_simulation, name=name
+                )
+            except Exception as e:
+                print(f"[AutoRobot] Failed to mirror trade for {uid}: {e}")
+
     def check_exits(self):
-        # TP +20% or SL -5%
-        print(f"[AutoRobot] Checking exits for {self.user_id}...")
-        self._update_status("ExitCheck", "Monitoring active positions for TP/SL...")
+        """Check exits for system_auto AND all authorized followers using their custom TP/SL."""
+        from api.services.storage_service import get_all_users_with_auto_trade, get_user_settings
+        
+        print(f"[AutoRobot] Running multi-user exit checks...")
+        
+        # 1. System Auto Exits (Fixed 20% / -5%)
+        self._check_user_exits(self.user_id, 20.0, -5.0)
+        
+        # 2. Follower Exits (Customized)
+        followers = get_all_users_with_auto_trade()
+        for uid in followers:
+            if uid == self.user_id: continue
+            settings = get_user_settings(uid)
+            if not settings.get("mirror_trading_confirmed", False): continue
+            
+            tp = settings.get("tp_pct", 20.0)
+            sl = settings.get("sl_pct", -5.0)
+            self._check_user_exits(uid, tp, sl)
+
+    def _check_user_exits(self, user_id, tp_pct, sl_pct):
+        """Monitor active positions for a specific user and trigger TP/SL."""
         try:
-            positions = ShioajiService.get_positions(self.user_id)
+            from api.services.storage_service import get_user_credentials
+            from api.services.email_service import notify_trade
+            
+            creds = get_user_credentials(user_id)
+            is_simulation = creds.get("simulation_mode", True)
+            
+            positions = ShioajiService.get_positions(user_id)
             for pos in positions:
                 pnl_pct = pos.get('pnl_percent', 0)
-                if pnl_pct >= 20.0 or pnl_pct <= -5.0:
-                    status = "Take Profit" if pnl_pct >= 20.0 else "Stop Loss"
-                    print(f"[AutoRobot] Trigger {status} for {pos['symbol']} at {pnl_pct}%")
+                if pnl_pct >= tp_pct or pnl_pct <= sl_pct:
+                    status = "Take Profit" if pnl_pct >= tp_pct else "Stop Loss"
+                    print(f"[AutoRobot] Trigger {status} for {user_id}: {pos['symbol']} @ {pnl_pct}%")
 
                     ShioajiService.place_order(
-                        self.user_id,
+                        user_id,
                         pos['symbol'],
                         pos['qty'],
                         pos['current_price'],
                         action="Sell",
-                        is_simulation=True
+                        is_simulation=is_simulation
                     )
-                    # Notify users
-                    self._notify_users(pos['symbol'], "Sell", pos['current_price'], pos.get('market', 'UNKNOWN'))
+                    # Notify user (Email)
+                    notify_trade(user_id, pos['symbol'], "Sell", pos['current_price'], pos.get('market', 'UNKNOWN'))
         except Exception as e:
-            print(f"[AutoRobot] Exit Check Error: {e}")
+            print(f"[AutoRobot] Exit Check Error for {user_id}: {e}")
 
 # Singleton
 robot = AutoRobot()
