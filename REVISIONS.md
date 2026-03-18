@@ -2,6 +2,18 @@
 
 ## Version 2.1 Series
 
+### v2.1.86 (2026-03-18)
+- **Advanced Mirror Trading UI & Logic**:
+    - **Strategy Allocation Slider**: Replaced individual strategy weights with a unified single ratio slider (Value vs. Pullback) for more intuitive budget splitting.
+    - **Total Allocation Budget**: Introduced a single "Total Allocation" percentage input, which defines the maximum overall account balance to risk per trade.
+    - **Auto-Trade Timezone Fix**: Enforced `Asia/Taipei` timezone globally in the backend (`api/main.py`) to guarantee that scheduled tasks (US 06:10, TW 14:10, Crypto 23:15) always trigger at the correct Taiwan local time, regardless of the underlying server's UTC configuration.
+
+### v2.1.85 (2026-03-18)
+- **Granular Trade Constraints**:
+    - **Score-Based Weights**: Implemented independent handling for Value and Pullback strategy allocations within the core trading engine.
+    - **Max Order Limit**: Added an absolute TWD cap setting per order, ensuring that even under high percentage allocations, the executed trade value is strictly capped.
+    - **Safety Confirmation**: Added a mandatory high-contrast confirmation modal requiring users to explicitely click to enable live mirror trading, preventing accidental test-mode toggles.
+
 ### v2.1.82 (2026-03-18)
 - **Notification System**:
     - **Email Notifications**: Integrated SMTP service to send automated trade notifications after daily auto-trade execution or TP/SL triggers.
