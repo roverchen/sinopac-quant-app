@@ -39,18 +39,6 @@ Sinopac Quant Pro 是一個強大的多市場資產篩選與自動化交易系�
 
 ---
 
-## 🛠️ 技術架構 (Tech Stack)
-
-- **Frontend**: React 18, Vite, Tailwind CSS, Framer Motion (動態視覺效果), Lucide React (圖標).
-- **Backend**: FastAPI (Python 3.11), Uvicorn.
-- **Data & APIs**: 
-  - [Shioaji](https://github.com/Sinopac/shioaji) (永豐證券 API)
-  - [Max-Exchange](https://max.maicoin.com/) (Maicoin MAX API)
-  - [FinMind](https://finmind.github.io/) (台股基本面數據)
-  - [Yahoo Finance](https://pypi.org/project/yfinance/) (歷史 K 線與即時價)
-
----
-
 ## 📊 數據策略 (Data Strategy)
 
 系統採取 **「混合雲端數據策略 (Hybrid Data Strategy)」**，以平衡開發成本與交易精準度：
@@ -64,6 +52,40 @@ Sinopac Quant Pro 是一個強大的多市場資產篩選與自動化交易系�
 *   **幣安 (Binance) 角色**：作為全球最大的流動性池，系統透過 Yahoo Finance 的 `[SYMBOL]-USD` 接口間接引用幣安定價，確保分析採用的是最具代表性的全球市價。
 *   **MAX 交易所角色**：擔任 **「在地實盤出口」**。系統整合 MAX API 管理 TWD 與加密貨幣的資金，並實作 **USD/TWD 匯率換算機制** (自動抓取最新美元匯率)，讓全球定價與在地 TWD 資產能無縫接軌。
 *   **數據補全**：對於 MAX 上特有的 TWD 交易對，系統會自動在 Yahoo (USD 全球價) 與 MAX (實體交易介面) 間自動進行標的對齊與換算。
+
+---
+
+## 📈 交易機制說明 (Trading Lifecycle)
+
+系統區分為 **「虛擬模擬 (Simulation)」** 與 **「實盤交易 (Live)」** 兩種模式，其生命週期如下：
+
+### 1. 委託下單 (Order Placement)
+*   **模擬模式**：僅在系統資料庫建立 `PENDING` 紀錄，顯示「委託買入中」。
+*   **實盤模式**：同步發送 API 請求至永豐金 (Shioaji) 或 MAX 交易所，取得真實委託代碼。
+
+### 2. 成交轉換 (Confirmation & Matching)
+由後端 **Matching Engine** 每 30 秒自動偵測：
+*   **模擬撮合**：對比第三方即時市價 (Yahoo/Binance)。若 `現價 <= 買入價` (或 `現價 >= 賣出價`)，判定成交並轉為 **Position (持倉)**。在此之前，委託會待在 **「當前持倉」的委託清單** 中。
+*   **實盤撮合**：透過券商 API 輪詢委託狀態。當回報為 `Filled (已成交)` 時，更新為正式持倉。
+
+### 3. 結案與損益計算 (History & PnL)
+*   **結案歸檔**：賣單成交後，系統自動將標的移除持倉清單，並轉入 **History (歷史)** 清單。
+*   **績效計算**：
+    *   **實現損益**：`(賣出成交價 - 買入成本) * 數量`。
+    *   **獲利率 %**：`((賣出成交價 - 買入成本) / 買入成本) * 100%`。
+    *   實盤交易會額外透過定期對帳服務 (Reconciliation) 修正真實的手續費與稅金支出。
+
+---
+
+## 🛠️ 技術架構 (Tech Stack)
+
+- **Frontend**: React 18, Vite, Tailwind CSS, Framer Motion (動態視覺效果), Lucide React (圖標).
+- **Backend**: FastAPI (Python 3.11), Uvicorn.
+- **Data & APIs**: 
+  - [Shioaji](https://github.com/Sinopac/shioaji) (永豐證券 API)
+  - [Max-Exchange](https://max.maicoin.com/) (Maicoin MAX API)
+  - [FinMind](https://finmind.github.io/) (台股基本面數據)
+  - [Yahoo Finance](https://pypi.org/project/yfinance/) (歷史 K 線與即時價)
 
 ---
 
@@ -89,28 +111,6 @@ Sinopac Quant Pro 是一個強大的多市場資產篩選與自動化交易系�
 ```bash
 gcloud builds submit --config cloudbuild.yaml .
 ```
-
----
-
-## 📈 交易機制說明 (Trading Lifecycle)
-
-系統區分為 **「虛擬模擬 (Simulation)」** 與 **「實盤交易 (Live)」** 兩種模式，其生命週期如下：
-
-### 1. 委託下單 (Order Placement)
-*   **模擬模式**：僅在系統資料庫建立 `PENDING` 紀錄，顯示「委託買入中」。
-*   **實盤模式**：同步發送 API 請求至永豐金 (Shioaji) 或 MAX 交易所，取得真實委託代碼。
-
-### 2. 成交轉換 (Confirmation & Matching)
-由後端 **Matching Engine** 每 30 秒自動偵測：
-*   **模擬撮合**：對比第三方即時市價 (Yahoo/Binance)。若 `現價 <= 買入價` (或 `現價 >= 賣出價`)，判定成交並轉為 **Position (持倉)**。在此之前，委託會待在 **「當前持倉」的委託清單** 中。
-*   **實盤撮合**：透過券商 API 輪詢委託狀態。當回報為 `Filled (已成交)` 時，更新為正式持倉。
-
-### 3. 結案與損益計算 (History & PnL)
-*   **結案歸檔**：賣單成交後，系統自動將標的移除持倉清單，並轉入 **History (歷史)** 清單。
-*   **績效計算**：
-    *   **實現損益**：`(賣出成交價 - 買入成本) * 數量`。
-    *   **獲利率 %**：`((賣出成交價 - 買入成本) / 買入成本) * 100%`。
-    *   實盤交易會額外透過定期對帳服務 (Reconciliation) 修正真實的手續費與稅金支出。
 
 ---
 
