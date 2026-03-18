@@ -50,8 +50,8 @@ class UserCredentialsUpdate(BaseModel):
 class UserSettings(BaseModel):
     email_notifications_enabled: bool = True
     mirror_trading_confirmed: bool = False
-    value_score_weight: float = 0.1    # Allocation for Value strategy
-    pullback_score_weight: float = 0.1 # Allocation for Pullback strategy
+    total_allocation_pct: float = 10.0  # Max % of balance per trade
+    strategy_ratio: float = 0.5       # Ratio (0=Val, 1=Pullback)
     max_order_limit: float = 50000.0   # Absolute TWD limit per order
     tp_pct: float = 20.0     # Take Profit %
     sl_pct: float = -5.0    # Stop Loss %

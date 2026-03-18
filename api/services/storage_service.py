@@ -100,8 +100,8 @@ def get_user_settings(user_id):
     default_settings = {
         "email_notifications_enabled": True,
         "mirror_trading_confirmed": False,
-        "value_score_weight": 0.1,
-        "pullback_score_weight": 0.1,
+        "total_allocation_pct": 10.0,
+        "strategy_ratio": 0.5,
         "max_order_limit": 50000.0,
         "tp_pct": 20.0,
         "sl_pct": -5.0

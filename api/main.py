@@ -8,6 +8,12 @@ import uvicorn
 import os
 import sys
 import certifi
+import time
+
+# Set timezone to Asia/Taipei to ensure scheduler runs on Taiwan Time (UTC+8)
+os.environ['TZ'] = 'Asia/Taipei'
+if hasattr(time, 'tzset'):
+    time.tzset()
 
 # Fix SSL Certificate Verification Error on Mac
 os.environ['SSL_CERT_FILE'] = certifi.where()
@@ -18,7 +24,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 app = FastAPI(
     title="Sinopac Quant Pro API",
     description="Professional backend for quantitative stock analysis and trading.",
-    version="2.1.85"
+    version="2.1.86"
 )
 
 @app.on_event("startup")

@@ -220,12 +220,18 @@ class AutoRobot:
                     print(f"[AutoRobot] Invalid balance for {uid}: {balance}. Skipping.")
                     continue
                 
-                # [v2.1.85] Granular Weights: Decide which weight to use
-                # We use a 0.5 defense weight logic consistent with quant_service to pick the dominant strategy
+                # [v2.1.86] Budget-Based Allocation
+                # total_allocation_pct is the max % of balance (e.g., 10%)
+                # strategy_ratio (0.0 to 1.0) splits that max %
+                total_pct = settings.get("total_allocation_pct", 10.0) / 100.0
+                ratio = settings.get("strategy_ratio", 0.5)
+
                 if pullback_score * 0.5 >= value_score * 0.5:
-                    weight = settings.get("pullback_score_weight", 0.1)
+                    # Scaling by ratio: if ratio is 1.0, use full total_pct
+                    weight = total_pct * ratio
                 else:
-                    weight = settings.get("value_score_weight", 0.1)
+                    # Scaling by (1-ratio): if ratio is 0.0, use full total_pct
+                    weight = total_pct * (1 - ratio)
 
                 order_value = balance * weight
                 

@@ -17,8 +17,8 @@ const Settings = () => {
   const [settings, setSettings] = useState({
     email_notifications_enabled: true,
     mirror_trading_confirmed: false,
-    value_score_weight: 0.1,
-    pullback_score_weight: 0.1,
+    total_allocation_pct: 10.0,
+    strategy_ratio: 0.5,
     max_order_limit: 50000,
     tp_pct: 20.0,
     sl_pct: -5.0
@@ -298,36 +298,48 @@ const Settings = () => {
             <div className="space-y-4">
               <label className="text-xs font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
                 <Target className="w-4 h-4 text-indigo-400" />
-                策略分配權重 (Weight Allocation)
+                跟單預算與策略分配 (Allocation)
               </label>
               
               <div className="grid grid-cols-1 gap-4">
                 <div className="p-4 bg-slate-800/30 rounded-2xl border border-slate-700/50 space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm font-bold text-slate-300">價值防禦 (Value Score)</span>
-                    <span className="text-indigo-400 font-bold font-inter">{Math.round(settings.value_score_weight * 100)}%</span>
+                  <div className="flex items-center gap-2 text-emerald-400">
+                    <Percent className="w-4 h-4" />
+                    <span className="text-xs font-bold uppercase">單筆跟單總權重 (Total Allocation)</span>
                   </div>
-                  <input 
-                    type="range" min="0" max="1" step="0.05"
-                    value={settings.value_score_weight}
-                    onChange={(e) => setSettings({...settings, value_score_weight: parseFloat(e.target.value)})}
-                    className="w-full accent-indigo-500"
-                  />
-                  <p className="text-[10px] text-slate-500">當系統判定為「價值型」買入訊號時，投入資金比例。</p>
+                  <div className="relative">
+                    <input 
+                      type="number"
+                      className="w-full pr-10 py-3 bg-slate-800/50 border border-slate-700 rounded-xl focus:outline-none font-inter font-bold text-white transition-all focus:ring-2 focus:ring-indigo-500/50"
+                      value={settings.total_allocation_pct}
+                      onChange={(e) => setSettings({...settings, total_allocation_pct: parseFloat(e.target.value) || 0})}
+                    />
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold">%</span>
+                  </div>
+                  <p className="text-[10px] text-slate-500">此為單次跟單使用的帳戶資金上限。</p>
                 </div>
 
                 <div className="p-4 bg-slate-800/30 rounded-2xl border border-slate-700/50 space-y-3">
                   <div className="flex justify-between items-center">
-                    <span className="text-sm font-bold text-slate-300">強勢拉回 (Pullback Score)</span>
-                    <span className="text-purple-400 font-bold font-inter">{Math.round(settings.pullback_score_weight * 100)}%</span>
+                    <span className="text-sm font-bold text-slate-300">策略比例 (Strategy Ratio)</span>
+                    <span className="text-white font-bold font-inter text-xs">
+                      <span className="text-indigo-400">價值 {Math.round((1 - settings.strategy_ratio) * 100)}%</span>
+                      <span className="mx-2 text-slate-500">|</span>
+                      <span className="text-purple-400">拉回 {Math.round(settings.strategy_ratio * 100)}%</span>
+                    </span>
                   </div>
-                  <input 
-                    type="range" min="0" max="1" step="0.05"
-                    value={settings.pullback_score_weight}
-                    onChange={(e) => setSettings({...settings, pullback_score_weight: parseFloat(e.target.value)})}
-                    className="w-full accent-purple-500"
-                  />
-                  <p className="text-[10px] text-slate-500">當系統判定為「動能拉回」買入訊號時，投入資金比例。</p>
+                  <div className="relative pt-2 pb-2">
+                    <input 
+                      type="range" min="0" max="1" step="0.05"
+                      value={settings.strategy_ratio}
+                      onChange={(e) => setSettings({...settings, strategy_ratio: parseFloat(e.target.value)})}
+                      className="w-full appearance-none h-2 rounded-full cursor-pointer focus:outline-none"
+                      style={{
+                        background: `linear-gradient(to right, #6366f1 0%, #6366f1 ${settings.strategy_ratio * 100}%, #a855f7 ${settings.strategy_ratio * 100}%, #a855f7 100%)`
+                      }}
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-500">調整總預算在價值防禦與強勢拉回策略間的分配。</p>
                 </div>
               </div>
             </div>
