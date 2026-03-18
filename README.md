@@ -1,6 +1,6 @@
 # Sinopac Quant Pro (股市報明牌)
 
-[![Version](https://img.shields.io/badge/version-2.1.75-blue.svg)](REVISIONS.md)
+[![Version](https://img.shields.io/badge/version-2.1.81-blue.svg)](REVISIONS.md)
 ---
 
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
@@ -18,8 +18,12 @@ Sinopac Quant Pro 是一個強大的多市場資產篩選與自動化交易系�
 
 ### 2. 量化選股引擎 (Quant Engine)
 系統採用「權重動態配置」策略，透過兩大維度進行評分（滿分 100）：
-- **🛡️ 價值防禦 (Value Score)**：尋找跌深、具備安全邊際的標的。結合年線/季線乖離率、位階百分比與成交量動能。
-- **📈 強勢拉回 (Pullback Score)**：順勢交易策略，鎖定月線附近回檔的強勢股，並結合 MACD 金叉與 0 軸濾鏡。
+- **🛡️ 價值防禦 (Value Score)**：尋找跌深、具備安全邊際的標的。
+  - **位階百分比**：計算當前價位在過去 52 週的相對高低位置。位階越低（越接近年線底部）分數越高。
+  - **乖離率支撐**：判定股價是否回落至年線/季線支撐區（±5%），提供防禦買點。
+  - **成交量動能**：偵測是否出現 1.2 倍以上的攻擊量，確認低檔有資金進場承接。
+- **📈 強勢拉回 (Pullback Score)**：順勢交易策略，鎖定月線附近回檔的強勢股，並結合 MACD 金叉與 **0 軸濾鏡**。
+  - **0 軸濾鏡機制**：利用 MACD 的 0 軸作為多空趨勢的分水嶺。系統僅在 MACD 快慢線均位於 0 軸上方（多頭強勢區）時，才將其視為高勝率的「強勢趨勢回檔」並給予最高加分，藉此過濾掉空頭趨勢下不穩定的低位反彈。
 - **動態偏好調整**：使用者可透過滑桿自定義「成長 ↔ 防禦」比重，系統將即時重新計算綜合分數。
 
 ### 3. 無情的交易機器人 (Automated Trading)
@@ -44,6 +48,22 @@ Sinopac Quant Pro 是一個強大的多市場資產篩選與自動化交易系�
   - [Max-Exchange](https://max.maicoin.com/) (Maicoin MAX API)
   - [FinMind](https://finmind.github.io/) (台股基本面數據)
   - [Yahoo Finance](https://pypi.org/project/yfinance/) (歷史 K 線與即時價)
+
+---
+
+## 📊 數據策略 (Data Strategy)
+
+系統採取 **「混合雲端數據策略 (Hybrid Data Strategy)」**，以平衡開發成本與交易精準度：
+
+### 1. Yahoo Finance：量化分析的「大數據骨幹」
+*   **角色**：擔任 **1-year 歷史數據** 的核心供應源，用於計算 MA、MACD 與相對位階。
+*   **優勢**：無需各別券商 API 限制，即可高效完成全市場（如 2,000+ 台股）的日線掃描。
+*   **撮合基礎**：虛擬帳戶的 **「模擬撮合引擎 (Simulation Matcher)」** 均以 Yahoo Finance 的收盤價作為即時行情參考，實現無成本的策略驗證。
+
+### 2. MAX & 幣安 (Crypto Strategy)：全球價格與在地交易
+*   **幣安 (Binance) 角色**：作為全球最大的流動性池，系統透過 Yahoo Finance 的 `[SYMBOL]-USD` 接口間接引用幣安定價，確保分析採用的是最具代表性的全球市價。
+*   **MAX 交易所角色**：擔任 **「在地實盤出口」**。系統整合 MAX API 管理 TWD 與加密貨幣的資金，並實作 **USD/TWD 匯率換算機制** (自動抓取最新美元匯率)，讓全球定價與在地 TWD 資產能無縫接軌。
+*   **數據補全**：對於 MAX 上特有的 TWD 交易對，系統會自動在 Yahoo (USD 全球價) 與 MAX (實體交易介面) 間自動進行標的對齊與換算。
 
 ---
 

@@ -8,7 +8,8 @@ import SettingsPage from './components/Settings'
 import Dashboard from './components/Dashboard'
 import TradingControl from './components/TradingControl'
 import SystemHealthModal from './components/SystemHealthModal'
-import { authService } from './services/api'
+import GlobalLoader from './components/GlobalLoader'
+import { authService, tradeService } from './services/api'
 import React from 'react'
 
 class ErrorBoundary extends React.Component {
@@ -60,15 +61,46 @@ function App() {
   const [user, setUser] = useState(null)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isDiagModalOpen, setIsDiagModalOpen] = useState(false)
+  const [isAppLoading, setIsAppLoading] = useState(true)
+  const [loadProgress, setLoadProgress] = useState(0)
+  const [isNavigating, setIsNavigating] = useState(false)
 
   useEffect(() => {
-    if (isAuthenticated) {
-      authService.getMe().then(setUser).catch(() => {
-        setIsAuthenticated(false)
-        localStorage.removeItem('token')
-      })
-    }
+    setIsNavigating(true)
+    const timer = setTimeout(() => setIsNavigating(false), 500)
+    return () => clearTimeout(timer)
+  }, [activeTab])
+
+  useEffect(() => {
+    const initApp = async () => {
+      setLoadProgress(10);
+      try {
+        if (isAuthenticated) {
+          setLoadProgress(30);
+          const userData = await authService.getMe();
+          setUser(userData);
+          setLoadProgress(60);
+          // Pre-fetch some critical data to ensure dashboard is ready
+          await tradeService.getSummary();
+          setLoadProgress(90);
+        }
+      } catch (err) {
+        console.error("App init error:", err);
+        if (isAuthenticated) {
+          setIsAuthenticated(false);
+          localStorage.removeItem('token');
+        }
+      } finally {
+        setLoadProgress(100);
+        setTimeout(() => setIsAppLoading(false), 800);
+      }
+    };
+    initApp();
   }, [isAuthenticated])
+
+  if (isAppLoading) {
+    return <GlobalLoader progress={loadProgress} />
+  }
 
   if (!isAuthenticated) {
     return <Login onLoginSuccess={() => setIsAuthenticated(true)} />
@@ -190,11 +222,24 @@ function App() {
           </div>
         </header>
 
-        <section className="p-4 md:p-8">
+        <section className="p-4 md:p-8 relative">
+          <AnimatePresence>
+            {isNavigating && (
+              <motion.div
+                initial={{ width: 0, opacity: 1 }}
+                animate={{ width: '100%', opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.5, ease: "easeInOut" }}
+                className="fixed top-16 md:top-20 left-0 h-0.5 bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.8)] z-[60]"
+              />
+            )}
+          </AnimatePresence>
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            key={activeTab}
+            initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.3 }}
             className="h-full"
           >
             <ErrorBoundary>

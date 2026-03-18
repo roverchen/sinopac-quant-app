@@ -6,30 +6,49 @@ import { tradeService, quantService } from '../services/api';
 
 // [v2.1.60] Removed mockChartData in favor of live API results
 
-const StatCard = ({ label, value, change, color, icon: Icon, subValue }) => (
+const Skeleton = ({ className }) => (
+  <div className={`animate-pulse bg-slate-800/50 rounded-2xl ${className}`} />
+);
+
+const StatCard = ({ label, value, change, color, icon: Icon, subValue, loading }) => (
   <div className="p-6 bg-slate-900/40 border border-slate-800 rounded-3xl hover:border-slate-700 transition-all group relative overflow-hidden">
-    <div className="flex items-start justify-between mb-4">
-      <div className={`p-3 rounded-2xl bg-${color}-500/10 text-${color}-400`}>
-        <Icon className="w-6 h-6" />
+    {loading ? (
+      <div className="space-y-4">
+        <div className="flex justify-between">
+          <Skeleton className="w-12 h-12" />
+          <Skeleton className="w-16 h-6 rounded-full" />
+        </div>
+        <div className="space-y-2">
+          <Skeleton className="w-24 h-4" />
+          <Skeleton className="w-32 h-8" />
+          <Skeleton className="w-20 h-3" />
+        </div>
       </div>
-      {change !== undefined && (
-        <span className={`flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full ${
-          Number(change) >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'
-        }`}>
-          {Number(change) >= 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
-          {Math.abs(Number(change))}%
-        </span>
-      )}
-    </div>
-    <p className="text-sm text-slate-500 font-medium mb-1">{label}</p>
-    <h3 className="text-3xl font-bold font-inter text-white">{value}</h3>
-    {subValue && <p className="text-xs text-slate-500 mt-2 font-mono">{subValue}</p>}
+    ) : (
+      <>
+        <div className="flex items-start justify-between mb-4">
+          <div className={`p-3 rounded-2xl bg-${color}-500/10 text-${color}-400`}>
+            <Icon className="w-6 h-6" />
+          </div>
+          {change !== undefined && (
+            <span className={`flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full ${
+              Number(change) >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'
+            }`}>
+              {Number(change) >= 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+              {Math.abs(Number(change))}%
+            </span>
+          )}
+        </div>
+        <p className="text-sm text-slate-500 font-medium mb-1">{label}</p>
+        <h3 className="text-3xl font-bold font-inter text-white">{value}</h3>
+        {subValue && <p className="text-xs text-slate-500 mt-2 font-mono">{subValue}</p>}
+      </>
+    )}
   </div>
 );
 
 const Dashboard = ({ onNavigate }) => {
   const [summary, setSummary] = useState(null);
-  const [balance, setBalance] = useState(null);
   const [focusTargets, setFocusTargets] = useState([]);
   const [chartData, setChartData] = useState([]);
   const [trendMarket, setTrendMarket] = useState('TW');
@@ -37,10 +56,21 @@ const Dashboard = ({ onNavigate }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchSummary();
-    fetchBalance();
-    fetchFocusTargets();
-    fetchTrendData();
+    const loadData = async () => {
+      setLoading(true);
+      try {
+        await Promise.all([
+          fetchSummary(),
+          fetchFocusTargets(),
+          fetchTrendData()
+        ]);
+      } catch (err) {
+        console.error("Dashboard data load error:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
   }, [trendMarket, trendDays]);
 
   const fetchTrendData = async () => {
@@ -65,17 +95,6 @@ const Dashboard = ({ onNavigate }) => {
     }
   };
 
-  const fetchBalance = async () => {
-    try {
-      const data = await tradeService.getBalance();
-      setBalance(data);
-    } catch (err) {
-      console.error("Failed to fetch balance:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const fetchFocusTargets = async () => {
     try {
       // Fetch top 1 from each market
@@ -97,46 +116,6 @@ const Dashboard = ({ onNavigate }) => {
 
   return (
     <div className="space-y-8">
-      {/* Real-time Balances */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="p-8 bg-gradient-to-br from-indigo-600/20 to-purple-600/10 border border-indigo-500/20 rounded-[2.5rem] relative overflow-hidden group">
-          <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:scale-110 transition-transform">
-            <Landmark className="w-24 h-24 text-white" />
-          </div>
-          <div className="relative z-10">
-            <div className="flex items-center gap-2 text-indigo-400 mb-2">
-              <Landmark className="w-5 h-5" />
-              <span className="text-xs font-black uppercase tracking-widest">永豐金證券 (Sinopac)</span>
-            </div>
-            <h2 className="text-4xl font-black text-white font-inter">
-              ${balance?.sinopac_twd !== undefined ? balance.sinopac_twd.toLocaleString() : '...'}
-              <span className="text-sm font-medium text-slate-500 ml-2">TWD</span>
-            </h2>
-            <p className="text-xs text-slate-400 mt-2 font-medium">可用交割金額 (已串接 API)</p>
-          </div>
-        </div>
-
-        <div className="p-8 bg-gradient-to-br from-emerald-600/20 to-teal-600/10 border border-emerald-500/20 rounded-[2.5rem] relative overflow-hidden group">
-          <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:scale-110 transition-transform">
-            <Database className="w-24 h-24 text-white" />
-          </div>
-          <div className="relative z-10">
-            <div className="flex items-center gap-2 text-emerald-400 mb-2">
-              <Database className="w-5 h-5" />
-              <span className="text-xs font-black uppercase tracking-widest">MAX 交易所 (Crypto)</span>
-            </div>
-            <h2 className="text-4xl font-black text-white font-inter">
-              ${balance?.max?.total_twd_estimate !== undefined ? balance.max.total_twd_estimate.toLocaleString() : '0'}
-              <span className="text-sm font-medium text-slate-500 ml-2">TWD (估值)</span>
-            </h2>
-            <div className="flex gap-4 mt-2">
-              <p className="text-[10px] text-slate-400 font-bold uppercase">TWD: ${balance?.max?.twd !== undefined ? balance.max.twd.toLocaleString() : 0}</p>
-              <p className="text-[10px] text-slate-400 font-bold uppercase">USDT: {balance?.max?.usdt !== undefined ? balance.max.usdt.toLocaleString() : 0}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Performance Summary */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard 
@@ -146,6 +125,7 @@ const Dashboard = ({ onNavigate }) => {
           color="indigo" 
           icon={TrendingUp}
           subValue={`累計盈虧: $${summary?.mock?.total?.toLocaleString() || 0}`}
+          loading={loading}
         />
         <StatCard 
           label="實盤總盈利率" 
@@ -154,6 +134,7 @@ const Dashboard = ({ onNavigate }) => {
           color="rose" 
           icon={Wallet}
           subValue={`累計盈虧: $${summary?.live?.total?.toLocaleString() || 0}`}
+          loading={loading}
         />
         <StatCard 
           label="系統自動下單模擬總成效" 
@@ -162,8 +143,9 @@ const Dashboard = ({ onNavigate }) => {
           color="emerald" 
           icon={Zap} 
           subValue={`回報率(百分比)`}
+          loading={loading}
         />
-        <StatCard label="策略平均勝率" value="78.2%" change="+2.4" color="amber" icon={BarChart3} />
+        <StatCard label="策略平均勝率" value="78.2%" change="+2.4" color="amber" icon={BarChart3} loading={loading} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -237,7 +219,23 @@ const Dashboard = ({ onNavigate }) => {
         <div className="p-8 bg-slate-900/40 border border-slate-800 rounded-[2.5rem] backdrop-blur-sm">
           <h3 className="text-xl font-bold text-white mb-6">今日焦點標的</h3>
           <div className="space-y-4">
-            {focusTargets.length > 0 ? (
+            {loading ? (
+              [1, 2, 3].map(i => (
+                <div key={i} className="p-4 bg-slate-800/30 rounded-2xl flex items-center justify-between border border-transparent">
+                  <div className="flex items-center gap-3 w-full">
+                    <Skeleton className="w-10 h-10 rounded-xl" />
+                    <div className="flex-1 space-y-2">
+                      <Skeleton className="w-16 h-4" />
+                      <Skeleton className="w-24 h-3" />
+                    </div>
+                    <div className="text-right space-y-2">
+                      <Skeleton className="w-12 h-4 ml-auto" />
+                      <Skeleton className="w-16 h-3 ml-auto" />
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : focusTargets.length > 0 ? (
               focusTargets.map((item) => (
                 <div key={item.symbol} className="p-4 bg-slate-800/30 rounded-2xl flex items-center justify-between border border-transparent hover:border-slate-700 transition-all cursor-pointer group">
                   <div className="flex items-center gap-3">

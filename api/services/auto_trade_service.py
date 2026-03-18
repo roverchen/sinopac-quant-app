@@ -48,27 +48,31 @@ class AutoRobot:
             schedule.run_pending()
             time.sleep(60)
 
-    def has_traded_today(self, market_type):
-        """Check if system_auto has already placed a trade for this market today"""
+    def get_last_trade_time(self, market_type):
+        """Retrieve the timestamp of the most recent trade for this market"""
         try:
             from api.services.storage_service import get_user_trade_logs
             logs = get_user_trade_logs(self.user_id)
-            today_str = datetime.now().strftime("%Y-%m-%d")
+            market_logs = [L for L in logs if L.get("market") == market_type]
+            if not market_logs:
+                return datetime.min
             
-            for L in logs:
-                # Check for either PENDING or HISTORY entries from today for this market
-                ts = L.get("timestamp", "")
-                if ts.startswith(today_str) and L.get("market") == market_type:
-                    return True
-            return False
+            # Sort by timestamp descending
+            market_logs.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+            ts_str = market_logs[0].get("timestamp", "")
+            if not ts_str: return datetime.min
+            # Parse ISO format, handles both with and without microsecs
+            try:
+                return datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+            except:
+                return datetime.fromisoformat(ts_str.split(".")[0])
         except Exception as e:
-            print(f"[AutoRobot] Error checking daily status: {e}")
-            return False
+            print(f"[AutoRobot] Error getting last trade time: {e}")
+            return datetime.min
 
     def ensure_fresh_scans(self):
-        """Check for missing data OR missed trade windows (Makeup logic)"""
+        """Check for missing data OR missed trade windows (Robust Makeup logic)"""
         now = datetime.now()
-        current_time_str = now.strftime("%H:%M")
         
         # Market schedule map
         schedule_times = {
@@ -77,23 +81,35 @@ class AutoRobot:
             "CRYPTO": "23:15"
         }
 
-        for m in ["TW", "US", "CRYPTO"]:
+        for m, scheduled_time_str in schedule_times.items():
+            # Layer 1: Data Freshness
             pool = get_cached_pool(m)
-            # 1. Ensure we have data
             if not pool or not pool.get("results"):
                 print(f"[AutoRobot] No data for {m}, triggering auto-scan...")
                 self._update_status("Scanning", f"Performing initial scan for {m}...")
                 asyncio.run(run_market_scan(m))
             
-            # 2. Makeup Logic: If time has passed but no trade recorded today
-            scheduled_time = schedule_times.get(m)
-            if scheduled_time and current_time_str >= scheduled_time:
-                if not self.has_traded_today(m):
-                    print(f"[AutoRobot] Missed window detected for {m} ({scheduled_time}). Triggering makeup trade...")
-                    self._update_status("Trading", f"Makeup trade for {m} (Scheduled: {scheduled_time})")
-                    self.perform_daily_trade(m)
-                else:
-                    print(f"[AutoRobot] {m} already traded today. Skipping makeup.")
+            # Layer 2: Robust Makeup Logic
+            # Calculate the LAST expected trade time for this market
+            h, mn = map(int, scheduled_time_str.split(":"))
+            target_today = now.replace(hour=h, minute=mn, second=0, microsecond=0)
+            
+            from datetime import timedelta
+            if now >= target_today:
+                last_expected = target_today
+            else:
+                # Target window was yesterday
+                last_expected = target_today - timedelta(days=1)
+            
+            last_trade = self.get_last_trade_time(m)
+            
+            # Use a small buffer (e.g. 1 minute) to avoid double trades due to timing precision
+            if last_trade < (last_expected - timedelta(minutes=1)):
+                print(f"[AutoRobot] Missed window detected for {m} (Last expected: {last_expected}, Last actual: {last_trade})")
+                self._update_status("Trading", f"Makeup trade for {m} (Missed window: {last_expected.strftime('%m-%d %H:%M')})")
+                self.perform_daily_trade(m)
+            else:
+                print(f"[AutoRobot] {m} is up to date (Last trade: {last_trade}).")
 
         self._update_status("Idle", "Startup checks and makeup trades complete.")
 

@@ -22,7 +22,7 @@ async def get_trading_status(current_user: str = Depends(get_current_user)):
     return {
         "auto_trade_enabled": creds.get("auto_trade_enabled", False),
         "mode": "Simulation" if creds.get("simulation_mode", True) else "Live",
-        "backend_version": "2.1.75"
+        "backend_version": "2.1.81"
     }
 
 @router.post("/toggle")
@@ -54,7 +54,10 @@ async def get_pending_orders(user_id: Optional[str] = None, current_user: str = 
     """Get pending orders"""
     target_user = user_id if user_id else current_user
     logs = get_user_trade_logs(target_user)
-    return {"pending": [L for L in logs if L.get("entry_type") == "PENDING"]}
+    pending = [L for L in logs if L.get("entry_type") == "PENDING"]
+    # Sort by timestamp (newest first)
+    pending.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+    return {"pending": pending}
 
 @router.get("/history")
 async def get_trade_history(user_id: Optional[str] = None, current_user: str = Depends(get_current_user)):

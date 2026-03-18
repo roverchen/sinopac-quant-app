@@ -4,6 +4,34 @@ This document tracks all version changes and feature updates for the Sinopac Qua
 
 ## Version 2.1 Series
 
+### v2.1.81 (2026-03-18)
+- **UI Consistency Pass**:
+    - **History Alignment**: Redesigned the "Trade History" table to match the layout and styling of the "Current Positions" table. This includes unified column headers, large/small font patterns for symbols/names, and consistent status badges.
+- **Settings Page Enhancement**:
+    - **Relocated Assets**: Moved Sinopac and MAX balance cards from the Dashboard to the Settings page. This provides a cleaner dashboard view while placing account balances directly where API credentials are managed.
+
+### v2.1.79 (2026-03-18)
+- **Trade History Sorting & Precision**:
+    - **Newest First**: Refactored `/history` and `/pending` endpoints to ensure records are sorted by timestamp in descending order.
+    - **Time Detail**: Enhanced the frontend History table to show both date and specific time (HH:MM), enabling better tracking of automated trade execution.
+
+### v2.1.78 (2026-03-18)
+- **Auto-Trade Robustness Upgrade**:
+    - **Cross-Day Makeup Logic**: Refactored the robot to calculate the absolute most recent scheduled window. If the server was hibernation during a window (e.g., Crypto at 23:15), it now triggers a makeup trade immediately upon the next wake-up, even across day boundaries.
+    - **Cloud Run Optimization**: Addresses the "Scale to Zero" issue by ensuring missed windows are caught as soon as the service is accessed.
+    - **Verified Fix**: Successfully triggered missed **CRYPTO (dottwd)** and **US (ESS)** trades for the 3/17-3/18 period.
+
+### v2.1.77 (2026-03-18)
+- **Loading UI Overhaul**:
+    - **GlobalLoader**: Professional 3D-styled splash screen for initial app mount and data pre-fetching.
+    - **Dashboard Skeletons**: Animated pulse loaders for StatCards and FocusTargets.
+    - **Watchlist Skeletons**: Row-based skeletons for market scanning and watchlist tables.
+    - **Navigation Progress Bar**: Slim, top-level progress bar (YouTube-style) for tab and market transitions.
+- **Auto-Trade Data Fixes**:
+    - Resolved 1227 score discrepancy (Sync'd stale GCS data).
+    - Added missing symbol 7717 (萊德光電-KY).
+- **Backend v2.1.77**: Optimized data fetching and health check response time.
+
 ### v2.1.75 (2026-03-17)
 - **Implemented Simulation Trading Costs**: 
     - TW Market: 0.1425% commission (Buy/Sell) + 0.3% tax (Sell only).

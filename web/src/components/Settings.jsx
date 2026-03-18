@@ -1,7 +1,11 @@
 import { useState, useEffect } from 'react';
-import { authService } from '../services/api';
-import { Save, Shield, Key, Landmark, Database, CheckCircle2, Settings as SettingsIcon } from 'lucide-react';
+import { authService, tradeService } from '../services/api';
+import { Save, Shield, Key, Landmark, Database, CheckCircle2, Settings as SettingsIcon, Clock } from 'lucide-react';
 import { motion } from 'framer-motion';
+
+const Skeleton = ({ className }) => (
+  <div className={`animate-pulse bg-slate-800/50 rounded-2xl ${className}`} />
+);
 
 const Settings = () => {
   const [creds, setCreds] = useState({
@@ -10,10 +14,17 @@ const Settings = () => {
     max_api_key: '',
     max_api_secret: '',
   });
+  const [balance, setBalance] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [balanceLoading, setBalanceLoading] = useState(true);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    setBalanceLoading(true);
     authService.getMe().then(user => {
       if (user?.creds) {
         setCreds({
@@ -28,7 +39,16 @@ const Settings = () => {
         });
       }
     });
-  }, []);
+
+    try {
+      const data = await tradeService.getBalance();
+      setBalance(data);
+    } catch (err) {
+      console.error("Failed to fetch balance in settings:", err);
+    } finally {
+      setBalanceLoading(false);
+    }
+  };
 
   const handleSave = async () => {
     setLoading(true);
@@ -50,7 +70,65 @@ const Settings = () => {
           <SettingsIcon className="w-6 h-6 text-indigo-400" />
           交易環境設定
         </h2>
-        <p className="text-slate-400 text-sm">設定您的券商 API 憑證，這將永久儲存於加密資料庫中。</p>
+        <p className="text-slate-400 text-sm">設定您的券商 API 憑證，並即時查閱帳戶資產餘額。</p>
+      </div>
+
+      {/* Balance Cards (Moved from Dashboard) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="p-8 bg-gradient-to-br from-indigo-600/20 to-purple-600/10 border border-indigo-500/20 rounded-[2.5rem] relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:scale-110 transition-transform">
+            <Landmark className="w-24 h-24 text-white" />
+          </div>
+          <div className="relative z-10">
+            <div className="flex items-center gap-2 text-indigo-400 mb-2">
+              <Landmark className="w-5 h-5" />
+              <span className="text-xs font-black uppercase tracking-widest">永豐金證券 (Sinopac)</span>
+            </div>
+            <h2 className="text-4xl font-black text-white font-inter">
+              {balanceLoading ? (
+                <Skeleton className="w-48 h-10 my-1" />
+              ) : (
+                <>
+                  ${balance?.sinopac_twd !== undefined ? balance.sinopac_twd.toLocaleString() : '0'}
+                  <span className="text-sm font-medium text-slate-500 ml-2">TWD</span>
+                </>
+              )}
+            </h2>
+            <p className="text-xs text-slate-400 mt-2 font-medium">可用交割金額 (已串接 API)</p>
+          </div>
+        </div>
+
+        <div className="p-8 bg-gradient-to-br from-emerald-600/20 to-teal-600/10 border border-emerald-500/20 rounded-[2.5rem] relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:scale-110 transition-transform">
+            <Database className="w-24 h-24 text-white" />
+          </div>
+          <div className="relative z-10">
+            <div className="flex items-center gap-2 text-emerald-400 mb-2">
+              <Database className="w-5 h-5" />
+              <span className="text-xs font-black uppercase tracking-widest">MAX 交易所 (Crypto)</span>
+            </div>
+            <h2 className="text-4xl font-black text-white font-inter">
+              {balanceLoading ? (
+                <Skeleton className="w-48 h-10 my-1" />
+              ) : (
+                <>
+                  ${balance?.max?.total_twd_estimate !== undefined ? balance.max.total_twd_estimate.toLocaleString() : '0'}
+                  <span className="text-sm font-medium text-slate-500 ml-2">TWD (估值)</span>
+                </>
+              )}
+            </h2>
+            <div className="flex gap-4 mt-2">
+              {balanceLoading ? (
+                <Skeleton className="w-32 h-3" />
+              ) : (
+                <>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase">TWD: ${balance?.max?.twd !== undefined ? balance.max.twd.toLocaleString() : 0}</p>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase">USDT: {balance?.max?.usdt !== undefined ? balance.max.usdt.toLocaleString() : 0}</p>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">

@@ -13,6 +13,35 @@ import {
   Cell
 } from 'recharts';
 
+const SkeletonRow = () => (
+  <tr className="animate-pulse border-b border-slate-800/30">
+    <td className="px-6 py-5 cursor-wait">
+      <div className="flex flex-col gap-2">
+        <div className="h-5 w-16 bg-slate-800 rounded-md" />
+        <div className="h-3 w-24 bg-slate-800/50 rounded-md" />
+      </div>
+    </td>
+    <td className="px-6 py-5">
+      <div className="h-5 w-10 bg-slate-800 rounded-full" />
+    </td>
+    <td className="px-6 py-5">
+      <div className="h-6 w-16 bg-slate-800 rounded-md" />
+    </td>
+    <td className="px-6 py-5">
+      <div className="h-1.5 w-32 bg-slate-800 rounded-full mx-auto" />
+    </td>
+    <td className="px-6 py-5">
+      <div className="h-5 w-24 bg-slate-800 rounded-md" />
+    </td>
+    <td className="px-6 py-5 text-center">
+      <div className="h-10 w-10 bg-slate-800 rounded-full mx-auto" />
+    </td>
+    <td className="px-6 py-5">
+      <div className="h-12 w-full bg-slate-800/50 rounded-lg" />
+    </td>
+  </tr>
+);
+
 const Watchlist = () => {
   const [data, setData] = useState([]);
   const [cachedData, setCachedData] = useState({}); // 快取各市場的數據
@@ -349,7 +378,9 @@ const Watchlist = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/50">
-              {filteredData.map((item, idx) => (
+              {loading ? (
+                [...Array(8)].map((_, i) => <SkeletonRow key={i} />)
+              ) : filteredData.map((item, idx) => (
                 <motion.tr 
                   key={`${item.symbol}-${item.market}`}
                   initial={{ opacity: 0, y: 10 }}
