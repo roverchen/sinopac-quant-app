@@ -5,7 +5,8 @@ import asyncio
 from datetime import datetime
 from api.services.quant_service import run_market_scan, get_cached_pool, scan_status
 from api.services.shioaji_service import ShioajiService
-from api.services.storage_service import get_user_trade_logs
+from api.services.storage_service import get_user_trade_logs, get_all_users_for_notifications
+from api.services.email_service import notify_trade
 
 class AutoRobot:
     def __init__(self):
@@ -42,6 +43,16 @@ class AutoRobot:
             "timestamp": datetime.now().isoformat()
         }
         save_robot_status(status_dict)
+
+    def _notify_users(self, symbol, action, price, market, score=0):
+        """Send email notifications to all subscribed users."""
+        targets = get_all_users_for_notifications()
+        if not targets:
+            return
+            
+        print(f"[AutoRobot] Notifying {len(targets)} users about {action} {symbol}")
+        for email, _ in targets:
+            notify_trade(email, symbol, action, price, market, score)
 
     def _run_scheduler(self):
         while self.running:
@@ -169,6 +180,9 @@ class AutoRobot:
             else:
                 self._update_status("Idle", f"Successfully placed order for {symbol} @ {entry_price}")
                 print(f"[AutoRobot] Simulation Trade CREATED for {symbol} at {entry_price}. Checking logs...")
+                # Notify users
+                self._notify_users(symbol, "Buy", entry_price, market_type, score)
+                
                 # Verify persistence immediately in logs
                 from api.services.storage_service import get_user_trade_logs
                 all_logs = get_user_trade_logs(self.user_id)
@@ -199,6 +213,8 @@ class AutoRobot:
                         action="Sell",
                         is_simulation=True
                     )
+                    # Notify users
+                    self._notify_users(pos['symbol'], "Sell", pos['current_price'], pos.get('market', 'UNKNOWN'))
         except Exception as e:
             print(f"[AutoRobot] Exit Check Error: {e}")
 

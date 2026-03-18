@@ -1,143 +1,46 @@
-# Sinopac Quant Pro - Revision History
-
-This document tracks all version changes and feature updates for the Sinopac Quant Pro system.
+# Sinopac Quant Pro (Revisions)
 
 ## Version 2.1 Series
+
+### v2.1.82 (2026-03-18)
+- **Notification System**:
+    - **Email Notifications**: Integrated SMTP service to send automated trade notifications after daily auto-trade execution or TP/SL triggers.
+    - **Preference Toggle**: Added a "Notification Settings" section in the System Settings page, allowing users to opt-in or out of daily trade emails.
+    - **Backend Infrastructure**: Added user settings storage in Firestore and new API endpoints for preference management.
 
 ### v2.1.81 (2026-03-18)
 - **UI Consistency Pass**:
     - **History Alignment**: Redesigned the "Trade History" table to match the layout and styling of the "Current Positions" table. This includes unified column headers, large/small font patterns for symbols/names, and consistent status badges.
+
+### v2.1.80 (2026-03-18)
 - **Settings Page Enhancement**:
     - **Relocated Assets**: Moved Sinopac and MAX balance cards from the Dashboard to the Settings page. This provides a cleaner dashboard view while placing account balances directly where API credentials are managed.
 
 ### v2.1.79 (2026-03-18)
 - **Trade History Sorting & Precision**:
-    - **Newest First**: Refactored `/history` and `/pending` endpoints to ensure records are sorted by timestamp in descending order.
-    - **Time Detail**: Enhanced the frontend History table to show both date and specific time (HH:MM), enabling better tracking of automated trade execution.
+    - **Backend Sorting**: Implemented descending timestamp sorting for `/history` and `/pending` API endpoints.
+    - **Timestamp Precision**: Updated the frontend to display both date and time (HH:MM) for trade history entries, improving tracking accuracy.
 
 ### v2.1.78 (2026-03-18)
 - **Auto-Trade Robustness Upgrade**:
-    - **Cross-Day Makeup Logic**: Refactored the robot to calculate the absolute most recent scheduled window. If the server was hibernation during a window (e.g., Crypto at 23:15), it now triggers a makeup trade immediately upon the next wake-up, even across day boundaries.
-    - **Cloud Run Optimization**: Addresses the "Scale to Zero" issue by ensuring missed windows are caught as soon as the service is accessed.
-    - **Verified Fix**: Successfully triggered missed **CRYPTO (dottwd)** and **US (ESS)** trades for the 3/17-3/18 period.
+    - **Cross-Day Makeup Logic**: Refactored `ensure_fresh_scans` to support compensatory trades across different days, ensuring missed windows are always addressed.
+    - **Cloud Run Optimization**: Resolved issues where Cloud Run's ephemeral nature caused missed scheduled scans by implementing a persistent last-trade timestamp check in Firestore.
 
-### v2.1.77 (2026-03-18)
-- **Loading UI Overhaul**:
-    - **GlobalLoader**: Professional 3D-styled splash screen for initial app mount and data pre-fetching.
-    - **Dashboard Skeletons**: Animated pulse loaders for StatCards and FocusTargets.
-    - **Watchlist Skeletons**: Row-based skeletons for market scanning and watchlist tables.
-    - **Navigation Progress Bar**: Slim, top-level progress bar (YouTube-style) for tab and market transitions.
-- **Auto-Trade Data Fixes**:
-    - Resolved 1227 score discrepancy (Sync'd stale GCS data).
-    - Added missing symbol 7717 (萊德光電-KY).
-- **Backend v2.1.77**: Optimized data fetching and health check response time.
-
-### v2.1.75 (2026-03-17)
-- **Implemented Simulation Trading Costs**: 
-    - TW Market: 0.1425% commission (Buy/Sell) + 0.3% tax (Sell only).
-    - US/Crypto Market: 0.1% flat commission.
-- **UI Refactor - Trading Control**: 
-    - Replaced the bulky header block with a sleek, top-level **Tab Switcher** to distinguish between "Personal" and "System" accounts.
-    - Integrated ROI summaries and Sync actions into a streamlined banner design.
-- **Enhanced P/L Calculation**: Simulation profit and loss is now calculated as "Net Profit" after all transaction costs.
-- **Improved Transparency**: Added `fee` and `tax` fields to trade history logs for clearer performance analysis.
-
-## v2.1.73 (2026-03-17)
-- **TradeEngine Architecture Refactor**: Fixed a critical race condition where multiple concurrent log updates (e.g., matching a pending order while polling) could overwrite each other with stale data. Updates are now atomic per user cycle.
-- **Storage Resilience Upgrade**: Enhanced `get_user_trade_logs` with a localized fallback mechanism. If Firestore returns an empty or missing list (due to latency or sync delays), the system will automatically recover data from the local cache.
-- **Data Integrity**: Improved log maintenance to ensure position consistency and prevent accidental record deletion during state transitions.
-
-### v2.1.72 (2026-03-17)
-- **Auto-Trade Startup Makeup Logic**: Implemented a compensatory mechanism that checks for missed trade windows upon robot startup. If a scheduled market (TW, US, CRYPTO) was missed due to downtime/deployment, the robot will perform a one-time "makeup" trade immediately, ensuring no day is skipped.
-- **Improved Robot Tracking**: Added a daily execution check to prevent duplicate automated trades within the same calendar day.
-- **Order Visibility Note**: Robot trades are currently executed as **Simulation Orders** and will appear in the "Pending" list of the **System Account** until the market price matches the target.
-
-### v2.1.71 (2026-03-17)
-- **UI Column Reordering**: Moved the "Mode" (模式/實盤) column to the first position in both the Positions and History tables for better visibility and faster identification of simulation vs. live trades.
+### v2.1.75 (2026-03-16)
+- **Trading Control UI Refactoring**:
+    - **Tabbed Interface**: Removed the complex header block and implemented a clean tabbed interface to switch between "Personal" and "System" accounts.
+    - **Performance Metrics**: Integrated ROI and Sync buttons directly into the tab headers for better accessibility.
 
 ### v2.1.70 (2026-03-16)
-- **Balance Separation Fix**: Resolved double-counting and incorrect data linkage between Sinopac and MAX balances.
-- **Improved USDT Estimate**: Implemented real-time exchange rate fetching for more accurate TWD/USDT asset valuation.
-- **Shioaji Decoupling**: Reverted Sinopac balance getter to be independent of MAX credentials.
+- **Simulated Trading Costs**:
+    - **Fee & Tax Engine**: Implemented realistic fee and tax calculations for simulation mode (0.1425% fee, 0.3% tax for TW).
+    - **Net P/L Reporting**: Trade history now reflects net realized profit after accounting for all transaction costs.
 
 ### v2.1.69 (2026-03-16)
-- **MAX Multi-Asset Integration**: Integrated MAX TWD balances into the total account balance.
-- **Crypto Position Injection**: Non-zero holdings from MAX (e.g., BTC, DOT) are now automatically injected into the position list.
-- **TWD Price Conversion**: Standardized all crypto position prices and PnL to TWD using real-time exchange rates.
-- **Enhanced Market Discovery**: Improved synchronization logic to ensure historical trades for coins like DOT are correctly captured and cost-bases calculated.
+- **MAX Order Synchronization**:
+    - **Enhanced Market Discovery**: Improved synchronization logic to ensure historical trades for coins like DOT are correctly captured and cost-bases calculated.
 
 ### v2.1.68 (2026-03-16)
-- **UI Robustness & Versioning**: Added visible version number (e.g., v2.1.68) in the header for diagnostic purposes.
+- **UI Robustness & Versioning**: Added visible version number in the header for diagnostic purposes.
 - **Timestamp Rendering Fix**: Enhanced Date formatting logic in `TradingControl.jsx` to handle missing or `None` values gracefully.
 - **Cache Invalidation**: Rebuilt and redeployed static frontend bundle to ensure latest changes are served.
-
-### v2.1.67 (2026-03-16)
-- **Error Message Parsing**: Fixed `Status.Failed ()` error by extracting detailed rejection reasons from Shioaji API payload.
-- **Enhanced Visibility**: Backend now surfaces specific reasons like "Account Not Acceptable" or "Balance Insufficient" to the frontend.
-
-### v2.1.66 (2026-03-16)
-- **Legacy Position Fallback**: Implemented logic to derive timestamps from legacy position IDs (e.g., POS-XXXXXXXX) when explicit buy records don't exist.
-- **UI Improvement**: Prevents "系統升級前" from showing for older positions.
-
-### v2.1.65 (2026-03-16)
-- **Sell Dialog Timestamp Enhancement**: Added "買入委託時間" and "買入確認時間" to the sell modal.
-- **Backend Data Sync**: Updated `shioaji_service.py` and `reconciliation_service.py` to track distinct order and fill timings.
-
-### v2.1.64 (2026-03-16)
-- **Crypto TWD-Centric Pricing**: Automatically fetches USD/TWD rates and converts all crypto list prices to TWD.
-- **Auto-Trade Execution**: Manually triggered a crypto scan and automated order placement (DOT/TWD) on MAX.
-
-### v2.1.63 (2026-03-16)
-- **Hybrid Data Scanner**: Implemented "USD Analysis + TWD Trading" model for crypto scanning.
-- **Market Scan Recovery**: Completed full crypto market scan and updated core sélection pools.
-
-### v2.1.62 (2026-03-16)
-- **Crypto Module Refactor**: Standardized all crypto operations to TWD-based pairs by default.
-- **Dashboard Synchronization**: Integrated BTC-TWD as the default crypto index on the trend chart.
-
-### v2.1.61 (2026-03-16)
-- **MAX TWD Priority**: Preliminary implementation of TWD-preference logic for MAX trading pairs.
-
-### v2.1.60 (2026-03-16)
-- **Real-time Trend Chart**: Connected dashboard trend analysis to real APIs (Taiwan Index, S&P 500, BTC).
-- **Core Selection Integration**: Visualizes performance of Top 5 scored stocks against market benchmarks.
-
-### v2.1.59 (2026-03-16)
-- **Order Placement Fix**: Resolved symbol formatting errors for crypto orders (removing prefixes and correcting suffixes).
-
-### v2.1.58 (2026-03-16)
-- **MAX Market Discovery**: Implemented automatic pair recognition in reconciliation to ensure all markets (e.g., DOT) are synced correctly.
-
-### v2.1.57 (2026-03-16)
-- **UI Experience**: Added loading progress bars when fetching detailed historical data for stock cards.
-
-### v2.1.56 (2026-03-16)
-- **Watchlist Stability**: Fixed `AttributeError` when sorting items from Firestore cache.
-
-### v2.1.55 (2026-03-16)
-- **UI Cleanup**: Removed unnecessary robot status bars and manual triggers from the main trading control.
-
-### v2.1.53 (2026-03-16)
-- **Watchlist Recovery**: Fixed filtering logic to ensure symbols like `BTC-USD` and `2330` are correctly categorized and displayed.
-- **Crypto Deduplication**: Optimized MAX API grabbing to ensure unique trading pairs (prioritizing USDT).
-
-### v2.1.50 (2026-03-16)
-- **Syntax Recovery**: Fixed syntax errors in `diag.py` and patched `api/main.py`.
-- **System Stability**: Standardized internal error handling for various data formats.
-
-### v2.1.45 - v2.1.48 (2026-03-16)
-- **Symbol Refactoring**: Shifted internal symbol logic to prioritize MAX format.
-- **System Diagnostics**: Fixed SSL Certificate Verification errors on Mac.
-
-### v2.1.43 (2026-03-15)
-- **Crypto Migration**: Handled MATIC-to-POL migration and improved DOT sync.
-
-### v2.1.10 - v2.1.24 (2026-03-14 - 2026-03-15)
-- **Initial v2.1 Rollout**:
-  - Parallel Re-scoring (100x speedup).
-  - Mobile responsiveness improvements.
-  - Transaction precision and Taiwan stock data robustness enhancements.
-  - Unified list interactions and order cancellation support.
-
----
-*End of log. Continued development and refinement ongoing.*

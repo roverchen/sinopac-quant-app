@@ -85,6 +85,47 @@ def get_user_credentials(user_id):
 load_credentials = get_user_credentials
 save_credentials = update_user_credentials
 
+def save_user_settings(user_id, settings):
+    db = get_db()
+    if db:
+        try:
+            db.collection("users").document(user_id).set({"settings": settings}, merge=True)
+            return True
+        except Exception as e:
+            print(f"Firestore save settings error: {e}")
+    return False
+
+def get_user_settings(user_id):
+    db = get_db()
+    if db:
+        try:
+            doc = db.collection("users").document(user_id).get()
+            if doc.exists:
+                return doc.to_dict().get("settings", {"email_notifications_enabled": True})
+        except Exception as e:
+            print(f"Firestore load settings error: {e}")
+    return {"email_notifications_enabled": True}
+
+def get_all_users_for_notifications():
+    """Returns list of (email, user_id) for users with notifications enabled."""
+    db = get_db()
+    targets = []
+    if db:
+        try:
+            docs = db.collection("users").stream()
+            for doc in docs:
+                data = doc.to_dict()
+                settings = data.get("settings", {})
+                # Default to True if not explicitly disabled
+                if settings.get("email_notifications_enabled", True):
+                    # For this system, user_id is the email
+                    user_id = doc.id
+                    if "@" in user_id:
+                        targets.append((user_id, user_id))
+        except Exception as e:
+            print(f"Error fetching notification targets: {e}")
+    return targets
+
 def save_user_watchlist(user_id, watchlist):
     """
     Save unified watchlist. 

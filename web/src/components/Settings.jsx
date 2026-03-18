@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { authService, tradeService } from '../services/api';
-import { Save, Shield, Key, Landmark, Database, CheckCircle2, Settings as SettingsIcon, Clock } from 'lucide-react';
+import { Save, Shield, Key, Landmark, Database, CheckCircle2, Settings as SettingsIcon, Clock, Mail } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const Skeleton = ({ className }) => (
@@ -13,6 +13,9 @@ const Settings = () => {
     shioaji_secret_key: '',
     max_api_key: '',
     max_api_secret: '',
+  });
+  const [settings, setSettings] = useState({
+    email_notifications_enabled: true
   });
   const [balance, setBalance] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -40,6 +43,10 @@ const Settings = () => {
       }
     });
 
+    authService.getSettings().then(data => {
+      if (data) setSettings(data);
+    });
+
     try {
       const data = await tradeService.getBalance();
       setBalance(data);
@@ -53,7 +60,10 @@ const Settings = () => {
   const handleSave = async () => {
     setLoading(true);
     try {
-      await authService.updateCredentials(creds);
+      await Promise.all([
+        authService.updateCredentials(creds),
+        authService.updateSettings(settings)
+      ]);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (err) {
@@ -249,6 +259,27 @@ const Settings = () => {
           </div>
         </section>
       </div>
+
+      {/* Notification Settings */}
+      <section className="p-8 bg-slate-900/40 border border-slate-800 rounded-[2rem] space-y-6">
+        <div className="flex items-center gap-3 mb-2">
+          <Mail className="w-5 h-5 text-indigo-400" />
+          <h3 className="text-lg font-semibold">通知設定 (Notification Settings)</h3>
+        </div>
+        
+        <div className="flex items-center justify-between p-4 bg-slate-800/30 rounded-2xl border border-slate-700/50">
+          <div className="space-y-1">
+            <p className="font-semibold text-white text-sm">每日交易郵件通知</p>
+            <p className="text-xs text-slate-500">當自動交易機器人執行買入或賣出操作時，發送郵件通知至您的註冊信箱。</p>
+          </div>
+          <button 
+            onClick={() => setSettings({ ...settings, email_notifications_enabled: !settings.email_notifications_enabled })}
+            className={`w-14 h-8 rounded-full transition-all relative ${settings.email_notifications_enabled ? 'bg-indigo-600' : 'bg-slate-700'}`}
+          >
+            <div className={`absolute top-1 w-6 h-6 bg-white rounded-full transition-all ${settings.email_notifications_enabled ? 'left-7' : 'left-1'}`} />
+          </button>
+        </div>
+      </section>
 
       <div className="p-6 bg-indigo-600/5 border border-indigo-500/20 rounded-2xl flex items-start gap-4">
         <Shield className="w-6 h-6 text-indigo-400 mt-1 flex-shrink-0" />

@@ -33,6 +33,14 @@ export const authService = {
   updateCredentials: async (creds) => {
     const response = await api.post('/auth/credentials', { creds });
     return response.data;
+  },
+  getSettings: async () => {
+    const response = await api.get('/auth/settings');
+    return response.data;
+  },
+  updateSettings: async (settings) => {
+    const response = await api.post('/auth/settings', { settings });
+    return response.data;
   }
 };
 

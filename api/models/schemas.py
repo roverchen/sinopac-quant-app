@@ -45,6 +45,12 @@ class Token(BaseModel):
 class UserCredentialsUpdate(BaseModel):
     creds: dict
 
+class UserSettings(BaseModel):
+    email_notifications_enabled: bool = True
+
+class UserSettingsUpdate(BaseModel):
+    settings: UserSettings
+
 class ScanRequest(BaseModel):
     market_type: str = "TW"
     defense_weight: float = 0.5

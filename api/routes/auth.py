@@ -1,8 +1,8 @@
 from fastapi import APIRouter, HTTPException, Depends, Security
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from api.models.schemas import AuthRequest, Token, UserCredentialsUpdate
+from api.models.schemas import AuthRequest, Token, UserCredentialsUpdate, UserSettingsUpdate
 from api.services.auth_service import create_access_token, decode_access_token
-from api.services.storage_service import load_credentials, save_credentials
+from api.services.storage_service import load_credentials, save_credentials, get_user_settings, save_user_settings
 from google.oauth2 import id_token
 from google.auth.transport import requests
 
@@ -42,6 +42,15 @@ async def login(request: AuthRequest):
 async def get_me(user_id: str = Depends(get_current_user)):
     creds = load_credentials(user_id)
     return {"user_id": user_id, "creds": creds}
+
+@router.get("/settings")
+async def get_settings(user_id: str = Depends(get_current_user)):
+    return get_user_settings(user_id)
+
+@router.post("/settings")
+async def update_settings(update: UserSettingsUpdate, user_id: str = Depends(get_current_user)):
+    save_user_settings(user_id, update.settings.dict())
+    return {"status": "success"}
 
 @router.post("/credentials")
 async def update_credentials(update: UserCredentialsUpdate, user_id: str = Depends(get_current_user)):
