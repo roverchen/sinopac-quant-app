@@ -126,6 +126,14 @@ class AutoRobot:
 
     def perform_daily_trade(self, market_type):
         print(f"[AutoRobot] Running daily trade for {market_type}...")
+        
+        # Distributed Lock Check (v2.1.89)
+        from api.services.storage_service import acquire_daily_trade_lock
+        from datetime import datetime
+        if not acquire_daily_trade_lock(market_type, datetime.now()):
+            print(f"[AutoRobot] Skipping trade for {market_type} - Lock already held by another Cloud Run instance.")
+            return
+            
         self._update_status("Trading", f"Analyzing {market_type} for trade opportunities...")
         try:
             # Step 1: Ensure we have a scan (trigger one if needed)

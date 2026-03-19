@@ -2,6 +2,10 @@
 
 ## Version 2.1 Series
 
+### v2.1.89 (2026-03-19)
+- **Distributed Auto-Trade Lock**: 
+    - **Concurrency Fix**: Implemented an atomic distributed lock via Firestore (`acquire_daily_trade_lock`) to guarantee that only ONE Cloud Run instance can execute the daily auto-trade. This prevents duplicated multi-buys (e.g. buying 3 times at once) caused by Cloud Run auto-scaling multiple in-memory scheduler threads at the exact same minute.
+
 ### v2.1.87 (2026-03-19)
 - **Sub-Order History Tracking**:
     - **Averaging Audit**: Modified the backend matching engine (`trade_engine.py`) to preserve individual batch purchase details (`qty`, `buy_price`, `time`) inside a `sub_orders` array when merging into an average-cost Position.

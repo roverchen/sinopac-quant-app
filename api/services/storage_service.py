@@ -552,3 +552,33 @@ def load_data_pool(market):
             print(f"[Storage] Firestore summary check failed: {e}")
 
     return final_pool
+
+def acquire_daily_trade_lock(market: str, current_time: datetime) -> bool:
+    """
+    Attempts to acquire an atomic distributed lock for the daily auto-trade.
+    Prevents multiple Cloud Run instances from executing the trade concurrently.
+    """
+    db = get_db()
+    if not db:
+        return True # Fallback for local simulation
+        
+    date_str = current_time.strftime("%Y-%m-%d")
+    lock_id = f"{market}_{date_str}"
+    
+    try:
+        from google.cloud import exceptions
+        doc_ref = db.collection("users").document("system_auto").collection("locks").document(lock_id)
+        # create() atomically throws an Exception if the document already exists.
+        doc_ref.create({
+            "locked_at": current_time.isoformat(),
+            "market": market,
+            "date": date_str
+        })
+        print(f"[Storage] Successfully acquired distributed lock for {lock_id}")
+        return True
+    except exceptions.Conflict:
+        print(f"[Storage] Lock for {lock_id} is currently held by another instance. Skipping duplicate execution.")
+        return False
+    except Exception as e:
+        print(f"[Storage] Distributed lock acquisition error (allowing fallback execution): {e}")
+        return True
