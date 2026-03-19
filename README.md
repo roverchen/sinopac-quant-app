@@ -1,6 +1,6 @@
 # Sinopac Quant Pro (股市報明牌)
 
-[![Version](https://img.shields.io/badge/version-2.1.86-blue.svg)](REVISIONS.md)
+[![Version](https://img.shields.io/badge/version-2.1.87-blue.svg)](REVISIONS.md)
 ---
 
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()

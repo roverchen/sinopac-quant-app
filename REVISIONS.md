@@ -2,6 +2,11 @@
 
 ## Version 2.1 Series
 
+### v2.1.87 (2026-03-19)
+- **Sub-Order History Tracking**:
+    - **Averaging Audit**: Modified the backend matching engine (`trade_engine.py`) to preserve individual batch purchase details (`qty`, `buy_price`, `time`) inside a `sub_orders` array when merging into an average-cost Position.
+    - **Hover UI Details**: Upgraded the `TradingControl.jsx` frontend to feature a hidden dropdown menu under each aggregated stock. Users can now instantly recall the specific dates and prices of multiple sequential additions that constructed their current position without breaking the clean UI.
+
 ### v2.1.86 (2026-03-18)
 - **Advanced Mirror Trading UI & Logic**:
     - **Strategy Allocation Slider**: Replaced individual strategy weights with a unified single ratio slider (Value vs. Pullback) for more intuitive budget splitting.
