@@ -26,6 +26,13 @@ steps:
       - '--cpu'
       - '1'
 
+  # 4. Clear GCS historical cache to ensure fresh data on new version
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - 'gcloud storage rm gs://$PROJECT_ID-data/shared_results_*.pkl || exit 0'
+
 images:
   - 'gcr.io/$PROJECT_ID/quant-pro'
 
