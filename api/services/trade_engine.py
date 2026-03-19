@@ -178,6 +178,16 @@ class MatchingEngine:
         existing = next((p for p in positions if p['symbol'] == symbol), None)
         
         if action == 'Buy':
+            # Create sub_order record for this specific buy
+            sub_order = {
+                "trade_id": trade_id,
+                "qty": qty,
+                "buy_price": fill_price,
+                "fee": fee,
+                "buy_order_time": order.get("order_time") or order.get("timestamp"),
+                "fill_time": datetime.now().isoformat()
+            }
+            
             if existing:
                 total_qty = existing['qty'] + qty
                 # Include buy fee in cost basis
@@ -185,6 +195,7 @@ class MatchingEngine:
                 avg_price = total_cost / total_qty
                 existing['qty'] = total_qty
                 existing['buy_price'] = avg_price
+                existing.setdefault('sub_orders', []).append(sub_order)
             else:
                 # Include buy fee in initial cost basis
                 avg_price = (total_value + fee) / qty
@@ -199,7 +210,8 @@ class MatchingEngine:
                     "status": "OPEN",
                     "timestamp": datetime.now().isoformat(),
                     "buy_order_time": order.get("order_time") or order.get("timestamp"),
-                    "fee": fee
+                    "fee": fee,
+                    "sub_orders": [sub_order]
                 }
                 logs.append(existing)
 

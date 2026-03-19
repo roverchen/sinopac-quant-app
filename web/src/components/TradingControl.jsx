@@ -369,6 +369,24 @@ const TradingControl = () => {
                           <div className="flex flex-col">
                             <span className="text-lg font-black text-white group-hover:text-indigo-400 font-inter leading-tight">{pos.symbol}</span>
                             <span className="text-[10px] text-slate-500 font-bold">{pos.name || '-'}</span>
+                            {/* Sub-Orders History Display */}
+                            {pos.sub_orders && pos.sub_orders.length > 1 && (
+                              <>
+                                <div className="mt-1 text-[9px] text-indigo-400/50 font-bold group-hover:hidden flex items-center gap-1">
+                                  <span>↳</span> {pos.sub_orders.length} 筆歷史加碼紀錄 (懸停查看)
+                                </div>
+                                <div className="mt-2 space-y-1 hidden group-hover:block transition-all">
+                                  <div className="text-[9px] text-indigo-400/50 font-bold mb-1 border-b border-indigo-500/10 pb-1">歷史買進軌跡</div>
+                                  {pos.sub_orders.map((sub, idx) => (
+                                    <div key={idx} className="flex items-center justify-between gap-3 text-[9px] text-slate-400 font-inter bg-slate-900/50 w-full px-2 py-1 rounded-md border border-slate-800/80 hover:border-slate-700/80 transition-colors">
+                                      <span className="text-slate-500">{sub.buy_order_time ? sub.buy_order_time.split('T')[0] : sub.fill_time?.split('T')[0]}</span>
+                                      <span className="font-bold text-white">{sub.qty} <span className="text-slate-500 font-normal">單位</span></span>
+                                      <span className="font-black">${typeof sub.buy_price === 'number' ? sub.buy_price.toFixed(2) : sub.buy_price}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </>
+                            )}
                           </div>
                         </td>
                         <td className="px-8 py-6">
