@@ -233,18 +233,21 @@ def calculate_technical_indicators(df):
     df['ma100'] = df['close'].rolling(window=100).mean()
     df['ma240'] = df['close'].rolling(window=240).mean()
     df['vol_ma5'] = df['volume'].rolling(window=5).mean()
+    df['vol_ma20'] = df['volume'].rolling(window=20).mean()
 
     ema12 = df['close'].ewm(span=12).mean()
     ema26 = df['close'].ewm(span=26).mean()
     df['macd'] = ema12 - ema26
     df['signal'] = df['macd'].ewm(span=9).mean()
     df['hist'] = df['macd'] - df['signal']
+    df['hist_slope'] = df['hist'].diff() # [v2.2.0] MACD Histogram Slope
 
     high_low = df['high'] - df['low']
     high_cp = (df['high'] - df['close'].shift()).abs()
     low_cp = (df['low'] - df['close'].shift()).abs()
     tr = pd.concat([high_low, high_cp, low_cp], axis=1).max(axis=1)
     df['atr'] = tr.rolling(window=14).mean()
+    df['atr5'] = tr.rolling(window=5).mean() # [v2.2.0] Short-term ATR for spike detection
 
     df['year_high'] = df['close'].rolling(window=240, min_periods=30).max()
     df['year_low'] = df['close'].rolling(window=240, min_periods=30).min()
@@ -290,9 +293,9 @@ def check_revenue_momentum(code):
     except:
         return "Unavailable", True
 
-def analyze_stock(df, code, name, defense_weight=0.5, market_type='TW', skip_indicators=False, skip_revenue=False, exchange_rate: float = 1.0):
-    """Analyze single stock and return AnalysisResult compatible dict"""
-    if df is None or len(df) < 10:
+def analyze_stock(df, code, name, defense_weight=0.5, market_type='TW', skip_indicators=False, skip_revenue=False, exchange_rate: float = 1.0, index_df=None):
+    """Analyze single stock and return AnalysisResult compatible dict [v2.2.0]"""
+    if df is None or len(df) < 20: 
         return {
             "symbol": code, "name": name, "price": 0, "suggestion": "Invalid Data",
             "level": "-", "ma240_diff": "-", "ma20_diff": "-", "macd_status": "-", "score": -1
@@ -302,15 +305,15 @@ def analyze_stock(df, code, name, defense_weight=0.5, market_type='TW', skip_ind
     df.columns = [c.lower() for c in df.columns]
 
     # Defensive: if skip_indicators is True but columns are missing, force calculate
-    required_cols = ['ma20', 'ma240', 'ma100', 'ma60', 'macd', 'signal', 'hist', 'atr', 'year_high', 'year_low', 'ma5', 'vol_ma5']
+    required_cols = ['ma20', 'ma240', 'ma100', 'ma60', 'macd', 'signal', 'hist', 'atr', 'atr5', 'hist_slope', 'year_high', 'year_low', 'ma5', 'vol_ma5', 'vol_ma20']
     missing = [c for c in required_cols if c not in df.columns]
     
     if not skip_indicators or missing:
-        if skip_indicators and missing:
-            print(f"[QuantService] {code} is missing indicators {missing} despite skip_indicators=True. Forcing calculation.")
         df = calculate_technical_indicators(df)
     
     last_row = df.iloc[-1]
+    prev_row = df.iloc[-2] if len(df) > 1 else last_row
+    
     last_price = last_row['close']
     ma20_last = last_row['ma20']
     ma240_last = last_row['ma240']
@@ -318,7 +321,12 @@ def analyze_stock(df, code, name, defense_weight=0.5, market_type='TW', skip_ind
     year_high = last_row['year_high']
     year_low = last_row['year_low']
     atr = last_row['atr']
+    atr5 = last_row['atr5']
+    vol_ma20 = last_row['vol_ma20']
+    hist = last_row['hist']
+    hist_slope = last_row['hist_slope']
 
+    # 1. Price Space & Level
     level_percentile = (last_price - year_low) / (year_high - year_low) if year_high > year_low else 0.5
     if market_type == 'CRYPTO':
         defense_base = ma100_last if not np.isnan(ma100_last) else last_row['ma60']
@@ -328,35 +336,86 @@ def analyze_stock(df, code, name, defense_weight=0.5, market_type='TW', skip_ind
     dist_to_defense = (last_price - defense_base) / defense_base if defense_base > 0 else 0
     dist_to_ma20 = (last_price - ma20_last) / ma20_last if ma20_last > 0 else 0
 
+    # 2. Market Relative Strength (RS) [v2.2.0]
+    rs_score = 50 # Neutral
+    if index_df is not None and len(index_df) >= 10:
+        try:
+            # 10-day return comparison
+            stock_ret = (last_price - df['close'].iloc[-10]) / df['close'].iloc[-10]
+            idx_ret = (index_df['Close'].iloc[-1] - index_df['Close'].iloc[-10]) / index_df['Close'].iloc[-10]
+            # RS is the outperformance
+            rs = stock_ret - idx_ret
+            rs_score = min(100, max(0, 50 + rs * 500)) # 2% outperf = +10 pts
+        except: pass
+
+    # 3. Volume & Pattern Detection [v2.2.0]
+    vol_last = last_row['volume']
+    body = abs(last_price - last_row['open'])
+    lower_shadow = min(last_row['open'], last_price) - last_row['low']
+    
+    # Choking Volume: Low level + extremely low volume
+    is_choking = (level_percentile < 0.2) and (vol_last < vol_ma20 * 0.5)
+    
+    # Bottoming Volume: Long lower shadow + some volume pick up
+    is_bottoming = (level_percentile < 0.3) and (lower_shadow > body * 1.5) and (vol_last > vol_ma20 * 0.8)
+    
+    # Washout (Pullback + Low Vol)
+    is_washout = (-0.03 < dist_to_ma20 < 0.02) and (vol_last < vol_ma20)
+    
+    # 4. Momentum & MACD Convergence
     macd = last_row['macd']
     signal = last_row['signal']
-    hist = last_row['hist']
     is_gold_cross = (df['hist'].iloc[-2] <= 0 if len(df) > 1 else False) and hist > 0
     is_above_zero = macd > 0 and signal > 0
+    
+    has_vol_momentum = (last_price > last_row['ma5']) and (vol_last > last_row['vol_ma5'] * 1.2)
+    
+    # MACD Convergence Score (Bonus if histogram is improving)
+    momentum_bonus = 20 if hist_slope > 0 else 0
+    if is_gold_cross: momentum_bonus += 30
 
+    # 5. [v2.2.0] New Weight Table Logic
+    # Value Calculation (Defense)
+    # Price(50%), Momentum(10%), Volume(20%), RS(20%)
+    v_price = (1 - level_percentile) * 100
+    v_moment = 60 if macd_status := "Bullish" else 30 # Simple proxy
+    v_vol = 50 + (30 if is_choking else 0) + (20 if is_bottoming else 0)
+    v_rs = rs_score
+    value_score = (v_price * 0.5) + (v_moment * 0.1) + (v_vol * 0.2) + (v_rs * 0.2)
+
+    # Pullback Calculation (Growth)
+    # Momentum(50%), Price(10%), Volume(20%), RS(20%)
+    g_moment = (1 - min(abs(dist_to_ma20), 0.1)/0.1) * 50 + momentum_bonus
+    g_price = (1 - level_percentile) * 100
+    g_vol = 50 + (30 if is_washout else 0) + (20 if has_vol_momentum else 0)
+    g_rs = rs_score
+    pullback_score = (g_moment * 0.5) + (g_price * 0.1) + (g_vol * 0.2) + (g_rs * 0.2)
+
+    # 6. Filters & Penalties
+    final_score = (defense_weight * value_score) + ((1 - defense_weight) * pullback_score)
+    
+    # Volatility Filter: Penalty for sudden spikes (Fake breakouts)
+    if atr5 > 1.5 * atr: final_score *= 0.8
+    
+    # Hard Stop-Loss Penalty: Break MA20-3% or MACD Histogram drops significantly
+    if last_price < ma20_last * 0.97 or (hist < 0 and hist_slope < 0):
+        final_score *= 0.5
+
+    # [v2.2.0] Restore revenue check
+    is_rev_ok = True
+    if market_type == 'TW' and code.isdigit() and not skip_revenue:
+        rev_msg, is_rev_ok = check_revenue_momentum(code)
+        if not is_rev_ok: final_score *= 0.1
+    
     macd_status = "Bearish"
     if is_above_zero:
         macd_status = "Bullish Cross" if is_gold_cross else "Bullish Consolidation"
     else:
         macd_status = "Low Cross" if is_gold_cross else "Weak Consolidation"
-
-    ma5 = last_row['ma5']
-    vol_ma5 = last_row['vol_ma5']
-    has_vol_momentum = (last_price > ma5) and (last_row['volume'] > vol_ma5 * 1.2)
-
-    value_score = (1 - level_percentile) * 50
-    if -0.05 < dist_to_defense < 0.05: value_score += 30
-    if has_vol_momentum: value_score += 20
-
-    pullback_score = (1 - min(abs(dist_to_ma20), 0.1)/0.1) * 50
-    if is_gold_cross:
-        pullback_score += 50 if is_above_zero else 30
-
-    final_score = (defense_weight * value_score) + ((1 - defense_weight) * pullback_score)
-    is_rev_ok = True
-    if market_type == 'TW' and code.isdigit() and not skip_revenue:
-        rev_msg, is_rev_ok = check_revenue_momentum(code)
-        if not is_rev_ok: final_score *= 0.1
+    
+    # [v2.2.0] Enhanced MACD Status with convergence info
+    if hist_slope > 0 and hist < 0:
+        macd_status += " (Converging)"
 
     def sanitize(val):
         if val is None or (isinstance(val, (float, np.floating)) and np.isnan(val)): return 0.0
@@ -377,14 +436,15 @@ def analyze_stock(df, code, name, defense_weight=0.5, market_type='TW', skip_ind
         entry_price = ma20_last
         atr_mult = 3.0 if market_type == 'CRYPTO' else 2.5
         stop_loss = last_price - (atr_mult * atr)
-        rr_ratio = 4.0 if (market_type == 'CRYPTO' and last_row['volume'] > vol_ma5 * 2.0) else 3.0
+        rr_ratio = 4.0 if (market_type == 'CRYPTO' and vol_last > vol_ma20 * 2.0) else 3.0
         target_price = last_price + (last_price - stop_loss) * rr_ratio
     else:
         type_prefix = "Value"
         entry_price = min(last_price, defense_base)
         target_price = max(defense_base, entry_price * 1.2)
         stop_loss = year_low * 0.95
-        if has_vol_momentum: type_prefix += "+"
+        if is_choking: type_prefix += "(Choke)"
+        if is_bottoming: type_prefix += "(Bottom)"
 
     # [v2.1.64] Convert prices to TWD if exchange_rate provided
     if market_type == 'CRYPTO' and exchange_rate > 1.0:
@@ -406,13 +466,12 @@ def analyze_stock(df, code, name, defense_weight=0.5, market_type='TW', skip_ind
         "score": round(final_score, 1), "market": market_type, "ma_base": defense_base,
         "ma20": ma20_last, "atr": atr, "entry_price": round(sanitize(entry_price), 2),
         "stop_loss": round(sanitize(stop_loss), 2), "target_price": round(sanitize(target_price), 2),
-        "value_score": round(sanitize(value_score), 1), "pullback_score": round(sanitize(pullback_score), 1)
+        "value_score": round(sanitize(value_score), 1), "pullback_score": round(sanitize(pullback_score), 1),
+        "rs_score": round(sanitize(rs_score), 1)
     }
 
 async def run_market_scan(market_type: str, defense_weight: float = 0.5):
     """Background task to scan market and save results pool"""
-    global scan_status, results_cache
-    from api.services.data_fetcher import fetch_batch_data
 
     try:
         print(f"[QuantService] Starting {market_type} market scan (Defense Weight: {defense_weight})...")
@@ -428,13 +487,20 @@ async def run_market_scan(market_type: str, defense_weight: float = 0.5):
         total = len(symbols)
         if total == 0: raise ValueError(f"No symbols found for {market_type}")
 
-        print(f"[QuantService] Starting {market_type} market scan (Defense Weight: {defense_weight}). Filtered Symbols: {total}")
-        
+        # [v2.2.0] Fetch Index Data for RS calculation
+        index_symbol = "^TWII" if market_type == "TW" else ("^GSPC" if market_type == "US" else "BTC-USD")
+        index_df = None
+        try:
+            import yfinance as yf
+            index_df = yf.Ticker(index_symbol).history(period="1mo")
+            print(f"[QuantService] Fetched index {index_symbol} for RS calculation.")
+        except Exception as e:
+            print(f"[QuantService] Failed to fetch index {index_symbol}: {e}")
+
         # [v2.1.64] Fetch USD/TWD rate if Crypto
         exchange_rate = 1.0
         if market_type == "CRYPTO":
             try:
-                import yfinance as yf
                 rate_df = yf.Ticker("TWD=X").history(period="1d")
                 if not rate_df.empty:
                     exchange_rate = float(rate_df['Close'].iloc[-1])
@@ -448,12 +514,6 @@ async def run_market_scan(market_type: str, defense_weight: float = 0.5):
 
         for i in range(0, total, chunk_size):
             chunk = symbols[i : i + chunk_size]
-            print(f"[QuantService] Fetching {market_type} chunk {i//chunk_size + 1}: {chunk[:3]}...")
-            data_map = fetch_batch_data(chunk, market_type)
-
-            for s, df in data_map.items():
-                name = symbols_map.get(s, "Unknown")
-                # PRE-CALCULATE INDICATORS ONCE and save to all_dfs
                 df = calculate_technical_indicators(df)
                 analysis = analyze_stock(df, s, name, defense_weight, market_type, skip_indicators=True, exchange_rate=exchange_rate)
                 results.append(AnalysisResult(**analysis))

@@ -95,7 +95,7 @@ const Watchlist = () => {
       }
 
       if (marketType === 'ALL') {
-        const resp = await quantService.analyze([], defenseWeight, 'ALL');
+        const resp = await quantService.analyze([], 1 - defenseWeight, 'ALL');
         let sortedData = (resp.results || []).sort((a, b) => b.score - a.score);
         
         if (search) {
@@ -107,15 +107,15 @@ const Watchlist = () => {
         
         setData(sortedData);
         setTotal(sortedData.length);
-        setCachedData(prev => ({ ...prev, ALL: { results: sortedData, total: sortedData.length } }));
+        setCachedData(prev => ({ ...prev, [cacheKey]: { results: sortedData, total: sortedData.length } }));
       } else {
         if (forceScan) {
-          await quantService.startScan(marketType, defenseWeight);
+          await quantService.startScan(marketType, 1 - defenseWeight);
           startPollingProgress();
           return;
         }
-        // 使用新 API 傳入 defenseWeight
-        const resp = await quantService.getResults(marketType, page, pageSize, search, defenseWeight);
+        // 使用新 API 傳入 defenseWeight (Backend expects Value weight)
+        const resp = await quantService.getResults(marketType, page, pageSize, search, 1 - defenseWeight);
         setData(resp.results || []);
         setTotal(resp.total || 0);
         
@@ -337,7 +337,7 @@ const Watchlist = () => {
               className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
             />
             <div className="text-[10px] text-center font-bold text-indigo-400">
-              比重配置: {Math.round(defenseWeight * 100)}% / {Math.round((1 - defenseWeight) * 100)}%
+              比重配置: {Math.round((1 - defenseWeight) * 100)}% / {Math.round(defenseWeight * 100)}%
             </div>
           </div>
         </div>

@@ -2,6 +2,38 @@
 
 ## Version 2.1 Series
 
+### v2.2.0 (2026-03-20) - **Quant Engine v2 Upgrade**
+- **Enhanced Scoring Core**:
+  - [Backend] Implemented **Relative Strength (RS)** comparison vs indices (^TWII, ^GSPC, BTC).
+  - [Backend] Added **Volume Behavioral Detection**: Choking Volume (底部窒息量), Bottoming Volume (止跌量), and Washout Volume (縮量回測).
+  - [Backend] Added **MACD Histogram Slope** to detect convergence/divergence earlier than crosses.
+  - [Backend] Implemented **ATR-Volatility Filter** to penalize sudden volatility spikes (Fake breakouts).
+  - [Backend] Added **Hard Stop-Loss Penalty** (Break MA20-3% or MACD negative flip).
+  - [Backend] Updated scoring weights to 50/10/20/20 (Value) and 10/50/20/20 (Growth).
+
+### v2.1.94 (2026-03-20)
+- **UI Cleanup & Optimization**:
+  - [Frontend] Relocated `sub_orders` (history of buys) from the "Current Positions" table to the "Sell Modal".
+  - [Frontend] Improved Sell Modal layout with a scrollable history section for multiple buy entries.
+  - [Frontend] Fixed JSX structural errors in `TradingControl.jsx`.
+
+### v2.1.93 (2026-03-20)
+- **Dashboard Performance Boost**:
+  - [Backend] Added 1-hour in-memory cache for `/trend` API to avoid slow Yahoo Finance fetches.
+  - [Backend] Optimized `/results` to skip expensive O(N log N) sorting when `defense_weight` is None.
+  - [Frontend] Parallelized market highlight fetching (TW/US/Crypto) in `Dashboard.jsx`.
+
+### v2.1.92 (2026-03-20)
+- **Fast Re-score & Caching**: 
+  - [Backend] Optimized `/analyze` and `/results` to re-score using sub-scores without K-line dependency.
+  - [Frontend] Fixed "My List" cache key to include weights, preventing stale results.
+- **UI Unification**:
+  - [Frontend] Unified all strategy sliders: Left=Value, Right=Pullback.
+  - [Frontend] Added strategy weight slider to "Strategy Scan" page.
+- **Mirror Trading Fixes**:
+  - [Backend] Normalized strategy weight scaling (0.5 ratio = 100% budget).
+  - [Backend] Added $1,000,000 default balance for simulation/mock accounts.
+
 ### v2.1.89 (2026-03-19)
 - **Distributed Auto-Trade Lock**: 
     - **Concurrency Fix**: Implemented an atomic distributed lock via Firestore (`acquire_daily_trade_lock`) to guarantee that only ONE Cloud Run instance can execute the daily auto-trade. This prevents duplicated multi-buys (e.g. buying 3 times at once) caused by Cloud Run auto-scaling multiple in-memory scheduler threads at the exact same minute.

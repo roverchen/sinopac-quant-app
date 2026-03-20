@@ -53,38 +53,38 @@ async def analyze_watchlist(request: StockAnalysisRequest, current_user: str = D
 
     for s, target_market, code in unique_items:
         pool = get_cached_pool(target_market) or {}
-        # [v2.1.52] Robust handling for both dict (from Firestore) and objects (from Pickle)
-        pool_results = {}
-        for r in pool.get("results", []):
-            # Safer attribute access logic
-            if isinstance(r, dict):
-                sym = r.get('symbol')
-            else:
-                sym = getattr(r, 'symbol', None)
-            if sym: pool_results[sym] = r
+        pool_results = { (r.get('symbol') if isinstance(r, dict) else getattr(r, 'symbol', None)): r for r in pool.get('results', []) }
+        
+        res = pool_results.get(code)
+        # [v2.1.92] Fast Re-score Logic: If we have sub-scores, use them instead of re-analyzing K-lines
+        if res:
+            v_score = res.get('value_score') if isinstance(res, dict) else getattr(res, 'value_score', 0)
+            p_score = res.get('pullback_score') if isinstance(res, dict) else getattr(res, 'pullback_score', 0)
             
-        dfs = pool.get("dfs", {})
+            if v_score is not None and p_score is not None:
+                w = request.defense_weight
+                new_score = round((w * v_score) + ((1 - w) * p_score), 1)
+                
+                # Update result with new score and market info
+                if isinstance(res, dict):
+                    res['score'] = new_score
+                    if not res.get('market'): res['market'] = target_market
+                    results.append(AnalysisResult(**res))
+                else:
+                    setattr(res, 'score', new_score)
+                    if not getattr(res, 'market', None): setattr(res, 'market', target_market)
+                    results.append(res)
+                continue
 
-        if code in pool_results and request.defense_weight == 0.5:
-            # Add market info if missing
-            res = pool_results[code]
-            if isinstance(res, dict):
-                res_market = res.get('market')
-                if not res_market: res['market'] = target_market
-            else:
-                res_market = getattr(res, 'market', None)
-                if not res_market: setattr(res, 'market', target_market)
-            results.append(res)
-        elif code in dfs:
-            res = pool_results.get(code)
+        # Fallback to K-line analysis if sub-scores missing
+        dfs = pool.get("dfs", {})
+        if code in dfs:
             name = "Unknown"
             if res:
-                if isinstance(res, dict): name = res.get('name', 'Unknown')
-                else: name = getattr(res, 'name', 'Unknown')
-            analysis = analyze_stock(dfs[code], code, name, request.defense_weight, target_market)
+                name = res.get('name', 'Unknown') if isinstance(res, dict) else getattr(res, 'name', 'Unknown')
+            analysis = analyze_stock(dfs[code], code, name, request.defense_weight, target_market, skip_indicators=True)
             results.append(AnalysisResult(**analysis))
         else:
-            # For data fetcher, we pass the raw symbol or reconstructed one
             data_map_needed.append((s, target_market))
 
     if data_map_needed:
@@ -98,15 +98,25 @@ async def analyze_watchlist(request: StockAnalysisRequest, current_user: str = D
             # Re-fetch data if not in pool
             from api.services.data_fetcher import fetch_batch_data
             data_pool = fetch_batch_data([code], m)
-            df = data_pool.get(code)
             
-            if df is not None:
-                name = "Unknown"
-                if m == "TW": name = tw_symbols.get(code, "Unknown")
-                elif m == "US": name = us_symbols.get(code, "Unknown")
-                elif m == "CRYPTO": name = crypto_symbols.get(code.upper(), "Unknown")
+            # [v2.2.0] Fetch Market Index for RS
+            index_symbol = "^TWII" if m == "TW" else ("^GSPC" if m == "US" else "BTC-USD")
+            idx_df = None
+            try:
+                import yfinance as yf
+                idx_df = yf.Ticker(index_symbol).history(period="1mo")
+            except: pass
 
-                analysis = analyze_stock(df, code, name, request.defense_weight, m)
+            for c, kdf in data_pool.items():
+                name = "Unknown"
+                if m == "TW": name = tw_symbols.get(c, "Unknown")
+                elif m == "US": name = us_symbols.get(c, "Unknown")
+                elif m == "CRYPTO": name = crypto_symbols.get(c.upper(), "Unknown")
+
+                analysis = analyze_stock(
+                    kdf, c, name, 
+                    request.defense_weight, m, index_df=idx_df
+                )
                 results.append(AnalysisResult(**analysis))
             else:
                 results.append(AnalysisResult(
@@ -151,10 +161,23 @@ async def get_market_results(
             
             def rescore_task(r):
                 code = getattr(r, 'symbol', r.get('symbol') if isinstance(r, dict) else None)
+                v_score = getattr(r, 'value_score', r.get('value_score') if isinstance(r, dict) else 0)
+                p_score = getattr(r, 'pullback_score', r.get('pullback_score') if isinstance(r, dict) else 0)
+                
+                # [v2.1.92] Fast Re-score: Priority given to mathematical re-calculation
+                if v_score is not None and p_score is not None:
+                    new_score = round((defense_weight * v_score) + ((1 - defense_weight) * p_score), 1)
+                    if isinstance(r, dict):
+                        r['score'] = new_score
+                        return AnalysisResult(**r)
+                    else:
+                        setattr(r, 'score', new_score)
+                        return r
+
+                # Fallback to K-line re-analysis only if sub-scores are unavailable
                 df = dfs.get(code)
                 name = getattr(r, 'name', r.get('name', 'Unknown') if isinstance(r, dict) else 'Unknown')
                 if df is not None:
-                    # skip_indicators=True and skip_revenue=True for 100x speedup
                     analysis = analyze_stock(df, code, name, defense_weight, market_type, skip_indicators=True, skip_revenue=True)
                     return AnalysisResult(**analysis)
                 else:
@@ -165,7 +188,9 @@ async def get_market_results(
             
             results_cache[cache_key] = all_results
     
-    all_results = sorted(all_results, key=lambda x: x.score if hasattr(x, 'score') else (x.get('score', 0) if isinstance(x, dict) else 0), reverse=True)
+    # [v2.1.93] Performance: Only sort if defense_weight was provided (otherwise it's already pre-sorted from scan)
+    if defense_weight is not None:
+        all_results = sorted(all_results, key=lambda x: x.score if hasattr(x, 'score') else (x.get('score', 0) if isinstance(x, dict) else 0), reverse=True)
     for r in all_results:
         if hasattr(r, 'market') and not r.market:
             r.market = market_type
@@ -242,7 +267,19 @@ async def get_market_trend(market_type: str = "TW", days: int = 7):
     """
     Fetch market index vs selection pool performance for dashboard trend chart.
     Selection Pool performance is the average normalized price of the TOP 5 stocks from latest scan.
+    [v2.1.93] Optimized with 1-hour in-memory cache.
     """
+    global trend_cache
+    if 'trend_cache' not in globals():
+        globals()['trend_cache'] = {}
+    
+    cache_key = f"{market_type}_{days}"
+    now = datetime.now()
+    if cache_key in globals()['trend_cache']:
+        cached_data, timestamp = globals()['trend_cache'][cache_key]
+        if (now - timestamp).total_seconds() < 3600: # 1 hour cache
+            return cached_data
+
     from api.services.quant_service import get_yahoo_ticker, fetch_stock_data, extract_stock_code
     import yfinance as yf
     import pandas as pd
@@ -363,9 +400,16 @@ async def get_market_trend(market_type: str = "TW", days: int = 7):
             "value": round(float(pool_norm.iloc[i]), 2) # Backward compatibility for old UI
         })
 
-    return {
+    # 6. Return
+    result = {
         "market": market_type,
         "index_symbol": index_symbol,
         "top_stocks": top_symbols,
         "chart_data": chart_data
     }
+    
+    # Save to cache
+    if 'trend_cache' in globals():
+        globals()['trend_cache'][cache_key] = (result, datetime.now())
+        
+    return result

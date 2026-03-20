@@ -397,7 +397,9 @@ class ShioajiService:
     @classmethod
     def get_balance(cls, email: str):
         api = cls.get_api_client(email)
-        if api and not (hasattr(api, 'is_mock') or type(api).__name__ == 'MockShioajiClient'):
+        if api:
+            if hasattr(api, 'is_mock') or type(api).__name__ == 'MockShioajiClient':
+                return 1000000.0 # Default balance for paper trading
             try:
                 balance_data = api.account_balance()
                 if balance_data and hasattr(balance_data, 'acc_balance'):

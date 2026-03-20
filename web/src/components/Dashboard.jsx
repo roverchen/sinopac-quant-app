@@ -97,10 +97,12 @@ const Dashboard = ({ onNavigate }) => {
 
   const fetchFocusTargets = async () => {
     try {
-      // Fetch top 1 from each market
-      const tw = await quantService.getResults('TW', 1, 1);
-      const us = await quantService.getResults('US', 1, 1);
-      const crypto = await quantService.getResults('CRYPTO', 1, 1);
+      // Fetch top 1 from each market in parallel
+      const [tw, us, crypto] = await Promise.all([
+        quantService.getResults('TW', 1, 1),
+        quantService.getResults('US', 1, 1),
+        quantService.getResults('CRYPTO', 1, 1)
+      ]);
       
       const combined = [
         ...(tw.results || []),

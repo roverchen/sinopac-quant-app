@@ -7,6 +7,7 @@ const StrategyScan = () => {
   const [scanning, setScanning] = useState(false);
   const [progress, setProgress] = useState(0);
   const [market, setMarket] = useState('TW');
+  const [defenseWeight, setDefenseWeight] = useState(0.5); // 0 = Value, 1 = Pullback
   const [results, setResults] = useState([]);
 
   const startScan = async () => {
@@ -15,8 +16,8 @@ const StrategyScan = () => {
       setProgress(0);
       setResults([]);
       
-      // 呼叫後端 API 啟動海選
-      await quantService.startScan(market, 0.5);
+      // 呼叫後端 API 啟動海選 (Backend expects Value weight)
+      await quantService.startScan(market, 1 - defenseWeight);
       
       // 每 1.5 秒輪詢進度
       const poll = setInterval(async () => {
@@ -70,6 +71,26 @@ const StrategyScan = () => {
             <option value="US">美股標普 500</option>
             <option value="CRYPTO">加密貨幣前 100 名</option>
           </select>
+
+          <div className="flex flex-col gap-1 w-48">
+            <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-slate-500">
+              <span>🛡 價值</span>
+              <span>拉回 🚀</span>
+            </div>
+            <input 
+              type="range" 
+              min="0" 
+              max="1" 
+              step="0.1" 
+              value={defenseWeight}
+              onChange={(e) => setDefenseWeight(parseFloat(e.target.value))}
+              disabled={scanning}
+              className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-500 disabled:opacity-50"
+            />
+            <div className="text-[10px] text-center font-bold text-indigo-400">
+              海選策略: {Math.round((1 - defenseWeight) * 100)}% / {Math.round(defenseWeight * 100)}%
+            </div>
+          </div>
           
           <button
             onClick={startScan}

@@ -369,24 +369,6 @@ const TradingControl = () => {
                           <div className="flex flex-col">
                             <span className="text-lg font-black text-white group-hover:text-indigo-400 font-inter leading-tight">{pos.symbol}</span>
                             <span className="text-[10px] text-slate-500 font-bold">{pos.name || '-'}</span>
-                            {/* Sub-Orders History Display */}
-                            {pos.sub_orders && pos.sub_orders.length > 1 && (
-                              <>
-                                <div className="mt-1 text-[9px] text-indigo-400/50 font-bold group-hover:hidden flex items-center gap-1">
-                                  <span>↳</span> {pos.sub_orders.length} 筆歷史加碼紀錄 (懸停查看)
-                                </div>
-                                <div className="mt-2 space-y-1 hidden group-hover:block transition-all">
-                                  <div className="text-[9px] text-indigo-400/50 font-bold mb-1 border-b border-indigo-500/10 pb-1">歷史買進軌跡</div>
-                                  {pos.sub_orders.map((sub, idx) => (
-                                    <div key={idx} className="flex items-center justify-between gap-3 text-[9px] text-slate-400 font-inter bg-slate-900/50 w-full px-2 py-1 rounded-md border border-slate-800/80 hover:border-slate-700/80 transition-colors">
-                                      <span className="text-slate-500">{sub.buy_order_time ? sub.buy_order_time.split('T')[0] : sub.fill_time?.split('T')[0]}</span>
-                                      <span className="font-bold text-white">{sub.qty} <span className="text-slate-500 font-normal">單位</span></span>
-                                      <span className="font-black">${typeof sub.buy_price === 'number' ? sub.buy_price.toFixed(2) : sub.buy_price}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </>
-                            )}
                           </div>
                         </td>
                         <td className="px-8 py-6">
@@ -656,22 +638,31 @@ const TradingControl = () => {
                     <p className="text-xl font-bold text-white font-inter">${selectedPosition.buy_price.toLocaleString()}</p>
                   </div>
                 </div>
-
-                {/* [v2.1.65] Added Buy Timestamps */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-4 bg-slate-800/30 rounded-2xl border border-slate-700/50">
-                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">買入委託時間</p>
-                    <p className="text-xs font-bold text-slate-300 font-inter">
-                      {selectedPosition.buy_order_time && selectedPosition.buy_order_time !== 'None' ? new Date(selectedPosition.buy_order_time).toLocaleString() : '系統升級前'}
-                    </p>
+                
+                {/* [v2.1.94] Sub-Orders History (Relocated from table for cleaner UI) */}
+                {selectedPosition.sub_orders && selectedPosition.sub_orders.length > 0 && (
+                  <div className="space-y-3">
+                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">歷史買進軌跡 ({selectedPosition.sub_orders.length} 筆)</p>
+                    <div className="max-h-32 overflow-y-auto pr-2 space-y-2 custom-scrollbar">
+                      {selectedPosition.sub_orders.map((sub, idx) => (
+                        <div key={idx} className="flex items-center justify-between p-3 bg-slate-800/30 rounded-xl border border-slate-700/50 text-[11px]">
+                          <div className="flex flex-col">
+                            <span className="text-slate-400 font-inter">
+                              {sub.buy_order_time ? new Date(sub.buy_order_time).toLocaleDateString() : (sub.fill_time ? new Date(sub.fill_time).toLocaleDateString() : '歷史資料')}
+                            </span>
+                            <span className="text-[9px] text-slate-500">
+                              {sub.buy_order_time ? new Date(sub.buy_order_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
+                            </span>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-bold text-white">{sub.qty} <span className="text-slate-500 font-normal">單位</span></div>
+                            <div className="font-black text-indigo-400">${typeof sub.buy_price === 'number' ? sub.buy_price.toFixed(2) : sub.buy_price}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div className="p-4 bg-slate-800/30 rounded-2xl border border-slate-700/50">
-                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">買入確認時間</p>
-                    <p className="text-xs font-bold text-slate-300 font-inter">
-                      {selectedPosition.buy_filled_time && selectedPosition.buy_filled_time !== 'None' ? new Date(selectedPosition.buy_filled_time).toLocaleString() : '系統升級前'}
-                    </p>
-                  </div>
-                </div>
+                )}
 
                 <div className="space-y-4">
                   <div>

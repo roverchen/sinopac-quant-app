@@ -234,12 +234,13 @@ class AutoRobot:
                 total_pct = settings.get("total_allocation_pct", 10.0) / 100.0
                 ratio = settings.get("strategy_ratio", 0.5)
 
-                if pullback_score * 0.5 >= value_score * 0.5:
-                    # Scaling by ratio: if ratio is 1.0, use full total_pct
-                    weight = total_pct * ratio
+                if pullback_score >= value_score:
+                    # [v2.1.90] Normalized Scaling: 0.5 ratio = 100% budget. 
+                    # If ratio < 0.5, scale down Pullback. If >= 0.5, keep 100%.
+                    weight = total_pct * min(1.0, ratio / 0.5)
                 else:
-                    # Scaling by (1-ratio): if ratio is 0.0, use full total_pct
-                    weight = total_pct * (1 - ratio)
+                    # If ratio > 0.5, scale down Value. If <= 0.5, keep 100%.
+                    weight = total_pct * min(1.0, (1.0 - ratio) / 0.5)
 
                 order_value = balance * weight
                 
