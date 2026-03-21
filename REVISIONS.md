@@ -2,6 +2,11 @@
 
 ## Version 2.2 Series
 
+### v2.4.1 (2026-03-22)
+- **UI Safety Restrictions**:
+  - [Frontend] Disabled manual "Sell" and "Cancel Order" buttons in `TradingControl.jsx` when viewing the **System Auto-Trade** account.
+  - [Frontend] Added visual feedback ("系統自動標的不可手動賣出") to guide users.
+
 ### v2.4.0 (2026-03-22)
 - **Simulation Lifecycle Optimization**:
   - [Backend] Implemented **Direct-Fill** for simulation trades: Bypass `PENDING` state and fill immediately.

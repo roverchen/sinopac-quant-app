@@ -528,10 +528,10 @@ const TradingControl = ({ navParams }) => {
                 <div className="pt-4 border-t border-slate-800 flex flex-col gap-3">
                   <button
                     onClick={handleCancelOrder}
-                    disabled={loading}
-                    className="w-full bg-rose-600/10 hover:bg-rose-600/20 text-rose-400 font-black py-4 rounded-2xl transition-all border border-rose-600/20 flex items-center justify-center gap-2"
+                    disabled={loading || viewAccount === 'system_auto'}
+                    className="w-full bg-rose-600/10 hover:bg-rose-600/20 text-rose-400 font-black py-4 rounded-2xl transition-all border border-rose-600/20 flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed"
                   >
-                    {loading ? "處理中..." : "撤銷此筆委託 (Cancel Order)"}
+                    {loading ? "處理中..." : viewAccount === 'system_auto' ? "系統委託不可手動撤單" : "撤銷此筆委託 (Cancel Order)"}
                   </button>
                   <button
                     onClick={() => setSelectedPending(null)}
@@ -638,7 +638,12 @@ const TradingControl = ({ navParams }) => {
                       <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">賣出數量</label>
                       <button 
                         onClick={() => setSellForm({...sellForm, qty: selectedPosition.qty})}
-                        className="text-[10px] font-black text-indigo-400 uppercase tracking-widest hover:text-indigo-300"
+                        disabled={viewAccount === 'system_auto'}
+                        className={`text-[10px] font-black uppercase tracking-widest transition-colors ${
+                          viewAccount === 'system_auto' 
+                            ? 'text-slate-600 cursor-not-allowed' 
+                            : 'text-indigo-400 hover:text-indigo-300'
+                        }`}
                       >
                         全部平倉
                       </button>
@@ -673,11 +678,13 @@ const TradingControl = ({ navParams }) => {
               <div className="p-8 pt-0">
                 <button
                   onClick={handleSellSubmit}
-                  disabled={loading}
-                  className="w-full bg-rose-600 hover:bg-rose-500 text-white font-black py-5 rounded-2xl transition-all transform active:scale-95 shadow-xl shadow-rose-600/20 disabled:opacity-50 flex items-center justify-center gap-3"
+                  disabled={loading || viewAccount === 'system_auto'}
+                  className="w-full bg-rose-600 hover:bg-rose-500 text-white font-black py-5 rounded-2xl transition-all transform active:scale-95 shadow-xl shadow-rose-600/20 disabled:opacity-50 disabled:bg-slate-800 disabled:text-slate-500 flex items-center justify-center gap-3"
                 >
                   {loading ? (
                     <div className="w-6 h-6 border-3 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : viewAccount === 'system_auto' ? (
+                    "系統自動標的不可手動賣出"
                   ) : (
                     <>
                       確認賣出委託
