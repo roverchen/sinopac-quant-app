@@ -2,6 +2,12 @@
 
 ## Version 2.2 Series
 
+### v2.4.0 (2026-03-22)
+- **Simulation Lifecycle Optimization**:
+  - [Backend] Implemented **Direct-Fill** for simulation trades: Bypass `PENDING` state and fill immediately.
+  - [Backend] Automated **Legacy Order Flush**: Existing simulation `PENDING` orders are now automatically converted to `FILLED` status.
+  - [Backend] Refactored `trade_engine.py` to expose public `execute_fill` method.
+
 ### v2.3.0 (2026-03-21)
 - **Quant Engine v2.3 Major Momentum Update**:
   - [Backend] Implemented **Opening Strength (開盤強度)** indicator for gap detection.

@@ -57,6 +57,17 @@ class MatchingEngine:
 
         prices = {}
         has_sim = any(o.get('is_simulation', True) for o in pending)
+        
+        # [v2.4.0] Immediate Flush: For Simulation, skip price check and match all
+        if has_sim:
+            print(f"[v2.4.0] Flushing {len([o for o in pending if o.get('is_simulation', True)])} simulation orders for {user_id}")
+            for order in pending:
+                if order.get('is_simulation', True):
+                    # For immediate fill, we can use the original limit price or try to find current if it helps
+                    # But the requirement is "直接成立", so we'll use limit_price as the fill_price
+                    # or current_price if we are already fetching it.
+                    pass
+
         if has_sim:
             for s, t in tickers.items():
                 price = None
@@ -101,11 +112,11 @@ class MatchingEngine:
             is_simulation = order.get('is_simulation', True)
 
             if is_simulation:
-                if current_price is not None:
-                    if action == 'Buy' and current_price <= limit_price:
-                        is_matched = True
-                    elif action == 'Sell' and current_price >= limit_price:
-                        is_matched = True
+                # [v2.4.0] Direct Fill: Always match
+                is_matched = True
+                # If current_price is available, use it (closer to 'now'), else use limit_price
+                if current_price is None:
+                    current_price = limit_price
             else:
                 if api and not hasattr(api, 'is_mock'):
                     try:
@@ -129,7 +140,7 @@ class MatchingEngine:
         if modified:
             for order, fill_price in results:
                 # IMPORTANT: Pass logs and set should_save=False
-                self._execute_fill(user_id, order, fill_price, logs=logs, should_save=False)
+                self.execute_fill(user_id, order, fill_price, logs=logs, should_save=False)
             
             # Final atomic save
             save_user_trade_logs(user_id, logs)
@@ -151,7 +162,7 @@ class MatchingEngine:
             
         return round(fee, 2), round(tax, 2)
 
-    def _execute_fill(self, user_id, order, fill_price, logs=None, should_save=True):
+    def execute_fill(self, user_id, order, fill_price, logs=None, should_save=True):
         if logs is None:
             logs = get_user_trade_logs(user_id)
         

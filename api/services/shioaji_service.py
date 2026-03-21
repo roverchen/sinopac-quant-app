@@ -39,10 +39,12 @@ class MockShioajiClient:
         else:
             market = "US"
 
-        logs.append({
+        # [v2.4.0] Immediate Fill for Simulation
+        from api.services.trade_engine import engine
+        order_item = {
             "trade_id": order_id,
             "symbol": target_symbol,
-            "name": name or target_symbol, # Persist name if provided
+            "name": name or target_symbol,
             "action": "Buy" if "Buy" in str(target_action) else "Sell",
             "qty": float(target_qty),
             "price": float(target_price),
@@ -50,10 +52,11 @@ class MockShioajiClient:
             "is_simulation": True,
             "entry_type": "PENDING",
             "status": "OPEN",
-            "timestamp": datetime.now().isoformat()
-        })
-        save_user_trade_logs(self.user_id, logs)
-        print(f"[MockShioaji] SIM Order saved for {self.user_id}: {target_symbol} @ {target_price}")
+            "timestamp": datetime.now().isoformat(),
+            "order_time": datetime.now().isoformat()
+        }
+        engine.execute_fill(self.user_id, order_item, float(target_price))
+        print(f"[MockShioaji] SIM Order DIRECT FILLED for {self.user_id}: {target_symbol} @ {target_price}")
 
         class MockTrade:
             class Order: id = order_id
@@ -179,6 +182,7 @@ class ShioajiService:
             else:
                 market = "US"
 
+            from api.services.trade_engine import engine
             pending_item = {
                 "trade_id": order_id,
                 "symbol": symbol,
@@ -193,9 +197,9 @@ class ShioajiService:
                 "timestamp": datetime.now().isoformat(),
                 "order_time": datetime.now().isoformat()
             }
-            logs.append(pending_item)
-            save_user_trade_logs(email, logs)
-            print(f"[ShioajiService] MOCK Order saved for {email}: {symbol} @ {price}")
+            # [v2.4.0] Direct Fill
+            engine.execute_fill(email, pending_item, float(price))
+            print(f"[ShioajiService] MOCK Order DIRECT FILLED for {email}: {symbol} @ {price}")
 
             class MockTrade:
                 class Order: id = order_id
