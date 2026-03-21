@@ -2,6 +2,10 @@
 
 ## Version 2.2 Series
 
+### v2.2.5 (2026-03-21)
+- **Notification Enhancements**:
+  - [Backend] Attempted to hide email address in `From` header to display only "Sinopac Quant Pro (no-reply)".
+
 ### v2.2.4 (2026-03-21)
 - **Notification Enhancements**:
   - [Backend] Updated `email_service.py` to use a professional "no-reply" display name in the `From` header.
