@@ -10,8 +10,13 @@ const Skeleton = ({ className }) => (
   <div className={`animate-pulse bg-slate-800/50 rounded-2xl ${className}`} />
 );
 
-const StatCard = ({ label, value, change, color, icon: Icon, subValue, loading }) => (
-  <div className="p-6 bg-slate-900/40 border border-slate-800 rounded-3xl hover:border-slate-700 transition-all group relative overflow-hidden">
+const StatCard = ({ label, value, change, color, icon: Icon, subValue, loading, onClick }) => (
+  <div 
+    onClick={onClick}
+    className={`p-6 bg-slate-900/40 border border-slate-800 rounded-3xl transition-all group relative overflow-hidden ${
+      onClick ? 'cursor-pointer hover:border-indigo-500/50 hover:bg-slate-900/60' : 'hover:border-slate-700'
+    }`}
+  >
     {loading ? (
       <div className="space-y-4">
         <div className="flex justify-between">
@@ -146,6 +151,7 @@ const Dashboard = ({ onNavigate }) => {
           icon={Zap} 
           subValue={`回報率(百分比)`}
           loading={loading}
+          onClick={() => onNavigate('trading', { viewAccount: 'system_auto' })}
         />
         <StatCard label="策略平均勝率" value="78.2%" change="+2.4" color="amber" icon={BarChart3} loading={loading} />
       </div>

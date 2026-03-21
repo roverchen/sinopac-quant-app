@@ -13,7 +13,7 @@ const SkeletonRow = ({ cols = 6 }) => (
   </tr>
 );
 
-const TradingControl = () => {
+const TradingControl = ({ navParams }) => {
   const [status, setStatus] = useState({ auto_trade_enabled: false, mode: 'Simulation', backend_version: "2.1.77" });
   const [account, setAccount] = useState({ balance: 0, positions: [], status: 'loading' });
   const [loading, setLoading] = useState(false);
@@ -32,6 +32,12 @@ const TradingControl = () => {
     const interval = setInterval(refreshAll, 60000);
     return () => clearInterval(interval);
   }, [viewAccount, viewType]);
+  
+  useEffect(() => {
+    if (navParams?.viewAccount) {
+      setViewAccount(navParams.viewAccount);
+    }
+  }, [navParams]);
 
   const refreshAll = () => {
     fetchStatus();

@@ -64,6 +64,7 @@ function App() {
   const [isAppLoading, setIsAppLoading] = useState(true)
   const [loadProgress, setLoadProgress] = useState(0)
   const [isNavigating, setIsNavigating] = useState(false)
+  const [navParams, setNavParams] = useState(null)
 
   useEffect(() => {
     setIsNavigating(true)
@@ -147,8 +148,9 @@ function App() {
             <button
               key={item.id}
               onClick={() => {
-                setActiveTab(item.id)
-                setIsMobileMenuOpen(false)
+                setNavParams(null);
+                setActiveTab(item.id);
+                setIsMobileMenuOpen(false);
               }}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
                 activeTab === item.id
@@ -243,9 +245,14 @@ function App() {
             className="h-full"
           >
             <ErrorBoundary>
-              {activeTab === 'dashboard' && <Dashboard onNavigate={setActiveTab} />}
+              {activeTab === 'dashboard' && (
+                <Dashboard onNavigate={(tab, params) => {
+                  setNavParams(params);
+                  setActiveTab(tab);
+                }} />
+              )}
               {activeTab === 'watchlist' && <Watchlist />}
-              {activeTab === 'trading' && <TradingControl />}
+              {activeTab === 'trading' && <TradingControl navParams={navParams} />}
               {activeTab === 'settings' && <SettingsPage />}
               
               {(['dashboard', 'watchlist', 'trading', 'settings'].indexOf(activeTab) === -1) && (
