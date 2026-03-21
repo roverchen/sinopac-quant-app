@@ -1,6 +1,13 @@
 # Sinopac Quant Pro (Revisions)
 
-## Version 2.1 Series
+## Version 2.2 Series
+
+### v2.2.1 (2026-03-21)
+- **Quant Engine Fixes**:
+  - [Backend] Fixed `SyntaxError` and `IndentationError` in `quant_service.py` that caused startup crashes.
+  - [Backend] Restored missing `fetch_batch_data` import in `run_market_scan`.
+  - [Backend] Fixed `/quant/analyze` (Watchlist) to correctly fetch indices and exchange rates for RS/Currency calculation.
+  - [Backend] Optimized local debugging for US and Crypto scans.
 
 ### v2.2.0 (2026-03-20) - **Quant Engine v2 Upgrade**
 - **Enhanced Scoring Core**:

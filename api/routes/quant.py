@@ -51,12 +51,33 @@ async def analyze_watchlist(request: StockAnalysisRequest, current_user: str = D
             unique_items.append((s, target_market, code))
             seen.add(check_key)
 
+    # [v2.2.0] Pre-fetch indices and exchange rate for needed markets
+    indices_data = {}
+    exchange_rate_val = 1.0
+    needed_markets = {request.market_type}
+    if request.watchlist:
+        for s in request.watchlist:
+            if ":" in s: needed_markets.add(s.split(":", 1)[0])
+    
+    import yfinance as yf
+    for m in needed_markets:
+        idx_sym = "^TWII" if m == "TW" else ("^GSPC" if m == "US" else "BTC-USD")
+        try:
+            indices_data[m] = yf.Ticker(idx_sym).history(period="1mo")
+        except: pass
+        
+    if "CRYPTO" in needed_markets:
+        try:
+            rate_df = yf.Ticker("TWD=X").history(period="1d")
+            if not rate_df.empty: exchange_rate_val = float(rate_df['Close'].iloc[-1])
+        except: pass
+
     for s, target_market, code in unique_items:
         pool = get_cached_pool(target_market) or {}
         pool_results = { (r.get('symbol') if isinstance(r, dict) else getattr(r, 'symbol', None)): r for r in pool.get('results', []) }
         
         res = pool_results.get(code)
-        # [v2.1.92] Fast Re-score Logic: If we have sub-scores, use them instead of re-analyzing K-lines
+        # [v2.1.92] Fast Re-score Logic
         if res:
             v_score = res.get('value_score') if isinstance(res, dict) else getattr(res, 'value_score', 0)
             p_score = res.get('pullback_score') if isinstance(res, dict) else getattr(res, 'pullback_score', 0)
@@ -65,7 +86,6 @@ async def analyze_watchlist(request: StockAnalysisRequest, current_user: str = D
                 w = request.defense_weight
                 new_score = round((w * v_score) + ((1 - w) * p_score), 1)
                 
-                # Update result with new score and market info
                 if isinstance(res, dict):
                     res['score'] = new_score
                     if not res.get('market'): res['market'] = target_market
@@ -76,37 +96,31 @@ async def analyze_watchlist(request: StockAnalysisRequest, current_user: str = D
                     results.append(res)
                 continue
 
-        # Fallback to K-line analysis if sub-scores missing
+        # Fallback to K-line analysis
         dfs = pool.get("dfs", {})
         if code in dfs:
             name = "Unknown"
             if res:
                 name = res.get('name', 'Unknown') if isinstance(res, dict) else getattr(res, 'name', 'Unknown')
-            analysis = analyze_stock(dfs[code], code, name, request.defense_weight, target_market, skip_indicators=True)
+            analysis = analyze_stock(
+                dfs[code], code, name, request.defense_weight, target_market, 
+                skip_indicators=True, index_df=indices_data.get(target_market),
+                exchange_rate=exchange_rate_val if target_market == 'CRYPTO' else 1.0
+            )
             results.append(AnalysisResult(**analysis))
         else:
             data_map_needed.append((s, target_market))
 
     if data_map_needed:
-        # Group by market for batch fetching if needed, or just fetch one by one
         tw_symbols = fetch_tw_symbols()
         us_symbols = fetch_us_symbols()
         crypto_symbols = fetch_crypto_symbols()
         
         for symbol_raw, m in data_map_needed:
             code = extract_stock_code(symbol_raw, m)
-            # Re-fetch data if not in pool
             from api.services.data_fetcher import fetch_batch_data
             data_pool = fetch_batch_data([code], m)
             
-            # [v2.2.0] Fetch Market Index for RS
-            index_symbol = "^TWII" if m == "TW" else ("^GSPC" if m == "US" else "BTC-USD")
-            idx_df = None
-            try:
-                import yfinance as yf
-                idx_df = yf.Ticker(index_symbol).history(period="1mo")
-            except: pass
-
             for c, kdf in data_pool.items():
                 name = "Unknown"
                 if m == "TW": name = tw_symbols.get(c, "Unknown")
@@ -115,15 +129,11 @@ async def analyze_watchlist(request: StockAnalysisRequest, current_user: str = D
 
                 analysis = analyze_stock(
                     kdf, c, name, 
-                    request.defense_weight, m, index_df=idx_df
+                    request.defense_weight, m, 
+                    index_df=indices_data.get(m),
+                    exchange_rate=exchange_rate_val if m == 'CRYPTO' else 1.0
                 )
                 results.append(AnalysisResult(**analysis))
-            else:
-                results.append(AnalysisResult(
-                    symbol=code, name="No Data", price=0, suggestion="Failed to fetch",
-                    level="-", ma240_diff="-", ma20_diff="-", macd_status="-", score=-1,
-                    ma_base=0, ma20=0, atr=0, market=m
-                ))
 
     results = sorted(results, key=lambda x: x.score if hasattr(x, 'score') else (x.get('score', 0) if isinstance(x, dict) else 0), reverse=True)
     return AnalysisResponse(results=results, timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))

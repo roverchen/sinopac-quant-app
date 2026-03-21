@@ -474,6 +474,7 @@ async def run_market_scan(market_type: str, defense_weight: float = 0.5):
     """Background task to scan market and save results pool"""
 
     try:
+        from api.services.data_fetcher import fetch_batch_data
         print(f"[QuantService] Starting {market_type} market scan (Defense Weight: {defense_weight})...")
         scan_status["status"] = "running"
         scan_status["progress"] = 5
