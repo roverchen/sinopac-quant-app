@@ -182,58 +182,7 @@ const TradingControl = ({ navParams }) => {
 
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8">
-      {/* Top Header & Actions */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 px-4">
-        <div className="flex items-center gap-4">
-          <div className="p-3 bg-indigo-500/10 rounded-2xl border border-indigo-500/20">
-            <TrendingUp className="w-6 h-6 text-indigo-400" />
-          </div>
-          <div>
-            <h2 className="text-2xl font-black text-white tracking-tight">交易環境控管</h2>
-            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mt-1">
-              Backend Version: <span className="text-slate-400">v{status.backend_version || '2.1.75'}</span>
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-4">
-          <button 
-            onClick={handleSyncBroker}
-            disabled={loading}
-            className="flex items-center gap-2 px-6 py-3 bg-slate-800/80 hover:bg-slate-700 text-white rounded-2xl text-xs font-bold transition-all border border-slate-700 shadow-xl disabled:opacity-50"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-            同步券商資料
-          </button>
-        </div>
-      </div>
-
-      {/* Account Type Tabs */}
-      <div className="bg-slate-900/40 p-1.5 border border-slate-800 rounded-3xl flex w-fit mx-auto md:mx-4">
-        <button 
-          onClick={() => setViewAccount('personal')}
-          className={`flex items-center gap-2 px-8 py-3 rounded-2xl text-sm font-black transition-all ${
-            viewAccount === 'personal' 
-              ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-600/30' 
-              : 'text-slate-500 hover:text-slate-300'
-          }`}
-        >
-          <Wallet className="w-4 h-4" />
-          個人實盤/模擬
-        </button>
-        <button 
-          onClick={() => setViewAccount('system_auto')}
-          className={`flex items-center gap-2 px-8 py-3 rounded-2xl text-sm font-black transition-all ${
-            viewAccount === 'system_auto' 
-              ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-600/30' 
-              : 'text-slate-500 hover:text-slate-300'
-          }`}
-        >
-          <RefreshCw className="w-4 h-4" />
-          系統自動跟單
-        </button>
-      </div>
+    <div className="max-w-6xl mx-auto space-y-8 pt-4">
 
       {/* ROI & Status Banner */}
       {summary && (

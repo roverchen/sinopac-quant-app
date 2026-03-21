@@ -2,7 +2,12 @@
 
 ## Version 2.2 Series
 
-### v2.2.1 (2026-03-21)
+### v2.2.3 (2026-03-21)
+- **UI Simplification**:
+  - [Frontend] Removed "Trading Environment Control" header and Account Type tabs from `TradingControl.jsx`.
+  - [Frontend] Default view is now always "Personal" unless deep-linked from Dashboard.
+
+### v2.2.2 (2026-03-21)
 - **Quant Engine Fixes**:
   - [Backend] Fixed `SyntaxError` and `IndentationError` in `quant_service.py` that caused startup crashes.
   - [Backend] Restored missing `fetch_batch_data` import in `run_market_scan`.
