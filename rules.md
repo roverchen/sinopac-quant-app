@@ -4,8 +4,8 @@ This document codifies the established development patterns and best practices f
 
 ## 1. Versioning & Documentation
 - **Semantic Versioning**: Always bump the `version` in `api/main.py` for every feature update or bug fix.
-- **Revision History**: Every release must be documented in `REVISIONS.md` with a summary of changes.
-- **README Synchronization**: Key features (like new quant indicators) should be reflected in `README.md` to keep documentation current.
+- **Revision History**: Every release must be documented in `REVISIONS.md` before deployment.
+- **README Synchronization**: Key technical features must be reflected in `README.md` to ensure the public-facing documentation matches the latest engine version.
 
 ## 2. Coding Standards (Backend)
 - **Modular Services**: Logic should reside in `api/services/` (e.g., `quant_service.py`, `auto_trade_service.py`).
@@ -28,7 +28,10 @@ This document codifies the established development patterns and best practices f
   - *Momentum Chase*: Gap Up > 7% from bottom levels.
 
 ## 5. Deployment Workflow
-- **GitHub Triggers**: Use Git Tags (`vX.Y.Z`) to trigger production deployments.
+- **GitHub Triggers & Tagging**: 
+  - Use Git Tags in `vX.Y.Z` format to trigger automated CI/CD or staging deployments.
+  - **Sequence**: Always commit `README.md` and `REVISIONS.md` *before* pushing the final Version Tag.
+  - **Re-tagging**: If documentation needs fixing post-commit, delete the remote tag and re-push it to ensure the build contains correct metadata.
 - **Cloud Run**: The primary deployment target is Google Cloud Run via `gcloud builds submit`.
 - **Atomic Operations**: Ensure critical tasks like `Auto-Trade` use distributed locks (via GCS) to prevent duplicate execution in containerized environments.
 
