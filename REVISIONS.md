@@ -2,6 +2,12 @@
 
 ## Version 2.2 Series
 
+### v2.4.2 (2026-03-22)
+- **Mobile Experience & Visual Feedback**:
+  - [Frontend] Added **Lock Icons** and "Read-Only" indicators to `TradingControl.jsx` position rows for system accounts.
+  - [Frontend] Improved mobile visibility of safety restrictions by ensuring "Locked" status is visible without hover.
+  - [Frontend] Updated header subtitle to clearly state "Robot Managed" for system views.
+
 ### v2.4.1 (2026-03-22)
 - **UI Safety Restrictions**:
   - [Frontend] Disabled manual "Sell" and "Cancel Order" buttons in `TradingControl.jsx` when viewing the **System Auto-Trade** account.

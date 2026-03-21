@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Shield, Play, Pause, Wallet, TrendingUp, Send, Smartphone, Clock, X, AlertCircle, RefreshCw } from 'lucide-react';
+import { Shield, Play, Pause, Wallet, TrendingUp, Send, Smartphone, Clock, X, AlertCircle, RefreshCw, Lock } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { tradeService } from '../services/api';
 
@@ -253,7 +253,11 @@ const TradingControl = ({ navParams }) => {
               </div>
               <div>
                 <h3 className="text-xl font-bold text-white">資產與委託 (Assets & Orders)</h3>
-                <p className="text-slate-500 text-xs mt-1">整合持倉與未成交委託，點擊持倉可快速平倉</p>
+                <p className="text-slate-500 text-xs mt-1">
+                  {viewAccount === 'system_auto' 
+                    ? '系統自動標的不可手動操作 (Robot Managed)' 
+                    : '整合持倉與未成交委託，點擊持倉可快速平倉'}
+                </p>
               </div>
             </div>
             <button onClick={refreshAll} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 transition-colors">
@@ -305,8 +309,17 @@ const TradingControl = ({ navParams }) => {
                         </td>
                         <td className="px-8 py-6 text-right">
                           <div className="flex items-center justify-end gap-2 text-amber-500/40 group-hover:text-amber-500 transition-colors">
-                            <span className="text-[10px] font-bold">點擊查看/撤單</span>
-                            <X className="w-4 h-4" />
+                            {viewAccount === 'system_auto' ? (
+                              <div className="flex items-center gap-1.5 px-3 py-1 bg-slate-800/50 text-slate-500 rounded-lg">
+                                <Lock className="w-3.5 h-3.5" />
+                                <span className="text-[10px] font-black uppercase">系統鎖定</span>
+                              </div>
+                            ) : (
+                              <>
+                                <span className="text-[10px] font-bold">點擊查看/撤單</span>
+                                <X className="w-4 h-4" />
+                              </>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -350,8 +363,19 @@ const TradingControl = ({ navParams }) => {
                                 ${pos.unrealized_pl?.toLocaleString() || '0'}
                               </span>
                             </div>
-                            <div className="p-2 bg-rose-500/10 text-rose-500 rounded-lg opacity-0 group-hover:opacity-100 transition-all transform translate-x-4 group-hover:translate-x-0">
-                              發起賣單
+                            <div className={`p-2 rounded-lg transition-all ${
+                              viewAccount === 'system_auto' 
+                                ? 'bg-slate-800/50 text-slate-500 opacity-100 flex items-center gap-1.5 px-3' 
+                                : 'bg-rose-500/10 text-rose-500 opacity-0 group-hover:opacity-100 transform translate-x-4 group-hover:translate-x-0'
+                            }`}>
+                              {viewAccount === 'system_auto' ? (
+                                <>
+                                  <Lock className="w-3.5 h-3.5" />
+                                  <span className="text-[10px] font-black uppercase">唯讀</span>
+                                </>
+                              ) : (
+                                "發起賣單"
+                              )}
                             </div>
                           </div>
                         </td>
