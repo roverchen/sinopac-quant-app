@@ -1,6 +1,6 @@
 # Sinopac Quant Pro (股市報明牌)
 
-[![Version](https://img.shields.io/badge/version-2.3.0-blue.svg)](REVISIONS.md) [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
+[![Version](https://img.shields.io/badge/version-2.4.0-blue.svg)](REVISIONS.md) [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
 
 Sinopac Quant Pro 是一個強大的多市場資產篩選與自動化交易系統，支援 **台股 (TW)**、**美股 (US)** 以及 **加密貨幣 (Crypto)**。本系統結合了動態權重配置策略、技術面計分引擎與基本面濾網，為量化交易者提供從選股、分析到下單的一站式解決方案。
 
@@ -82,12 +82,12 @@ Sinopac Quant Pro 是一個強大的多市場資產篩選與自動化交易系�
 系統區分為 **「虛擬模擬 (Simulation)」** 與 **「實盤交易 (Live)」** 兩種模式，其生命週期如下：
 
 ### 1. 委託下單 (Order Placement)
-*   **模擬模式**：僅在系統資料庫建立 `PENDING` 紀錄，顯示「委託買入中」。
+*   **模擬模式 (v2.4.0 優化)**：跳過 `PENDING` 狀態，直接根據目標價或現價成交，並轉為持倉或歷史紀錄。這確保了模擬環境的即時性與簡潔。
 *   **實盤模式**：同步發送 API 請求至永豐金 (Shioaji) 或 MAX 交易所，取得真實委託代碼。
 
 ### 2. 成交轉換 (Confirmation & Matching)
 由後端 **Matching Engine** 每 30 秒自動偵測：
-*   **模擬撮合**：對比第三方即時市價 (Yahoo/Binance)。若 `現價 <= 買入價` (或 `現價 >= 賣出價`)，判定成交並轉為 **Position (持倉)**。在此之前，委託會待在 **「當前持倉」的委託清單** 中。
+*   **模擬撮合**：(v2.4.0 已升級為即時成交，不再需要撮合等待)。
 *   **實盤撮合**：透過券商 API 輪詢委託狀態。當回報為 `Filled (已成交)` 時，更新為正式持倉。
 
 ### 3. 結案與損益計算 (History & PnL)
