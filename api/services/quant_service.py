@@ -378,7 +378,7 @@ def analyze_stock(df, code, name, defense_weight=0.5, market_type='TW', skip_ind
     # Value Calculation (Defense)
     # Price(50%), Momentum(10%), Volume(20%), RS(20%)
     v_price = (1 - level_percentile) * 100
-    v_moment = 60 if macd_status := "Bullish" else 30 # Simple proxy
+    v_moment = 60 if is_above_zero else 30 # Simple proxy for momentum in Value score
     v_vol = 50 + (30 if is_choking else 0) + (20 if is_bottoming else 0)
     v_rs = rs_score
     value_score = (v_price * 0.5) + (v_moment * 0.1) + (v_vol * 0.2) + (v_rs * 0.2)
@@ -514,10 +514,20 @@ async def run_market_scan(market_type: str, defense_weight: float = 0.5):
 
         for i in range(0, total, chunk_size):
             chunk = symbols[i : i + chunk_size]
-                df = calculate_technical_indicators(df)
-                analysis = analyze_stock(df, s, name, defense_weight, market_type, skip_indicators=True, exchange_rate=exchange_rate)
-                results.append(AnalysisResult(**analysis))
-                all_dfs[s] = df
+            print(f"[QuantService] Processing {market_type} chunk {i//chunk_size + 1}/{(total+chunk_size-1)//chunk_size} ({len(chunk)} symbols)")
+            
+            chunk_dfs = fetch_batch_data(chunk, market_type)
+            all_dfs.update(chunk_dfs)
+
+            for sym in chunk:
+                if sym in chunk_dfs:
+                    res = analyze_stock(
+                        chunk_dfs[sym], sym, symbols_map.get(sym, "Unknown"), 
+                        defense_weight=defense_weight, market_type=market_type, 
+                        exchange_rate=exchange_rate, index_df=index_df
+                    )
+                    results.append(AnalysisResult(**res))
+                    all_dfs[sym] = chunk_dfs[sym]
 
             scan_status["progress"] = round(10 + (i / total) * 85, 1)
             scan_status["message"] = f"Analyzed {len(results)}/{total} items..."
