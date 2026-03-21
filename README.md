@@ -1,6 +1,6 @@
 # Sinopac Quant Pro (股市報明牌)
 
-[![Version](https://img.shields.io/badge/version-2.2.0-blue.svg)](REVISIONS.md)
+[![Version](https://img.shields.io/badge/version-2.3.0-blue.svg)](REVISIONS.md)
 ---
 
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
@@ -35,6 +35,14 @@ Sinopac Quant Pro 是一個強大的多市場資產篩選與自動化交易系�
   - **攻擊量**：發動時需具備 1.2 倍以上的攻擊量能。
 - **市場強度 (20%)**：優先選擇在大盤回檔時維持抗跌屬性的標的。
 - **價格空間 (10%)**：保留基本位階參考。
+
+#### 🚀 動能追擊 (Momentum Chase) - v2.3.0 新增
+當系統偵測到以下極端強勢訊號時，會自動進入「動能追擊模式」：
+- **開盤強度 (Opening Strength)**：偵測開盤價強勢跳空 (Gap up > 7%) 的標的。
+- **位階攻擊過濾**：
+  - **強勢起漲**：若標的處於 52 週低位階 (<30%) 且出現早盤鎖死，系統給予最高分加成。
+  - **噴出過熱**：若位階已過高 (>80%) 則自動扣分，防範末升段風險。
+- **波動容許度**：自動優化 ATR 過濾邏輯，接受合理的跳空波動，避免誤判。
 
 #### 🚫 智能過濾與風控
 - **ATR 波動過濾**：自動檢測最近 5 天 ATR 波動，若出現異常劇震 (ATR5 > 1.5x ATR) 則自動減分。
