@@ -25,6 +25,8 @@ class AnalysisResult(BaseModel):
     target_price: Optional[float] = None
     value_score: Optional[float] = 0.0
     pullback_score: Optional[float] = 0.0
+    rs_score: Optional[float] = 0.0
+    opening_strength: Optional[float] = 0.0
 
 class AnalysisResponse(BaseModel):
     results: List[AnalysisResult]

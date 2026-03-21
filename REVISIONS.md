@@ -2,6 +2,16 @@
 
 ## Version 2.2 Series
 
+### v2.3.0 (2026-03-21)
+- **Quant Engine v2.3 Major Momentum Update**:
+  - [Backend] Implemented **Opening Strength (開盤強度)** indicator for gap detection.
+  - [Backend] Introduced **Momentum Chase Mode** scoring boost for early high-strength gaps.
+  - [Backend] Applied **Level-Check Filters**: 
+    - Bonus for low-level (bottom) momentum gaps.
+    - Penalty for high-level (exhaustion) momentum gaps.
+  - [Backend] Optimized volatility filter to accept valid momentum gap spikes.
+  - [Backend] Updated API schemas to include `opening_strength` and `rs_score`.
+
 ### v2.2.5 (2026-03-21)
 - **Notification Enhancements**:
   - [Backend] Attempted to hide email address in `From` header to display only "Sinopac Quant Pro (no-reply)".

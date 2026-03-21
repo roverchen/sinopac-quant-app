@@ -370,6 +370,21 @@ def analyze_stock(df, code, name, defense_weight=0.5, market_type='TW', skip_ind
     
     has_vol_momentum = (last_price > last_row['ma5']) and (vol_last > last_row['vol_ma5'] * 1.2)
     
+    # [v2.3.0] Opening Strength & Early Momentum Chase
+    open_price = last_row['open']
+    prev_close = prev_row['close'] if len(df) > 1 else open_price
+    opening_strength = (open_price / prev_close) - 1 if prev_close > 0 else 0
+    
+    momentum_chase_bonus = 0
+    is_momentum_chase = False
+    if opening_strength > 0.07:
+        is_momentum_chase = True
+        momentum_chase_bonus = 30
+        if level_percentile < 0.3: # Low level attack
+            momentum_chase_bonus += 20
+        elif level_percentile > 0.8: # High level exhaustion
+            momentum_chase_bonus -= 40
+
     # MACD Convergence Score (Bonus if histogram is improving)
     momentum_bonus = 20 if hist_slope > 0 else 0
     if is_gold_cross: momentum_bonus += 30
@@ -385,7 +400,7 @@ def analyze_stock(df, code, name, defense_weight=0.5, market_type='TW', skip_ind
 
     # Pullback Calculation (Growth)
     # Momentum(50%), Price(10%), Volume(20%), RS(20%)
-    g_moment = (1 - min(abs(dist_to_ma20), 0.1)/0.1) * 50 + momentum_bonus
+    g_moment = (1 - min(abs(dist_to_ma20), 0.1)/0.1) * 50 + momentum_bonus + momentum_chase_bonus
     g_price = (1 - level_percentile) * 100
     g_vol = 50 + (30 if is_washout else 0) + (20 if has_vol_momentum else 0)
     g_rs = rs_score
@@ -395,7 +410,8 @@ def analyze_stock(df, code, name, defense_weight=0.5, market_type='TW', skip_ind
     final_score = (defense_weight * value_score) + ((1 - defense_weight) * pullback_score)
     
     # Volatility Filter: Penalty for sudden spikes (Fake breakouts)
-    if atr5 > 1.5 * atr: final_score *= 0.8
+    # [v2.3.0] Skip penalty if it's a valid momentum chase gap
+    if atr5 > 1.5 * atr and not is_momentum_chase: final_score *= 0.8
     
     # Hard Stop-Loss Penalty: Break MA20-3% or MACD Histogram drops significantly
     if last_price < ma20_last * 0.97 or (hist < 0 and hist_slope < 0):
@@ -432,7 +448,7 @@ def analyze_stock(df, code, name, defense_weight=0.5, market_type='TW', skip_ind
     weighted_growth = (1 - defense_weight) * pullback_score
 
     if weighted_growth >= weighted_value:
-        type_prefix = "Growth"
+        type_prefix = "Momentum Chase" if is_momentum_chase else "Growth"
         entry_price = ma20_last
         atr_mult = 3.0 if market_type == 'CRYPTO' else 2.5
         stop_loss = last_price - (atr_mult * atr)
@@ -458,7 +474,6 @@ def analyze_stock(df, code, name, defense_weight=0.5, market_type='TW', skip_ind
 
     suggestion = f"{type_prefix} | Buy:{entry_price:.1f} | TP:{target_price:.1f} | SL:{sanitize(stop_loss):.1f}"
     if not is_rev_ok: suggestion = "REVENUE_WARNING | " + suggestion
-
     return {
         "symbol": code, "name": name, "price": round(last_price, 2), "suggestion": suggestion,
         "level": f"{sanitize(level_percentile)*100:.1f}%", "ma240_diff": f"{sanitize(dist_to_defense)*100:.1f}%",
@@ -467,7 +482,7 @@ def analyze_stock(df, code, name, defense_weight=0.5, market_type='TW', skip_ind
         "ma20": ma20_last, "atr": atr, "entry_price": round(sanitize(entry_price), 2),
         "stop_loss": round(sanitize(stop_loss), 2), "target_price": round(sanitize(target_price), 2),
         "value_score": round(sanitize(value_score), 1), "pullback_score": round(sanitize(pullback_score), 1),
-        "rs_score": round(sanitize(rs_score), 1)
+        "rs_score": round(sanitize(rs_score), 1), "opening_strength": round(sanitize(opening_strength), 4)
     }
 
 async def run_market_scan(market_type: str, defense_weight: float = 0.5):
