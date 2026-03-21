@@ -2,6 +2,10 @@
 
 ## Version 2.2 Series
 
+### v2.2.4 (2026-03-21)
+- **Notification Enhancements**:
+  - [Backend] Updated `email_service.py` to use a professional "no-reply" display name in the `From` header.
+
 ### v2.2.3 (2026-03-21)
 - **UI Simplification**:
   - [Frontend] Removed "Trading Environment Control" header and Account Type tabs from `TradingControl.jsx`.
