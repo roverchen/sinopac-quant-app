@@ -71,41 +71,64 @@ async def get_trade_history(user_id: Optional[str] = None, current_user: str = D
 
 @router.get("/summary")
 async def get_performance_summary(user_id: Optional[str] = None, current_user: str = Depends(get_current_user)):
-    """Get portfolio performance summary (P/L)"""
+    """Get portfolio performance summary (P/L) based on actual invested capital."""
     target_user = user_id if user_id else current_user
     logs = get_user_trade_logs(target_user)
     positions = [L for L in logs if L.get("entry_type") == "POSITION"]
     history = [L for L in logs if L.get("entry_type") == "HISTORY"]
 
-    realized_mock = sum(item.get('realized_pl', 0) for item in history if item.get('is_simulation') or target_user == "system_auto")
-    realized_live = sum(item.get('realized_pl', 0) for item in history if not item.get('is_simulation') and target_user != "system_auto")
+    # Calculate PnL and Invested Capital
+    realized_mock = 0.0
+    realized_live = 0.0
+    invested_mock = 0.0
+    invested_live = 0.0
+
+    # From Closed Trades (History)
+    for item in history:
+        pnl = item.get('realized_pl', 0)
+        # Original Buy Cost = (Sell Price * Qty) - Fees - Tax - Realized PnL
+        # This works for both manual and auto since trade_engine sets realized_pl
+        buy_cost = (item.get('price', 0) * item.get('qty', 0)) - item.get('fee', 0) - item.get('tax', 0) - pnl
+        
+        if item.get('is_simulation') or target_user == "system_auto":
+            realized_mock += pnl
+            invested_mock += buy_cost
+        else:
+            realized_live += pnl
+            invested_live += buy_cost
 
     unrealized_mock = 0.0
     unrealized_live = 0.0
 
+    # From Open Positions
     for pos in positions:
         current = pos.get('current_price', 0)
         buy = pos.get('buy_price', 0)
         qty = pos.get('qty', 0)
         if current and buy and qty:
             pnl = (current - buy) * qty
+            buy_cost = buy * qty
             if pos.get('is_simulation'):
                 unrealized_mock += pnl
+                invested_mock += buy_cost
             else:
                 unrealized_live += pnl
+                invested_live += buy_cost
 
     return {
         "mock": {
             "realized": round(realized_mock, 2),
             "unrealized": round(unrealized_mock, 2),
             "total": round(realized_mock + unrealized_mock, 2),
-            "return_rate": round(((realized_mock + unrealized_mock) / 1000000) * 100, 2)
+            "invested": round(invested_mock, 2),
+            "return_rate": round(((realized_mock + unrealized_mock) / invested_mock * 100), 2) if invested_mock > 0 else 0.0
         },
         "live": {
             "realized": round(realized_live, 2),
             "unrealized": round(unrealized_live, 2),
             "total": round(realized_live + unrealized_live, 2),
-            "return_rate": 0.0
+            "invested": round(invested_live, 2),
+            "return_rate": round(((realized_live + unrealized_live) / invested_live * 100), 2) if invested_live > 0 else 0.0
         }
     }
 

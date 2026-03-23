@@ -2,6 +2,12 @@
 
 ## Version 2.2 Series
 
+### v2.5.0 (2026-03-23)
+- **Performance Tracking Overhaul**:
+  - [Backend] Refactored `get_performance_summary` in `trade.py` to use **Actual Invested Capital** as the ROI denominator.
+  - [Backend] Cumulative ROI now aggregates TW, US, and Crypto markets based on total purchase costs.
+  - [Backend] Fixed "0% ROI" dilution by removing the hardcoded 1,000,000 simulation balance.
+
 ### v2.4.2 (2026-03-22)
 - **Mobile Experience & Visual Feedback**:
   - [Frontend] Added **Lock Icons** and "Read-Only" indicators to `TradingControl.jsx` position rows for system accounts.
