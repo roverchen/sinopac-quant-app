@@ -2,6 +2,13 @@
 
 ## Version 2.2 Series
 
+### v2.5.2 (2026-03-23)
+- **Enhanced Safety Engine**:
+  - [Backend] Increased exit-check frequency for robot from 30m to **5m**.
+  - [Backend] Implemented **Liquidity Penalty** in `quant_service.py` to avoid low-volume "flash crash" risks (TW < 10M, Crypto < 1M turnover).
+  - [Backend] Added **Price Divergence Guard** (3% limit) to prevent chasing sudden spikes.
+  - [Backend] Enhanced audit logs by storing `buy_price` in `HISTORY` records.
+
 ### v2.5.1 (2026-03-23)
 - **Dashboard UI Enhancements**:
   - [Frontend] Updated `Dashboard.jsx` to display **Invested Capital** and **Total PnL** under the system auto-trade return rate card.

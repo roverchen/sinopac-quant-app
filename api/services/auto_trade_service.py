@@ -23,8 +23,8 @@ class AutoRobot:
             schedule.every().day.at("14:10").do(self.perform_daily_trade, market_type="TW")
             schedule.every().day.at("23:15").do(self.perform_daily_trade, market_type="CRYPTO")
             
-            # Periodic checks
-            schedule.every(30).minutes.do(self.check_exits)
+            # Periodic checks (v2.5.2: Increased to 5 mins for safety)
+            schedule.every(5).minutes.do(self.check_exits)
             schedule.every(4).hours.do(self.ensure_fresh_scans)
 
             self.thread = threading.Thread(target=self._run_scheduler, daemon=True)
@@ -168,6 +168,19 @@ class AutoRobot:
 
             log_msg = f"Top candidate: {symbol} ({name}) with score {score} (V:{value_score}/P:{pullback_score})."
             print(f"[AutoRobot] {log_msg}")
+            
+            # [v2.5.2] Price Divergence Guard: Avoid "Chasing" sudden spikes
+            current_price = ShioajiService.get_current_price(symbol, market_type)
+            if current_price:
+                diff = abs(current_price - entry_price) / entry_price
+                if diff > 0.03:
+                    msg = f"Skipping {symbol}: Price Divergence too high ({diff*100:.1f}% > 3%)"
+                    print(f"[AutoRobot] {msg}")
+                    self._update_status("Idle", msg)
+                    return
+                # Use current price as the more accurate fill price
+                entry_price = current_price
+
             self._update_status("Trading", log_msg)
 
             # Execution logic (TW: 1000 shares, US: 10, Crypto: 0.1)

@@ -248,6 +248,7 @@ class MatchingEngine:
                 "action": "Sell",
                 "qty": qty,
                 "price": fill_price,
+                "buy_price": round(existing.get('buy_price', 0), 2) if existing else 0,
                 "market": market,
                 "status": "FILLED",
                 "entry_type": "HISTORY",

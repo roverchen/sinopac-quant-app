@@ -413,6 +413,19 @@ def analyze_stock(df, code, name, defense_weight=0.5, market_type='TW', skip_ind
     # [v2.3.0] Skip penalty if it's a valid momentum chase gap
     if atr5 > 1.5 * atr and not is_momentum_chase: final_score *= 0.8
     
+    # [v2.5.2] Liquidity Penalty: Avoid low-volume "flash crash" risks
+    # Turnover = Daily Volume * Price
+    turnover = sanitize(vol_ma20 * last_price)
+    if market_type == "TW":
+        # TW: Penalty if daily turnover < 10M TWD (approx 330k USD)
+        if turnover < 10000000: final_score *= 0.3
+    elif market_type == "CRYPTO":
+        # Crypto: Heavy penalty if daily turnover < 1M TWD (Extremely thin)
+        if turnover < 1000000: final_score *= 0.1
+    elif market_type == "US":
+        # US: Penalty if daily turnover < 1M USD (approx 32M TWD)
+        if turnover < 1000000: final_score *= 0.5
+    
     # Hard Stop-Loss Penalty: Break MA20-3% or MACD Histogram drops significantly
     if last_price < ma20_last * 0.97 or (hist < 0 and hist_slope < 0):
         final_score *= 0.5
