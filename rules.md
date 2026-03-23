@@ -6,6 +6,7 @@ This document codifies the established development patterns and best practices f
 - **Semantic Versioning**: Always bump the `version` in `api/main.py` for every feature update or bug fix.
 - **Revision History**: Every release must be documented in `REVISIONS.md` before deployment.
 - **README Synchronization**: Key technical features must be reflected in `README.md` to ensure the public-facing documentation matches the latest engine version.
+- **Invested Capital ROI**: For simulation performance, always use `(Total PnL / Total Invested Capital)` as the primary metric to avoid balance dilution.
 
 ## 2. Coding Standards (Backend)
 - **Modular Services**: Logic should reside in `api/services/` (e.g., `quant_service.py`, `auto_trade_service.py`).
@@ -26,6 +27,10 @@ This document codifies the established development patterns and best practices f
   - *Bottoming*: Long lower shadow + volume swell.
   - *Washout*: Contraction during pullback.
   - *Momentum Chase*: Gap Up > 7% from bottom levels.
+- **Liquidity & Safety Guards**:
+  - *Liquidity Filter*: Minimum daily turnover (TW > 10M, Crypto > 1M) to prevent "Flash Crashes".
+  - *Price Guard*: Maximum 3% divergence allowed between scan price and execution price.
+  - *High-Frequency Monitoring*: Maintenance of 5-minute exit checks for automated strategies.
 
 ## 5. Deployment Workflow
 - **GitHub Triggers & Tagging**: 

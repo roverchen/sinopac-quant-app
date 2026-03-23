@@ -2,6 +2,11 @@
 
 ## Version 2.2 Series
 
+### v2.5.3 (2026-03-23)
+- **Rules Synchronization**:
+  - [Maintenance] Updated `rules.md` to codify the new **Invested Capital ROI** and **Liquidity Filter** standards.
+  - [Maintenance] Ensured `README.md` and `REVISIONS.md` follow the updated versioning rules.
+
 ### v2.5.2 (2026-03-23)
 - **Enhanced Safety Engine**:
   - [Backend] Increased exit-check frequency for robot from 30m to **5m**.
