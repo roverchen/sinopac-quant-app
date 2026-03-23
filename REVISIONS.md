@@ -2,6 +2,11 @@
 
 ## Version 2.2 Series
 
+### v2.5.1 (2026-03-23)
+- **Dashboard UI Enhancements**:
+  - [Frontend] Updated `Dashboard.jsx` to display **Invested Capital** and **Total PnL** under the system auto-trade return rate card.
+  - [Frontend] Improved clarity of the performance summary by showing the scale of investments.
+
 ### v2.5.0 (2026-03-23)
 - **Performance Tracking Overhaul**:
   - [Backend] Refactored `get_performance_summary` in `trade.py` to use **Actual Invested Capital** as the ROI denominator.

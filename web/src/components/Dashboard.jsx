@@ -149,7 +149,7 @@ const Dashboard = ({ onNavigate }) => {
           change={summary?.system_auto?.return_rate} 
           color="emerald" 
           icon={Zap} 
-          subValue={`回報率(百分比)`}
+          subValue={summary?.system_auto ? `成本: $${summary.system_auto.invested?.toLocaleString()} | 盈虧: $${summary.system_auto.total?.toLocaleString()}` : '載入中...'}
           loading={loading}
           onClick={() => onNavigate('trading', { viewAccount: 'system_auto' })}
         />
