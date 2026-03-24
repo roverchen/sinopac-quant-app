@@ -2,6 +2,11 @@
 
 ## Version 2.2 Series
 
+### v2.6.0 (2026-03-24)
+- **Custom Email Service**:
+  - [Backend] Updated `email_service.py` to support `info@vibe-coding.tw` as the default sender.
+  - [Backend] Added SMTP configuration templates for professional email delivery.
+
 ### v2.5.3 (2026-03-23)
 - **Rules Synchronization**:
   - [Maintenance] Updated `rules.md` to codify the new **Invested Capital ROI** and **Liquidity Filter** standards.
