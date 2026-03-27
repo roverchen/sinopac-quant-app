@@ -2,6 +2,12 @@
 
 ## Version 2.2 Series
 
+### v2.6.1 (2026-03-28)
+- **Auto-Trade Recovery & Email Reversion**:
+  - [Backend] Reverted default email sender to `rover.k.chen@gmail.com` as requested.
+  - [Backend] Fixed `AutoRobot` staleness bug: Added a 24-hour expiration check to `ensure_fresh_scans`.
+  - [Backend] Prevented **Price Divergence Guard** from blocking trades due to 10-day-old stale scan data.
+
 ### v2.6.0 (2026-03-24)
 - **Custom Email Service**:
   - [Backend] Updated `email_service.py` to support `info@vibe-coding.tw` as the default sender.

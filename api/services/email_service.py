@@ -9,8 +9,8 @@ SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASS = os.getenv("SMTP_PASS", "")
-# [v2.6.0] Use custom sender domain
-SMTP_FROM = os.getenv("SMTP_FROM", "Sinopac Quant Pro <info@vibe-coding.tw>")
+# [v2.6.1] Revert sender to primary email
+SMTP_FROM = os.getenv("SMTP_FROM", "Sinopac Quant Pro <rover.k.chen@gmail.com>")
 
 def send_email(to_email: str, subject: str, body_html: str):
     """

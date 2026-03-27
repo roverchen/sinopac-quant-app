@@ -93,11 +93,23 @@ class AutoRobot:
         }
 
         for m, scheduled_time_str in schedule_times.items():
-            # Layer 1: Data Freshness
+            # Layer 1: Data Freshness (v2.6.1: Added Staleness Check)
             pool = get_cached_pool(m)
-            if not pool or not pool.get("results"):
-                print(f"[AutoRobot] No data for {m}, triggering auto-scan...")
-                self._update_status("Scanning", f"Performing initial scan for {m}...")
+            is_missing = not pool or not pool.get("results")
+            is_stale = False
+            
+            if pool and pool.get("timestamp"):
+                try:
+                    pool_ts = datetime.fromisoformat(pool["timestamp"].replace("Z", "+00:00"))
+                    if (now - pool_ts.replace(tzinfo=None)).total_seconds() > 86400: # 24 hours
+                        is_stale = True
+                except:
+                    is_stale = True
+
+            if is_missing or is_stale:
+                reason = "Missing data" if is_missing else "Stale data (>24h)"
+                print(f"[AutoRobot] {reason} for {m}, triggering auto-scan...")
+                self._update_status("Scanning", f"Performing {reason} scan for {m}...")
                 asyncio.run(run_market_scan(m))
             
             # Layer 2: Robust Makeup Logic
