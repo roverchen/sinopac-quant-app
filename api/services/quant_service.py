@@ -295,6 +295,12 @@ def check_revenue_momentum(code):
 
 def analyze_stock(df, code, name, defense_weight=0.5, market_type='TW', skip_indicators=False, skip_revenue=False, exchange_rate: float = 1.0, index_df=None):
     """Analyze single stock and return AnalysisResult compatible dict [v2.2.0]"""
+    def sanitize(val):
+        import numpy as np
+        if val is None or (isinstance(val, (float, np.floating)) and np.isnan(val)): return 0.0
+        if isinstance(val, (float, np.floating)) and np.isinf(val): return 999.9 if val > 0 else -999.9
+        return float(val) if isinstance(val, (int, float, np.integer, np.floating)) else val
+
     if df is None or len(df) < 20: 
         return {
             "symbol": code, "name": name, "price": 0, "suggestion": "Invalid Data",
@@ -446,10 +452,6 @@ def analyze_stock(df, code, name, defense_weight=0.5, market_type='TW', skip_ind
     if hist_slope > 0 and hist < 0:
         macd_status += " (Converging)"
 
-    def sanitize(val):
-        if val is None or (isinstance(val, (float, np.floating)) and np.isnan(val)): return 0.0
-        if isinstance(val, (float, np.floating)) and np.isinf(val): return 999.9 if val > 0 else -999.9
-        return float(val) if isinstance(val, (int, float, np.integer, np.floating)) else val
 
     last_price = sanitize(last_price)
     final_score = sanitize(final_score)

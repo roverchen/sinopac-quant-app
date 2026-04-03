@@ -599,4 +599,31 @@ class ShioajiService:
 
         return positions
 
+    @classmethod
+    def get_current_price(cls, symbol: str, market_type: str = 'TW'):
+        """Fetch the most recent market price for any supported market [v2.6.2]"""
+        from api.services.quant_service import get_yahoo_ticker, fetch_stock_data
+        try:
+            ticker = get_yahoo_ticker(symbol, market_type)
+            df = fetch_stock_data(symbol, ticker, period="1d")
+            if df is not None and not df.empty:
+                val = df['Close'].iloc[-1]
+                
+                # Handle exchange rate for US/Crypto if returned from Yahoo in USD
+                if market_type in ['US', 'CRYPTO']:
+                    try:
+                        import yfinance as yf
+                        rate_df = yf.Ticker("TWD=X").history(period="1d")
+                        if not rate_df.empty:
+                            exchange_rate = float(rate_df['Close'].iloc[-1])
+                            # If it's a USD ticker (ends in -USD or -USDT on Yahoo), convert to TWD
+                            if "-USD" in ticker or "-USDT" in ticker:
+                                val = val * exchange_rate
+                    except: pass
+                
+                return float(val)
+        except Exception as e:
+            print(f"[ShioajiService] Failed to fetch current price for {symbol}: {e}")
+        return None
+
 shioaji_service = ShioajiService()

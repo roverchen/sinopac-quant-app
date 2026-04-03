@@ -65,3 +65,27 @@ async def trigger_auto_trade(market: str = "TW", current_user: str = Depends(get
         "market": market,
         "message": f"Auto-trade cycle initiated for {market}. Check Trade History or Diag Logs for updates."
     }
+
+@router.get("/wakeup")
+async def wakeup(token: str = ""):
+    """Special endpoint for Cloud Scheduler pulsars to wake up the system and run auto-trade logic.
+    Awaits full execution to prevent Cloud Run from scaling down prematurely.
+    """
+    # Simple security token check to prevent unauthorized spamming of scans
+    # If not set in env, it's open for now (can be added later for security)
+    expected_token = os.getenv("WAKEUP_TOKEN", "")
+    if expected_token and token != expected_token:
+        return {"status": "unauthorized"}
+
+    from api.services.auto_trade_service import robot
+    print(f"[Diag] Wakeup pulse received @ {datetime.now()}")
+    
+    # Run the robust makeup and scan logic synchronously to keep Cloud Run alive
+    # We use robot.ensure_fresh_scans() which internally handles the logic
+    robot.ensure_fresh_scans()
+    
+    return {
+        "status": "success",
+        "timestamp": datetime.now().isoformat(),
+        "message": "System wake-up successful. All scheduled tasks and makeup trades processed."
+    }

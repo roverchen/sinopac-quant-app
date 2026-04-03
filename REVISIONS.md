@@ -2,6 +2,11 @@
 
 ## Version 2.2 Series
 
+### v2.6.2 (2026-03-28)
+- **Quant Engine Hotfix**:
+  - [Backend] Fixed `UnboundLocalError` in `analyze_stock` caused by incorrect `sanitize` helper scope.
+  - [Backend] Restored market scan functionality for all markets (TW, US, CRYPTO).
+
 ### v2.6.1 (2026-03-28)
 - **Auto-Trade Recovery & Email Reversion**:
   - [Backend] Reverted default email sender to `rover.k.chen@gmail.com` as requested.
