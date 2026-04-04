@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends
 import logging
+import os
 from typing import List, Dict
 from datetime import datetime
 from api.routes.auth import get_current_user
