@@ -21,8 +21,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # 複製後端程式碼
 COPY api/ ./api/
-# 複製基礎工具 (sinopac_api.py, max_api.py 等)
-COPY sinopac_api.py max_api.py ./
+# 複製基礎工具 (max_api.py 等)
+COPY max_api.py ./
 
 # 從第一階段複製編譯好的前端靜態檔案
 COPY --from=build-stage /app/web/dist ./static

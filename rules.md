@@ -38,7 +38,7 @@ This document codifies the established development patterns and best practices f
   - **Sequence**: Always commit `README.md` and `REVISIONS.md` *before* pushing the final Version Tag.
   - **Re-tagging**: If documentation needs fixing post-commit, delete the remote tag and re-push it to ensure the build contains correct metadata.
 - **Cloud Run**: The primary deployment target is Google Cloud Run via `gcloud builds submit`.
-- **Atomic Operations**: Ensure critical tasks like `Auto-Trade` use distributed locks (via GCS) to prevent duplicate execution in containerized environments.
+- **Atomic Operations**: Ensure critical tasks like `Auto-Trade` use distributed locks (via Firestore) to prevent duplicate execution in containerized environments.
 
 ## 6. Interaction Habits
 - **Task Tracking**: Maintenance of `task.md`, `implementation_plan.md`, and `walkthrough.md` for major updates.

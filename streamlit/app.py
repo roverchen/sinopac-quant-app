@@ -10,9 +10,15 @@ import random
 from streamlit_javascript import st_javascript
 from dotenv import load_dotenv
 
+import sys
+# 將專案根目錄加入路徑，以便讀取共享的 max_api.py
+root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if root_dir not in sys.path:
+    sys.path.append(root_dir)
+
 # 載入環境變數 (如 MAX API Keys)
-# 使用絕對路徑確保無論從哪裡啟動都能讀到同目錄下的 .env
-env_path = os.path.join(os.path.dirname(__file__), '.env')
+# 使用絕對路徑確保讀取根目錄下的 .env
+env_path = os.path.join(root_dir, '.env')
 load_dotenv(env_path)
 
 
