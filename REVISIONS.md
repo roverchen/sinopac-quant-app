@@ -2,6 +2,12 @@
 
 ## Version 2.2 Series
 
+### v2.6.4 (2026-04-10)
+- **Architecture & Rules Synchronization**:
+  - [Maintenance] Encapsulated legacy Streamlit files into a dedicated `streamlit/` subdirectory to decouple from modern FastAPI backend.
+  - [Maintenance] Updated `rules.md` to correctly reflect Firestore as the distributed lock provider.
+  - [Maintenance] Synchronized all backend version strings to `2.6.4`.
+
 ### v2.6.3 (2026-04-09)
 - **Fix Critical Simulation Bug**:
   - [Maintenance] Fixed the -97% PnL bug where Crypto/US prices were compared directly against TWD positions without exchange rate conversion.
