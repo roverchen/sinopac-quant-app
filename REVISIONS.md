@@ -2,6 +2,12 @@
 
 ## Version 2.2 Series
 
+### v2.6.3 (2026-04-09)
+- **Fix Critical Simulation Bug**:
+  - [Maintenance] Fixed the -97% PnL bug where Crypto/US prices were compared directly against TWD positions without exchange rate conversion.
+  - [Maintenance] Added `yfinance` TWD=X rate caching (10 min) to the `MatchingEngine`.
+  - [Maintenance] Reset `system_auto` trade logs for a fresh, accurate performance start.
+
 ### v2.6.2 (2026-03-28)
 - **Quant Engine Hotfix**:
   - [Backend] Fixed `UnboundLocalError` in `analyze_stock` caused by incorrect `sanitize` helper scope.

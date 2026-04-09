@@ -75,8 +75,14 @@ class MatchingEngine:
                     data = yf.download(t, period="1d", interval="1m", progress=False)
                     if not data.empty:
                         price = float(data['Close'].iloc[-1])
-                except:
-                    pass
+                        
+                        # [v2.6.3] Fix: Convert USD price to TWD if the symbol is US or Crypto
+                        if m_type == "US" or (m_type == "CRYPTO" and s.lower().endswith("twd")):
+                            exchange_rate = self._get_cached_exchange_rate()
+                            price = price * exchange_rate
+                            print(f"[TradeEngine] Converted Yahoo {s} USD price to {price:.2f} TWD (Rate: {exchange_rate:.2f})")
+                except Exception as e:
+                    print(f"[TradeEngine] Yahoo fetch error: {e}")
                 
                 m_type = next((o['market'] for o in pending if o['symbol'] == s), "TW")
                 if price is None and ("-USD" in t or m_type == "CRYPTO"):
@@ -86,8 +92,14 @@ class MatchingEngine:
                         r = requests.get(f"https://api.binance.com/api/v3/ticker/price?symbol={base}USDT", timeout=5)
                         if r.status_code == 200:
                             price = float(r.json()['price'])
-                    except:
-                        pass
+                            
+                            # [v2.6.3] Fix: Convert USD price to TWD if the symbol is a TWD pair or US market is active
+                            if s.lower().endswith("twd") or m_type == "US":
+                                exchange_rate = self._get_cached_exchange_rate()
+                                price = price * exchange_rate
+                                print(f"[TradeEngine] Converted {base if m_type == 'CRYPTO' else s} USD price to {price:.2f} TWD (Rate: {exchange_rate:.2f})")
+                    except Exception as e:
+                        print(f"[TradeEngine] Binance fetch error: {e}")
                 
                 if price:
                     prices[s] = price
@@ -299,5 +311,22 @@ class MatchingEngine:
             print(f"[MatchingEngine] Cancelled {target_id} for {user_id}")
             return True
         return False
+
+    def _get_cached_exchange_rate(self):
+        """Fetch USD/TWD exchange rate with a 10-minute cache to avoid rate limits."""
+        now = time.time()
+        if hasattr(self, '_rate_cache') and (now - self._rate_cache['ts'] < 600):
+            return self._rate_cache['rate']
+        
+        rate = 31.0 # Default fallback
+        try:
+            rate_df = yf.download("TWD=X", period="1d", interval="1m", progress=False)
+            if not rate_df.empty:
+                rate = float(rate_df['Close'].iloc[-1])
+        except Exception as e:
+            print(f"[TradeEngine] Exchange rate fetch error: {e}")
+        
+        self._rate_cache = {'rate': rate, 'ts': now}
+        return rate
 
 engine = MatchingEngine()
