@@ -2,6 +2,12 @@
 
 ## Version 2.2 Series
 
+### v2.6.6 (2026-04-13)
+- **Critical Fix: Simulation PnL Accuracy**:
+  - [Maintenance] Fixed `MatchingEngine` bug where US/Crypto prices were not converted to TWD during simulation fills due to `UnboundLocalError`.
+  - [Maintenance] Corrected `system_auto` historical logs where ROI was incorrectly reported as -97%.
+  - [Maintenance] Bumped version to `2.6.6`.
+
 ### v2.6.5 (2026-04-13)
 - **Auto-Trade Recovery & Local Env Fixes**:
   - [Maintenance] Resolved stalled "Scanning" state by manually restarting sequences.

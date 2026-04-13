@@ -71,20 +71,21 @@ class MatchingEngine:
         if has_sim:
             for s, t in tickers.items():
                 price = None
+                m_type = next((o['market'] for o in pending if o['symbol'] == s), "TW")
+                
                 try:
                     data = yf.download(t, period="1d", interval="1m", progress=False)
                     if not data.empty:
                         price = float(data['Close'].iloc[-1])
                         
-                        # [v2.6.3] Fix: Convert USD price to TWD if the symbol is US or Crypto
+                        # [v2.6.3] Fix: Convert USD price to TWD if the symbol is US or Crypto TWD pair
                         if m_type == "US" or (m_type == "CRYPTO" and s.lower().endswith("twd")):
                             exchange_rate = self._get_cached_exchange_rate()
                             price = price * exchange_rate
                             print(f"[TradeEngine] Converted Yahoo {s} USD price to {price:.2f} TWD (Rate: {exchange_rate:.2f})")
                 except Exception as e:
-                    print(f"[TradeEngine] Yahoo fetch error: {e}")
+                    print(f"[TradeEngine] Yahoo fetch error for {s}: {e}")
                 
-                m_type = next((o['market'] for o in pending if o['symbol'] == s), "TW")
                 if price is None and ("-USD" in t or m_type == "CRYPTO"):
                     base = t.split("-")[0]
                     try:
@@ -97,9 +98,9 @@ class MatchingEngine:
                             if s.lower().endswith("twd") or m_type == "US":
                                 exchange_rate = self._get_cached_exchange_rate()
                                 price = price * exchange_rate
-                                print(f"[TradeEngine] Converted {base if m_type == 'CRYPTO' else s} USD price to {price:.2f} TWD (Rate: {exchange_rate:.2f})")
+                                print(f"[TradeEngine] Converted Binance {base} USD price to {price:.2f} TWD (Rate: {exchange_rate:.2f})")
                     except Exception as e:
-                        print(f"[TradeEngine] Binance fetch error: {e}")
+                        print(f"[TradeEngine] Binance fetch error for {base}: {e}")
                 
                 if price:
                     prices[s] = price
