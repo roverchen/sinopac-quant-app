@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Port Definitions
-API_PORT=8000
+API_PORT=8001
 WEB_PORT=5173
 
 echo "🚀 Starting Sinopac Quant Pro Local Development..."
@@ -11,7 +11,7 @@ cd "$(dirname "$0")"
 
 # 1. Start Backend (API)
 echo "📦 Starting Backend API on port $API_PORT..."
-python3 -m uvicorn api.main:app --host 0.0.0.0 --port $API_PORT --reload > /tmp/backend.log 2>&1 &
+./venv/bin/python -m uvicorn api.main:app --host 0.0.0.0 --port $API_PORT --reload > /tmp/backend.log 2>&1 &
 BACKEND_PID=$!
 
 # 2. Start Frontend (Vite)

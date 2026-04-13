@@ -2,6 +2,13 @@
 
 ## Version 2.2 Series
 
+### v2.6.5 (2026-04-13)
+- **Auto-Trade Recovery & Local Env Fixes**:
+  - [Maintenance] Resolved stalled "Scanning" state by manually restarting sequences.
+  - [Maintenance] Fixed local port conflict (8000 -> 8001).
+  - [Maintenance] Updated `requirements.txt` for Python 3.9 compatibility and added `lxml`.
+  - [Maintenance] Normalized `run_local.sh` to use virtual environment's Python.
+
 ### v2.6.4 (2026-04-10)
 - **Architecture & Rules Synchronization**:
   - [Maintenance] Encapsulated legacy Streamlit files into a dedicated `streamlit/` subdirectory to decouple from modern FastAPI backend.
