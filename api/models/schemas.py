@@ -53,6 +53,7 @@ class UserSettings(BaseModel):
     email_notifications_enabled: bool = True
     mirror_trading_confirmed: bool = False
     total_allocation_pct: float = 10.0  # Max % of balance per trade
+    sip_amount_twd: float = 10000.0    # Fixed amount per trade in TWD
     strategy_ratio: float = 0.5       # Ratio (0=Val, 1=Pullback)
     max_order_limit: float = 50000.0   # Absolute TWD limit per order
     tp_pct: float = 20.0     # Take Profit %

@@ -195,8 +195,34 @@ class AutoRobot:
 
             self._update_status("Trading", log_msg)
 
-            # Execution logic (TW: 1000 shares, US: 10, Crypto: 0.1)
-            qty = 1000 if market_type == "TW" else (10 if market_type == "US" else 0.1)
+            # Execution logic: Systematic Investment Plan (SIP) Mode [v2.6.7]
+            # Default to 10,000 TWD or user-defined sip_amount_twd
+            from api.services.storage_service import get_user_settings
+            settings = get_user_settings(self.user_id)
+            sip_amount = settings.get("sip_amount_twd", 10000.0)
+            
+            # Convert native price to TWD for quantity calculation
+            price_twd = entry_price
+            if market_type != "TW":
+                from api.services.trade_engine import engine
+                rate = engine._get_cached_exchange_rate()
+                price_twd = entry_price * rate
+            
+            qty = sip_amount / price_twd
+            
+            # Apply market rounding
+            if market_type == "TW":
+                qty = int(qty) # Odd-lots allowed (1 share unit)
+            elif market_type == "US":
+                qty = int(qty) # Integer shares
+            else:
+                qty = round(qty, 4) # Crypto precision
+
+            if qty <= 0:
+                msg = f"Skipping {symbol}: Calculated quantity {qty} is too low for amount {sip_amount}"
+                print(f"[AutoRobot] {msg}")
+                self._update_status("Idle", msg)
+                return
 
             res = ShioajiService.place_order(
                 self.user_id,
@@ -210,8 +236,8 @@ class AutoRobot:
             if isinstance(res, dict) and "error" in res:
                 self._update_status("Error", f"Order failed for {symbol}: {res['error']}")
             else:
-                self._update_status("Idle", f"Successfully placed order for {symbol} @ {entry_price}")
-                print(f"[AutoRobot] Simulation Trade CREATED for {symbol} at {entry_price}. Checking logs...")
+                self._update_status("Idle", f"Successfully placed order for {symbol} ({qty} units) @ {entry_price}")
+                print(f"[AutoRobot] Simulation Trade CREATED for {symbol} at {entry_price} (Qty: {qty}).")
                 # Notify users (Email)
                 self._notify_users(symbol, "Buy", entry_price, market_type, score)
                 
@@ -253,41 +279,30 @@ class AutoRobot:
                     print(f"[AutoRobot] Invalid balance for {uid}: {balance}. Skipping.")
                     continue
                 
-                # [v2.1.86] Budget-Based Allocation
-                # total_allocation_pct is the max % of balance (e.g., 10%)
-                # strategy_ratio (0.0 to 1.0) splits that max %
-                total_pct = settings.get("total_allocation_pct", 10.0) / 100.0
-                ratio = settings.get("strategy_ratio", 0.5)
-
-                if pullback_score >= value_score:
-                    # [v2.1.90] Normalized Scaling: 0.5 ratio = 100% budget. 
-                    # If ratio < 0.5, scale down Pullback. If >= 0.5, keep 100%.
-                    weight = total_pct * min(1.0, ratio / 0.5)
-                else:
-                    # If ratio > 0.5, scale down Value. If <= 0.5, keep 100%.
-                    weight = total_pct * min(1.0, (1.0 - ratio) / 0.5)
-
-                order_value = balance * weight
+                # [v2.6.7] SIP Mode: Fixed TWD amount per trade
+                order_value = settings.get("sip_amount_twd", 10000.0)
                 
-                # [v2.1.85] Absolute Trade Limit
+                # [v2.1.85] Absolute Trade Limit (Still apply for safety)
                 max_limit = settings.get("max_order_limit", 50000.0)
                 if order_value > max_limit:
-                    print(f"[AutoRobot] Order value {order_value} exceeds limit {max_limit} for {uid}. Capping.")
+                    print(f"[AutoRobot] SIP value {order_value} exceeds limit {max_limit} for {uid}. Capping.")
                     order_value = max_limit
 
-                if order_value < 100: # Threshold for too small order
-                    print(f"[AutoRobot] Balance too low for {uid} to mirror trade {symbol}")
-                    continue
-                
-                # Calc Qty (TW: round to nearest 1000/1, US: floor, Crypto: floor)
+                # Convert Native price to TWD for quantity calculation
+                price_twd = entry_price
+                if market_type != "TW":
+                    from api.services.trade_engine import engine
+                    rate = engine._get_cached_exchange_rate()
+                    price_twd = entry_price * rate
+
+                # Calc Qty
+                qty = order_value / price_twd
                 if market_type == "TW":
-                    # Simple estimation: price * 1.005 to cover fees
-                    qty = int(order_value / (entry_price * 1.005)) 
-                    qty = (qty // 1000) * 1000 if qty >= 1000 else qty
+                    qty = int(qty) # Odd-lots allowed
                 elif market_type == "US":
-                    qty = int(order_value / entry_price)
+                    qty = int(qty)
                 else:
-                    qty = round(order_value / entry_price, 4)
+                    qty = round(qty, 4)
 
                 if qty <= 0: continue
 

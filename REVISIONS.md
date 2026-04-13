@@ -2,6 +2,13 @@
 
 ## Version 2.2 Series
 
+### v2.6.7 (2026-04-13)
+- **New Feature: SIP (Periodic Investment) Mode**:
+  - [Backend] Replaced hardcoded quantities with a dynamic calculation based on `sip_amount_twd` (Default: 10,000 TWD).
+  - [Backend] Enabled Odd-Lot (零股) trading for Taiwan market to match exact TWD amounts.
+  - [Backend] Implemented currency-aware quantity calculation for US and Crypto markets.
+  - [Maintenance] Added `sip_amount_twd` to global user settings.
+
 ### v2.6.6 (2026-04-13)
 - **Critical Fix: Simulation PnL Accuracy**:
   - [Maintenance] Fixed `MatchingEngine` bug where US/Crypto prices were not converted to TWD during simulation fills due to `UnboundLocalError`.

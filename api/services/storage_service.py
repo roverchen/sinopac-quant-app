@@ -101,6 +101,7 @@ def get_user_settings(user_id):
         "email_notifications_enabled": True,
         "mirror_trading_confirmed": False,
         "total_allocation_pct": 10.0,
+        "sip_amount_twd": 10000.0,
         "strategy_ratio": 0.5,
         "max_order_limit": 50000.0,
         "tp_pct": 20.0,
