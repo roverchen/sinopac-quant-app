@@ -6,7 +6,7 @@ from api.services.storage_service import (
     get_user_trade_logs,
     save_user_trade_logs
 )
-from api.services.quant_service import get_yahoo_ticker
+from api.services.quant_service import get_yahoo_ticker, get_symbol_name
 from api.services.strategy_accounts import list_strategy_account_ids
 
 class MatchingEngine:
@@ -187,7 +187,13 @@ class MatchingEngine:
         
         trade_id = target_id or f"AUTO-{int(time.time())}"
         symbol = order['symbol']
+        market = order['market']
+        
+        # [v2.6.9] Ensure name is resolved if missing or generic
         name = order.get('name', symbol)
+        if not name or name == symbol:
+            name = get_symbol_name(symbol, market)
+            
         qty = order['qty']
         action = order['action']
         market = order['market']

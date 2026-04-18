@@ -4,6 +4,7 @@ from api.services.shioaji_service import ShioajiService
 from api.services.reconciliation_service import reconciliation_service
 from api.services.storage_service import get_user_credentials, update_user_credentials, get_user_trade_logs
 from api.services.strategy_accounts import is_system_strategy_account, list_strategy_account_ids
+from api.services.quant_service import get_symbol_name
 from pydantic import BaseModel
 from typing import Optional
 
@@ -23,7 +24,7 @@ async def get_trading_status(current_user: str = Depends(get_current_user)):
     return {
         "auto_trade_enabled": creds.get("auto_trade_enabled", False),
         "mode": "Simulation" if creds.get("simulation_mode", True) else "Live",
-        "backend_version": "2.6.8"
+        "backend_version": "2.6.9"
     }
 
 @router.post("/toggle")
@@ -56,6 +57,12 @@ async def get_pending_orders(user_id: Optional[str] = None, current_user: str = 
     target_user = user_id if user_id else current_user
     logs = get_user_trade_logs(target_user)
     pending = [L for L in logs if L.get("entry_type") == "PENDING"]
+    
+    # [v2.6.9] Robust Name Resolution
+    for o in pending:
+        if not o.get("name") or o.get("name") == o.get("symbol"):
+            o["name"] = get_symbol_name(o.get("symbol"), o.get("market", "TW"))
+            
     # Sort by timestamp (newest first)
     pending.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
     return {"pending": pending}
@@ -66,6 +73,12 @@ async def get_trade_history(user_id: Optional[str] = None, current_user: str = D
     target_user = user_id if user_id else current_user
     logs = get_user_trade_logs(target_user)
     history = [L for L in logs if L.get("entry_type") == "HISTORY" and (L.get("action") == "Sell" or L.get("status") == "CANCELLED")]
+    
+    # [v2.6.9] Robust Name Resolution
+    for h in history:
+        if not h.get("name") or h.get("name") == h.get("symbol"):
+            h["name"] = get_symbol_name(h.get("symbol"), h.get("market", "TW"))
+
     # Sort by timestamp (newest first)
     history.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
     return {"history": history[:20]}

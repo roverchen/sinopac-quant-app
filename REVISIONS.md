@@ -2,6 +2,12 @@
 
 ## Version 2.2 Series
 
+### v2.6.9 (2026-04-18)
+- **Fix: Trade History Name Display**:
+  - [Backend] Implemented thread-safe global symbol-to-name caching and lazy fetching from external APIs (ISIN, Wikipedia, MAX).
+  - [Backend] Added lazy name resolution to History and Pending Order endpoints to repair missing/generic names in existing logs.
+  - [Backend] Guaranteed accurate name persistence during real-time fill execution in the `MatchingEngine`.
+
 ### v2.6.8 (2026-04-18)
 - **Multi-Strategy Support**:
   - [Backend] Refactored `AutoRobot` and `MatchingEngine` to support multiple system accounts via `strategy_accounts.py`.

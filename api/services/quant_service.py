@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import re
 import requests
 import asyncio
+import threading
 from max_api import MaxExchangeAPI
 from api.services.storage_service import save_data_pool, load_data_pool
 from api.models.schemas import AnalysisResult
@@ -26,6 +27,10 @@ results_cache = {
 
 # Revenue analysis cache (24h)
 revenue_cache = {}
+
+# Global symbol-to-name cache [v2.6.9]
+_SYMBOLS_CACHE = {"TW": {}, "US": {}, "CRYPTO": {}}
+_SYMBOLS_LOCK = threading.Lock()
 
 def get_cached_pool(market_type: str):
     global results_cache
@@ -157,28 +162,45 @@ def fetch_crypto_symbols():
 
 
 def get_symbol_name(symbol, market_type='TW'):
-    """Lookup symbol name from results cache or return symbol as fallback"""
-    global results_cache
-    pool = results_cache.get(market_type)
-    if pool is None:
-        # Try loading if cache is empty
-        pool = load_data_pool(market_type)
-        if pool:
-            results_cache[market_type] = pool
+    """Lookup symbol name with multi-layer caching and lazy fetching [v2.6.9]"""
+    global _SYMBOLS_CACHE, results_cache
     
-    if pool and 'summary' in pool:
-        # Search in summary dataframe
-        df = pool['summary']
+    # 1. Check scan results cache first (most likely to have the latest info)
+    pool = results_cache.get(market_type)
+    if not pool:
+        pool = load_data_pool(market_type)
+        if pool: results_cache[market_type] = pool
         
-        # [v2.1.43] Handle MATIC <-> POL fallback
-        query_symbols = [symbol]
-        if symbol == "MATIC-USD": query_symbols.append("POL-USD")
-        if symbol == "POL-USD": query_symbols.append("MATIC-USD")
+    if pool and 'results' in pool:
+        # Pydantic models or dicts
+        for r in pool['results']:
+            r_sym = r.get('symbol') if isinstance(r, dict) else getattr(r, 'symbol', None)
+            if r_sym == symbol:
+                name = r.get('name') if isinstance(r, dict) else getattr(r, 'name', None)
+                if name and name != symbol:
+                    return name
+
+    # 2. Check Global Symbols Cache
+    with _SYMBOLS_LOCK:
+        if symbol in _SYMBOLS_CACHE[market_type]:
+            return _SYMBOLS_CACHE[market_type][symbol]
+
+    # 3. Lazy Fetching: If cache is empty for this market, populate it
+    with _SYMBOLS_LOCK:
+        if not _SYMBOLS_CACHE[market_type]:
+            print(f"[QuantService] Populating global symbols cache for {market_type}...")
+            try:
+                if market_type == "TW": _SYMBOLS_CACHE["TW"] = fetch_tw_symbols()
+                elif market_type == "US": _SYMBOLS_CACHE["US"] = fetch_us_symbols()
+                else: _SYMBOLS_CACHE["CRYPTO"] = fetch_crypto_symbols()
+            except Exception as e:
+                print(f"[QuantService] Failed to populate {market_type} symbols: {e}")
         
-        match = df[df['symbol'].isin(query_symbols)]
-        if not match.empty:
-            return match.iloc[0]['name']
-            
+        # Check again after lazy population
+        name = _SYMBOLS_CACHE[market_type].get(symbol)
+        if name and name != symbol:
+            return name
+
     return symbol
 
 def get_yahoo_ticker(code, market_type='TW'):
