@@ -10,6 +10,11 @@ const Skeleton = ({ className }) => (
   <div className={`animate-pulse bg-slate-800/50 rounded-2xl ${className}`} />
 );
 
+const STRATEGY_ACCOUNTS = [
+  { id: 'system_auto', label: 'Rover Rules 自動下單模擬', icon: Zap, color: 'emerald' },
+  { id: 'system_eric', label: 'Eric Rules 台股模擬', icon: BarChart3, color: 'amber' },
+];
+
 const StatCard = ({ label, value, change, color, icon: Icon, subValue, loading, onClick }) => (
   <div 
     onClick={onClick}
@@ -89,11 +94,15 @@ const Dashboard = ({ onNavigate }) => {
 
   const fetchSummary = async () => {
     try {
-      const data = await tradeService.getSummary();
-      const autoData = await tradeService.getSummary('system_auto');
+      const [data, roverData, ericData] = await Promise.all([
+        tradeService.getSummary(),
+        tradeService.getSummary('system_auto'),
+        tradeService.getSummary('system_eric')
+      ]);
       setSummary({
         ...data,
-        system_auto: autoData.mock
+        system_auto: roverData.mock,
+        system_eric: ericData.mock
       });
     } catch (err) {
       console.error("Failed to fetch summary:", err);
@@ -144,16 +153,25 @@ const Dashboard = ({ onNavigate }) => {
           loading={loading}
         />
         <StatCard 
-          label="系統自動下單模擬總成效" 
+          label={STRATEGY_ACCOUNTS[0].label}
           value={`${summary?.system_auto?.return_rate ?? 0}%`} 
           change={summary?.system_auto?.return_rate} 
-          color="emerald" 
+          color={STRATEGY_ACCOUNTS[0].color}
           icon={Zap} 
           subValue={summary?.system_auto ? `成本: $${summary.system_auto.invested?.toLocaleString()} | 盈虧: $${summary.system_auto.total?.toLocaleString()}` : '載入中...'}
           loading={loading}
           onClick={() => onNavigate('trading', { viewAccount: 'system_auto' })}
         />
-        <StatCard label="策略平均勝率" value="78.2%" change="+2.4" color="amber" icon={BarChart3} loading={loading} />
+        <StatCard
+          label={STRATEGY_ACCOUNTS[1].label}
+          value={`${summary?.system_eric?.return_rate ?? 0}%`}
+          change={summary?.system_eric?.return_rate}
+          color={STRATEGY_ACCOUNTS[1].color}
+          icon={BarChart3}
+          subValue={summary?.system_eric ? `成本: $${summary.system_eric.invested?.toLocaleString()} | 盈虧: $${summary.system_eric.total?.toLocaleString()}` : '載入中...'}
+          loading={loading}
+          onClick={() => onNavigate('trading', { viewAccount: 'system_eric' })}
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

@@ -13,13 +13,19 @@ const SkeletonRow = ({ cols = 6 }) => (
   </tr>
 );
 
+const ACCOUNT_OPTIONS = [
+  { id: 'personal', label: '個人帳戶', shortLabel: 'Personal', accent: 'indigo' },
+  { id: 'system_auto', label: 'Rover Rules 模擬', shortLabel: 'Rover', accent: 'emerald' },
+  { id: 'system_eric', label: 'Eric Rules 模擬', shortLabel: 'Eric', accent: 'amber' },
+];
+
 const TradingControl = ({ navParams }) => {
-  const [status, setStatus] = useState({ auto_trade_enabled: false, mode: 'Simulation', backend_version: "2.6.7" });
+  const [status, setStatus] = useState({ auto_trade_enabled: false, mode: 'Simulation', backend_version: "2.6.8" });
   const [account, setAccount] = useState({ balance: 0, positions: [], status: 'loading' });
   const [loading, setLoading] = useState(false);
   const [selectedPosition, setSelectedPosition] = useState(null);
   const [sellForm, setSellForm] = useState({ price: 0, qty: 0 });
-  const [viewAccount, setViewAccount] = useState('personal'); // 'personal' or 'system_auto'
+  const [viewAccount, setViewAccount] = useState('personal');
   const [viewType, setViewType] = useState('positions'); // 'positions' or 'history'
   const [pending, setPending] = useState([]);
   const [summary, setSummary] = useState(null);
@@ -38,6 +44,10 @@ const TradingControl = ({ navParams }) => {
       setViewAccount(navParams.viewAccount);
     }
   }, [navParams]);
+
+  const currentAccount = ACCOUNT_OPTIONS.find((account) => account.id === viewAccount) || ACCOUNT_OPTIONS[0];
+  const isSystemView = viewAccount !== 'personal';
+  const activeUserId = isSystemView ? viewAccount : null;
 
   const refreshAll = () => {
     fetchStatus();
@@ -62,8 +72,7 @@ const TradingControl = ({ navParams }) => {
   const fetchAccount = async () => {
     setLoading(true);
     try {
-      const userId = viewAccount === 'system_auto' ? 'system_auto' : null;
-      const resp = await tradeService.getAccount(userId);
+      const resp = await tradeService.getAccount(activeUserId);
       setAccount(resp);
     } catch (err) {
       console.error(err);
@@ -74,8 +83,7 @@ const TradingControl = ({ navParams }) => {
 
   const fetchPending = async () => {
     try {
-      const userId = viewAccount === 'system_auto' ? 'system_auto' : null;
-      const resp = await tradeService.getPending(userId);
+      const resp = await tradeService.getPending(activeUserId);
       setPending(resp.pending || []);
     } catch (err) {
       console.error(err);
@@ -84,8 +92,7 @@ const TradingControl = ({ navParams }) => {
 
   const fetchSummary = async () => {
     try {
-      const userId = viewAccount === 'system_auto' ? 'system_auto' : null;
-      const resp = await tradeService.getSummary(userId);
+      const resp = await tradeService.getSummary(activeUserId);
       setSummary(resp);
     } catch (err) {
       console.error(err);
@@ -95,8 +102,7 @@ const TradingControl = ({ navParams }) => {
   const fetchHistory = async () => {
     setLoading(true);
     try {
-      const userId = viewAccount === 'system_auto' ? 'system_auto' : null;
-      const resp = await tradeService.getHistory(userId);
+      const resp = await tradeService.getHistory(activeUserId);
       setHistory(resp.history || []);
     } catch (err) {
       console.error(err);
@@ -193,8 +199,8 @@ const TradingControl = ({ navParams }) => {
           
           <div className="relative z-10">
             <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-2">
-              <span className={`w-2 h-2 rounded-full ${viewAccount === 'personal' ? 'bg-indigo-500' : 'bg-emerald-500'} animate-pulse`} />
-              {viewAccount === 'personal' ? '個人帳戶' : '系統自動'} 績效快報
+              <span className={`w-2 h-2 rounded-full ${currentAccount.accent === 'indigo' ? 'bg-indigo-500' : currentAccount.accent === 'emerald' ? 'bg-emerald-500' : 'bg-amber-500'} animate-pulse`} />
+              {currentAccount.label} 績效快報
             </p>
             <div className="flex items-baseline gap-4">
               <h3 className={`text-4xl font-black font-inter tracking-tight ${ (summary?.mock?.total ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
@@ -220,6 +226,26 @@ const TradingControl = ({ navParams }) => {
           </div>
         </div>
       )}
+
+      <div className="flex flex-wrap items-center gap-3 px-4">
+        {ACCOUNT_OPTIONS.map((accountOption) => (
+          <button
+            key={accountOption.id}
+            onClick={() => setViewAccount(accountOption.id)}
+            className={`px-4 py-2 rounded-2xl text-sm font-black transition-all border ${
+              viewAccount === accountOption.id
+                ? accountOption.accent === 'indigo'
+                  ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30'
+                  : accountOption.accent === 'emerald'
+                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                    : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                : 'bg-slate-900/40 text-slate-400 border-slate-800 hover:text-slate-200 hover:border-slate-700'
+            }`}
+          >
+            {accountOption.label}
+          </button>
+        ))}
+      </div>
 
 
       {/* Operation Tabs */}
@@ -254,7 +280,7 @@ const TradingControl = ({ navParams }) => {
               <div>
                 <h3 className="text-xl font-bold text-white">資產與委託 (Assets & Orders)</h3>
                 <p className="text-slate-500 text-xs mt-1">
-                  {viewAccount === 'system_auto' 
+                  {isSystemView
                     ? '系統自動標的不可手動操作 (Robot Managed)' 
                     : '整合持倉與未成交委託，點擊持倉可快速平倉'}
                 </p>
@@ -309,7 +335,7 @@ const TradingControl = ({ navParams }) => {
                         </td>
                         <td className="px-8 py-6 text-right">
                           <div className="flex items-center justify-end gap-2 text-amber-500/40 group-hover:text-amber-500 transition-colors">
-                            {viewAccount === 'system_auto' ? (
+                            {isSystemView ? (
                               <div className="flex items-center gap-1.5 px-3 py-1 bg-slate-800/50 text-slate-500 rounded-lg">
                                 <Lock className="w-3.5 h-3.5" />
                                 <span className="text-[10px] font-black uppercase">系統鎖定</span>
@@ -364,11 +390,11 @@ const TradingControl = ({ navParams }) => {
                               </span>
                             </div>
                             <div className={`p-2 rounded-lg transition-all ${
-                              viewAccount === 'system_auto' 
+                              isSystemView
                                 ? 'bg-slate-800/50 text-slate-500 opacity-100 flex items-center gap-1.5 px-3' 
                                 : 'bg-rose-500/10 text-rose-500 opacity-0 group-hover:opacity-100 transform translate-x-4 group-hover:translate-x-0'
                             }`}>
-                              {viewAccount === 'system_auto' ? (
+                              {isSystemView ? (
                                 <>
                                   <Lock className="w-3.5 h-3.5" />
                                   <span className="text-[10px] font-black uppercase">唯讀</span>
@@ -552,10 +578,10 @@ const TradingControl = ({ navParams }) => {
                 <div className="pt-4 border-t border-slate-800 flex flex-col gap-3">
                   <button
                     onClick={handleCancelOrder}
-                    disabled={loading || viewAccount === 'system_auto'}
+                    disabled={loading || isSystemView}
                     className="w-full bg-rose-600/10 hover:bg-rose-600/20 text-rose-400 font-black py-4 rounded-2xl transition-all border border-rose-600/20 flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed"
                   >
-                    {loading ? "處理中..." : viewAccount === 'system_auto' ? "系統委託不可手動撤單" : "撤銷此筆委託 (Cancel Order)"}
+                    {loading ? "處理中..." : isSystemView ? "系統委託不可手動撤單" : "撤銷此筆委託 (Cancel Order)"}
                   </button>
                   <button
                     onClick={() => setSelectedPending(null)}
@@ -662,9 +688,9 @@ const TradingControl = ({ navParams }) => {
                       <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">賣出數量</label>
                       <button 
                         onClick={() => setSellForm({...sellForm, qty: selectedPosition.qty})}
-                        disabled={viewAccount === 'system_auto'}
+                        disabled={isSystemView}
                         className={`text-[10px] font-black uppercase tracking-widest transition-colors ${
-                          viewAccount === 'system_auto' 
+                          isSystemView
                             ? 'text-slate-600 cursor-not-allowed' 
                             : 'text-indigo-400 hover:text-indigo-300'
                         }`}
@@ -702,12 +728,12 @@ const TradingControl = ({ navParams }) => {
               <div className="p-8 pt-0">
                 <button
                   onClick={handleSellSubmit}
-                  disabled={loading || viewAccount === 'system_auto'}
+                  disabled={loading || isSystemView}
                   className="w-full bg-rose-600 hover:bg-rose-500 text-white font-black py-5 rounded-2xl transition-all transform active:scale-95 shadow-xl shadow-rose-600/20 disabled:opacity-50 disabled:bg-slate-800 disabled:text-slate-500 flex items-center justify-center gap-3"
                 >
                   {loading ? (
                     <div className="w-6 h-6 border-3 border-white/30 border-t-white rounded-full animate-spin" />
-                  ) : viewAccount === 'system_auto' ? (
+                  ) : isSystemView ? (
                     "系統自動標的不可手動賣出"
                   ) : (
                     <>

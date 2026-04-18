@@ -3,6 +3,7 @@ from api.routes.auth import get_current_user
 from api.services.shioaji_service import ShioajiService
 from api.services.reconciliation_service import reconciliation_service
 from api.services.storage_service import get_user_credentials, update_user_credentials, get_user_trade_logs
+from api.services.strategy_accounts import is_system_strategy_account, list_strategy_account_ids
 from pydantic import BaseModel
 from typing import Optional
 
@@ -22,7 +23,7 @@ async def get_trading_status(current_user: str = Depends(get_current_user)):
     return {
         "auto_trade_enabled": creds.get("auto_trade_enabled", False),
         "mode": "Simulation" if creds.get("simulation_mode", True) else "Live",
-        "backend_version": "2.6.7"
+        "backend_version": "2.6.8"
     }
 
 @router.post("/toggle")
@@ -90,7 +91,7 @@ async def get_performance_summary(user_id: Optional[str] = None, current_user: s
         # This works for both manual and auto since trade_engine sets realized_pl
         buy_cost = (item.get('price', 0) * item.get('qty', 0)) - item.get('fee', 0) - item.get('tax', 0) - pnl
         
-        if item.get('is_simulation') or target_user == "system_auto":
+        if item.get('is_simulation') or is_system_strategy_account(target_user):
             realized_mock += pnl
             invested_mock += buy_cost
         else:
@@ -108,7 +109,7 @@ async def get_performance_summary(user_id: Optional[str] = None, current_user: s
         if current and buy and qty:
             pnl = (current - buy) * qty
             buy_cost = buy * qty
-            if pos.get('is_simulation'):
+            if pos.get('is_simulation') or is_system_strategy_account(target_user):
                 unrealized_mock += pnl
                 invested_mock += buy_cost
             else:
@@ -223,15 +224,18 @@ async def cancel_order(trade_id: str, current_user: str = Depends(get_current_us
         # Try user's own orders first
         success = engine.cancel_order(current_user, trade_id)
         if not success:
-            # Also try system_auto
-            print(f"[TradeRoute] Order {trade_id} not found for {current_user}, checking system_auto...")
-            success = engine.cancel_order("system_auto", trade_id)
+            # Also try system strategy accounts
+            for system_user in list_strategy_account_ids():
+                print(f"[TradeRoute] Order {trade_id} not found for {current_user}, checking {system_user}...")
+                success = engine.cancel_order(system_user, trade_id)
+                if success:
+                    break
             
         if success:
             print(f"[TradeRoute] Cancellation success for {trade_id}")
             return {"status": "success", "message": "Order cancelled"}
         else:
-            print(f"[TradeRoute] Cancellation failed: Order {trade_id} not found after checking both user and system_auto")
+            print(f"[TradeRoute] Cancellation failed: Order {trade_id} not found after checking user and system strategy accounts")
             raise HTTPException(status_code=404, detail=f"Order {trade_id} not found or already filled")
     except HTTPException:
         raise

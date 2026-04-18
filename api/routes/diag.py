@@ -53,18 +53,19 @@ async def clear_logs(current_user: str = Depends(get_current_user)):
     return {"status": "success"}
 
 @router.post("/trigger_auto_trade")
-async def trigger_auto_trade(market: str = "TW", current_user: str = Depends(get_current_user)):
+async def trigger_auto_trade(market: str = "TW", strategy_user_id: str = "system_auto", current_user: str = Depends(get_current_user)):
     """Manually trigger the AutoRobot cycle for testing"""
     from api.services.auto_trade_service import robot
     import threading
     
     # Run in background to not block API
-    threading.Thread(target=robot.perform_daily_trade, args=(market,), daemon=True).start()
+    threading.Thread(target=robot.perform_daily_trade, kwargs={"market_type": market, "strategy_user_id": strategy_user_id}, daemon=True).start()
     
     return {
         "status": "triggered",
         "market": market,
-        "message": f"Auto-trade cycle initiated for {market}. Check Trade History or Diag Logs for updates."
+        "strategy_user_id": strategy_user_id,
+        "message": f"Auto-trade cycle initiated for {strategy_user_id} on {market}. Check Trade History or Diag Logs for updates."
     }
 
 @router.get("/wakeup")

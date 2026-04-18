@@ -2,6 +2,14 @@
 
 ## Version 2.2 Series
 
+### v2.6.8 (2026-04-18)
+- **Multi-Strategy Support**:
+  - [Backend] Refactored `AutoRobot` and `MatchingEngine` to support multiple system accounts via `strategy_accounts.py`.
+  - [Backend] Added filtering by `userId` for positions, history, and pending order endpoints.
+  - [Backend] Enhanced `storage_service` and `trade_engine` for multi-account compatibility.
+  - [Frontend] Updated `TradingControl` and `Dashboard` to support switching between different system strategy views.
+  - [Maintenance] Synchronized `rover-rules.md` with SIP mode and relative strength definitions.
+
 ### v2.6.7 (2026-04-13)
 - **New Feature: SIP (Periodic Investment) Mode**:
   - [Backend] Replaced hardcoded quantities with a dynamic calculation based on `sip_amount_twd` (Default: 10,000 TWD).

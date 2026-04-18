@@ -1,46 +1,53 @@
-import time
-import threading
-import schedule
 import asyncio
-from datetime import datetime
-from api.services.quant_service import run_market_scan, get_cached_pool, scan_status
-from api.services.shioaji_service import ShioajiService
-from api.services.storage_service import get_user_trade_logs, get_all_users_for_notifications
+import schedule
+import threading
+import time
+from datetime import datetime, timedelta
+
 from api.services.email_service import notify_trade
+from api.services.quant_service import get_cached_pool, run_market_scan
+from api.services.shioaji_service import ShioajiService
+from api.services.storage_service import get_all_users_for_notifications, get_user_trade_logs
+from api.services.strategy_accounts import (
+    get_strategy_account,
+    list_strategy_accounts,
+    supports_market,
+)
+
 
 class AutoRobot:
     def __init__(self):
-        self.user_id = "system_auto"
+        self.primary_user_id = "system_auto"
         self.running = False
         self.thread = None
 
     def start(self):
         if not self.running:
             self.running = True
-            # Setup Schedule
-            # US 06:10, TW 14:10, Crypto 23:15 (Delayed slightly to ensure fresh data)
+            # Internal schedule targets the intended trade windows in Taiwan time.
             schedule.every().day.at("06:10").do(self.perform_daily_trade, market_type="US")
             schedule.every().day.at("14:10").do(self.perform_daily_trade, market_type="TW")
             schedule.every().day.at("23:15").do(self.perform_daily_trade, market_type="CRYPTO")
-            
+
             # Periodic checks (v2.5.2: Increased to 5 mins for safety)
             schedule.every(5).minutes.do(self.check_exits)
             schedule.every(4).hours.do(self.ensure_fresh_scans)
 
             self.thread = threading.Thread(target=self._run_scheduler, daemon=True)
             self.thread.start()
-            
+
             # Initial check at startup
             threading.Thread(target=self.ensure_fresh_scans, daemon=True).start()
-            print(f"[AutoRobot] Started for {self.user_id}")
+            print("[AutoRobot] Started multi-strategy simulation engine.")
             self._update_status("Idle", "Robot started and waiting for schedule.")
 
     def _update_status(self, status, message):
         from api.services.storage_service import save_robot_status
+
         status_dict = {
             "status": status,
             "message": message,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
         save_robot_status(status_dict)
 
@@ -49,7 +56,7 @@ class AutoRobot:
         targets = get_all_users_for_notifications()
         if not targets:
             return
-            
+
         print(f"[AutoRobot] Notifying {len(targets)} users about {action} {symbol}")
         for email, _ in targets:
             notify_trade(email, symbol, action, price, market, score)
@@ -59,164 +66,234 @@ class AutoRobot:
             schedule.run_pending()
             time.sleep(60)
 
-    def get_last_trade_time(self, market_type):
-        """Retrieve the timestamp of the most recent trade for this market"""
+    def get_last_trade_time(self, user_id, market_type):
+        """Retrieve the timestamp of the most recent trade for this user and market."""
         try:
-            from api.services.storage_service import get_user_trade_logs
-            logs = get_user_trade_logs(self.user_id)
+            logs = get_user_trade_logs(user_id)
             market_logs = [L for L in logs if L.get("market") == market_type]
             if not market_logs:
                 return datetime.min
-            
-            # Sort by timestamp descending
+
             market_logs.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
             ts_str = market_logs[0].get("timestamp", "")
-            if not ts_str: return datetime.min
-            # Parse ISO format, handles both with and without microsecs
+            if not ts_str:
+                return datetime.min
             try:
                 return datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
-            except:
+            except Exception:
                 return datetime.fromisoformat(ts_str.split(".")[0])
         except Exception as e:
-            print(f"[AutoRobot] Error getting last trade time: {e}")
+            print(f"[AutoRobot] Error getting last trade time for {user_id}: {e}")
             return datetime.min
 
+    def _parse_percent(self, raw_value, default=0.0):
+        try:
+            if raw_value is None:
+                return default
+            if isinstance(raw_value, (int, float)):
+                return float(raw_value)
+            return float(str(raw_value).replace("%", "").strip())
+        except Exception:
+            return default
+
+    def _pick_rover_candidate(self, results):
+        if not results:
+            return None
+        return results[0]
+
+    def _pick_eric_candidate(self, results):
+        """
+        TW-only swing strategy inspired by eric-rules:
+        prefer strong bullish trend structure, healthy pullback, and non-exhausted levels.
+        """
+        ranked = []
+        for result in results:
+            market = getattr(result, "market", result.get("market", "TW") if isinstance(result, dict) else "TW")
+            if market != "TW":
+                continue
+
+            pullback_score = float(getattr(result, "pullback_score", result.get("pullback_score", 0) if isinstance(result, dict) else 0) or 0)
+            value_score = float(getattr(result, "value_score", result.get("value_score", 0) if isinstance(result, dict) else 0) or 0)
+            rs_score = float(getattr(result, "rs_score", result.get("rs_score", 0) if isinstance(result, dict) else 0) or 0)
+            opening_strength = float(getattr(result, "opening_strength", result.get("opening_strength", 0) if isinstance(result, dict) else 0) or 0)
+            macd_status = getattr(result, "macd_status", result.get("macd_status", "") if isinstance(result, dict) else "") or ""
+            level = self._parse_percent(getattr(result, "level", result.get("level", 0) if isinstance(result, dict) else 0))
+            ma20_diff = self._parse_percent(getattr(result, "ma20_diff", result.get("ma20_diff", 0) if isinstance(result, dict) else 0))
+
+            if "Bullish" not in macd_status:
+                continue
+            if level < 15 or level > 82:
+                continue
+            if ma20_diff < -3.5 or ma20_diff > 8.0:
+                continue
+
+            near_ma20_bonus = max(0.0, 8.0 - abs(ma20_diff))
+            level_bonus = max(0.0, 18.0 - abs(level - 45.0)) * 0.35
+            composite = (
+                pullback_score * 0.45
+                + rs_score * 0.30
+                + value_score * 0.10
+                + opening_strength * 8.0
+                + near_ma20_bonus
+                + level_bonus
+            )
+            ranked.append((composite, result))
+
+        if ranked:
+            ranked.sort(key=lambda item: item[0], reverse=True)
+            return ranked[0][1]
+
+        # Fallback to best TW result if no candidate meets the stricter filters.
+        tw_results = [
+            r for r in results
+            if getattr(r, "market", r.get("market", "TW") if isinstance(r, dict) else "TW") == "TW"
+        ]
+        return tw_results[0] if tw_results else None
+
+    def _select_trade_candidate(self, strategy_key, market_type, results):
+        if strategy_key == "eric":
+            return self._pick_eric_candidate(results)
+        return self._pick_rover_candidate(results)
+
     def ensure_fresh_scans(self):
-        """Check for missing data OR missed trade windows (Robust Makeup logic)"""
+        """Check for missing data OR missed trade windows (robust makeup logic)."""
         now = datetime.now()
-        
-        # Market schedule map
         schedule_times = {
             "US": "06:10",
             "TW": "14:10",
-            "CRYPTO": "23:15"
+            "CRYPTO": "23:15",
         }
 
-        for m, scheduled_time_str in schedule_times.items():
-            # Layer 1: Data Freshness (v2.6.1: Added Staleness Check)
-            pool = get_cached_pool(m)
+        for market_type, scheduled_time_str in schedule_times.items():
+            pool = get_cached_pool(market_type)
             is_missing = not pool or not pool.get("results")
             is_stale = False
-            
+
             if pool and pool.get("timestamp"):
                 try:
                     pool_ts = datetime.fromisoformat(pool["timestamp"].replace("Z", "+00:00"))
-                    if (now - pool_ts.replace(tzinfo=None)).total_seconds() > 86400: # 24 hours
+                    if (now - pool_ts.replace(tzinfo=None)).total_seconds() > 86400:
                         is_stale = True
-                except:
+                except Exception:
                     is_stale = True
 
             if is_missing or is_stale:
                 reason = "Missing data" if is_missing else "Stale data (>24h)"
-                print(f"[AutoRobot] {reason} for {m}, triggering auto-scan...")
-                self._update_status("Scanning", f"Performing {reason} scan for {m}...")
-                asyncio.run(run_market_scan(m))
-            
-            # Layer 2: Robust Makeup Logic
-            # Calculate the LAST expected trade time for this market
+                print(f"[AutoRobot] {reason} for {market_type}, triggering auto-scan...")
+                self._update_status("Scanning", f"Performing {reason} scan for {market_type}...")
+                asyncio.run(run_market_scan(market_type))
+
             h, mn = map(int, scheduled_time_str.split(":"))
             target_today = now.replace(hour=h, minute=mn, second=0, microsecond=0)
-            
-            from datetime import timedelta
-            if now >= target_today:
-                last_expected = target_today
-            else:
-                # Target window was yesterday
-                last_expected = target_today - timedelta(days=1)
-            
-            last_trade = self.get_last_trade_time(m)
-            
-            # Use a small buffer (e.g. 1 minute) to avoid double trades due to timing precision
-            if last_trade < (last_expected - timedelta(minutes=1)):
-                print(f"[AutoRobot] Missed window detected for {m} (Last expected: {last_expected}, Last actual: {last_trade})")
-                self._update_status("Trading", f"Makeup trade for {m} (Missed window: {last_expected.strftime('%m-%d %H:%M')})")
-                self.perform_daily_trade(m)
-            else:
-                print(f"[AutoRobot] {m} is up to date (Last trade: {last_trade}).")
+            last_expected = target_today if now >= target_today else target_today - timedelta(days=1)
+
+            for strategy in list_strategy_accounts():
+                user_id = strategy["user_id"]
+                if not supports_market(user_id, market_type):
+                    continue
+
+                last_trade = self.get_last_trade_time(user_id, market_type)
+                if last_trade < (last_expected - timedelta(minutes=1)):
+                    print(
+                        f"[AutoRobot] Missed window detected for {user_id}/{market_type} "
+                        f"(Last expected: {last_expected}, Last actual: {last_trade})"
+                    )
+                    self._update_status(
+                        "Trading",
+                        f"{strategy['short_label']} makeup trade for {market_type} "
+                        f"({last_expected.strftime('%m-%d %H:%M')})",
+                    )
+                    self.perform_daily_trade(market_type, strategy_user_id=user_id)
+                else:
+                    print(f"[AutoRobot] {user_id}/{market_type} is up to date (Last trade: {last_trade}).")
 
         self._update_status("Idle", "Startup checks and makeup trades complete.")
 
-    def perform_daily_trade(self, market_type):
-        print(f"[AutoRobot] Running daily trade for {market_type}...")
-        
-        # Distributed Lock Check (v2.1.89)
-        from api.services.storage_service import acquire_daily_trade_lock
-        from datetime import datetime
-        if not acquire_daily_trade_lock(market_type, datetime.now()):
-            print(f"[AutoRobot] Skipping trade for {market_type} - Lock already held by another Cloud Run instance.")
+    def perform_daily_trade(self, market_type, strategy_user_id=None):
+        strategy_user_id = strategy_user_id or self.primary_user_id
+        strategy = get_strategy_account(strategy_user_id)
+        if not strategy or not supports_market(strategy_user_id, market_type):
+            print(f"[AutoRobot] Strategy {strategy_user_id} does not support market {market_type}.")
             return
-            
-        self._update_status("Trading", f"Analyzing {market_type} for trade opportunities...")
+
+        print(f"[AutoRobot] Running {strategy['short_label']} daily trade for {market_type}...")
+
+        from api.services.storage_service import acquire_daily_trade_lock, get_user_settings
+        if not acquire_daily_trade_lock(market_type, datetime.now(), user_id=strategy_user_id):
+            print(
+                f"[AutoRobot] Skipping trade for {strategy_user_id}/{market_type} - "
+                "lock already held by another Cloud Run instance."
+            )
+            return
+
+        self._update_status("Trading", f"Analyzing {market_type} for {strategy['short_label']} opportunities...")
         try:
-            # Step 1: Ensure we have a scan (trigger one if needed)
             pool = get_cached_pool(market_type)
             if not pool or not pool.get("results"):
                 print(f"[AutoRobot] Data missing for {market_type} trade, starting emergency scan...")
                 asyncio.run(run_market_scan(market_type))
                 pool = get_cached_pool(market_type)
 
-            results = pool.get("results", [])
+            results = pool.get("results", []) if pool else []
             if not results:
                 print(f"[AutoRobot] No results found for {market_type} after emergency scan.")
                 return
 
-            # Explicitly sort by score just in case
             try:
-                # Handle both object (Pydantic) and dict types
-                results = sorted(results, key=lambda x: getattr(x, 'score', 0) if not isinstance(x, dict) else x.get('score', 0), reverse=True)
-            except:
+                results = sorted(
+                    results,
+                    key=lambda x: getattr(x, "score", 0) if not isinstance(x, dict) else x.get("score", 0),
+                    reverse=True,
+                )
+            except Exception:
                 pass
 
-            # Pick Top 1
-            top_1 = results[0]
-            # Handle potential dictionary or object access
-            symbol = getattr(top_1, 'symbol', top_1.get('symbol', '') if isinstance(top_1, dict) else '')
-            name = getattr(top_1, 'name', top_1.get('name', '') if isinstance(top_1, dict) else '')
-            entry_price = getattr(top_1, 'entry_price', top_1.get('entry_price', 0) if isinstance(top_1, dict) else 0)
-            score = getattr(top_1, 'score', top_1.get('score', 0) if isinstance(top_1, dict) else 0)
-            
-            pullback_score = getattr(top_1, 'pullback_score', top_1.get('pullback_score', 0) if isinstance(top_1, dict) else 0)
-            value_score = getattr(top_1, 'value_score', top_1.get('value_score', 0) if isinstance(top_1, dict) else 0)
+            candidate = self._select_trade_candidate(strategy["strategy_key"], market_type, results)
+            if not candidate:
+                print(f"[AutoRobot] No qualified candidate for {strategy_user_id}/{market_type}.")
+                return
 
-            log_msg = f"Top candidate: {symbol} ({name}) with score {score} (V:{value_score}/P:{pullback_score})."
+            symbol = getattr(candidate, "symbol", candidate.get("symbol", "") if isinstance(candidate, dict) else "")
+            name = getattr(candidate, "name", candidate.get("name", "") if isinstance(candidate, dict) else "")
+            entry_price = getattr(candidate, "entry_price", candidate.get("entry_price", 0) if isinstance(candidate, dict) else 0)
+            score = getattr(candidate, "score", candidate.get("score", 0) if isinstance(candidate, dict) else 0)
+            pullback_score = getattr(candidate, "pullback_score", candidate.get("pullback_score", 0) if isinstance(candidate, dict) else 0)
+            value_score = getattr(candidate, "value_score", candidate.get("value_score", 0) if isinstance(candidate, dict) else 0)
+
+            log_msg = (
+                f"{strategy['short_label']} top candidate: {symbol} ({name}) "
+                f"with score {score} (V:{value_score}/P:{pullback_score})."
+            )
             print(f"[AutoRobot] {log_msg}")
-            
-            # [v2.5.2] Price Divergence Guard: Avoid "Chasing" sudden spikes
+
             current_price = ShioajiService.get_current_price(symbol, market_type)
             if current_price:
                 diff = abs(current_price - entry_price) / entry_price
                 if diff > 0.03:
-                    msg = f"Skipping {symbol}: Price Divergence too high ({diff*100:.1f}% > 3%)"
+                    msg = f"Skipping {symbol}: Price Divergence too high ({diff * 100:.1f}% > 3%)"
                     print(f"[AutoRobot] {msg}")
                     self._update_status("Idle", msg)
                     return
-                # Use current price as the more accurate fill price
                 entry_price = current_price
 
             self._update_status("Trading", log_msg)
 
-            # Execution logic: Systematic Investment Plan (SIP) Mode [v2.6.7]
-            # Default to 10,000 TWD or user-defined sip_amount_twd
-            from api.services.storage_service import get_user_settings
-            settings = get_user_settings(self.user_id)
+            settings = get_user_settings(strategy_user_id)
             sip_amount = settings.get("sip_amount_twd", 10000.0)
-            
-            # Convert native price to TWD for quantity calculation
+
             price_twd = entry_price
             if market_type != "TW":
                 from api.services.trade_engine import engine
                 rate = engine._get_cached_exchange_rate()
                 price_twd = entry_price * rate
-            
+
             qty = sip_amount / price_twd
-            
-            # Apply market rounding
             if market_type == "TW":
-                qty = int(qty) # Odd-lots allowed (1 share unit)
+                qty = int(qty)
             elif market_type == "US":
-                qty = int(qty) # Integer shares
+                qty = int(qty)
             else:
-                qty = round(qty, 4) # Crypto precision
+                qty = round(qty, 4)
 
             if qty <= 0:
                 msg = f"Skipping {symbol}: Calculated quantity {qty} is too low for amount {sip_amount}"
@@ -225,111 +302,111 @@ class AutoRobot:
                 return
 
             res = ShioajiService.place_order(
-                self.user_id,
+                strategy_user_id,
                 symbol,
                 qty,
                 entry_price,
                 action="Buy",
                 is_simulation=True,
-                name=name
+                name=name,
             )
             if isinstance(res, dict) and "error" in res:
                 self._update_status("Error", f"Order failed for {symbol}: {res['error']}")
-            else:
-                self._update_status("Idle", f"Successfully placed order for {symbol} ({qty} units) @ {entry_price}")
-                print(f"[AutoRobot] Simulation Trade CREATED for {symbol} at {entry_price} (Qty: {qty}).")
-                # Notify users (Email)
+                return
+
+            self._update_status(
+                "Idle",
+                f"{strategy['short_label']} placed order for {symbol} ({qty} units) @ {entry_price}",
+            )
+            print(
+                f"[AutoRobot] {strategy['short_label']} simulation trade CREATED for "
+                f"{symbol} at {entry_price} (Qty: {qty})."
+            )
+
+            if strategy.get("send_notifications"):
                 self._notify_users(symbol, "Buy", entry_price, market_type, score)
-                
-                # MIRROR TRADING: Follow-up for other users
+
+            if strategy.get("mirror_followers"):
                 self._execute_mirror_buys(symbol, entry_price, market_type, name, value_score, pullback_score)
 
-                # Verify persistence immediately in logs
-                from api.services.storage_service import get_user_trade_logs
-                all_logs = get_user_trade_logs(self.user_id)
-                if any(L.get("symbol") == symbol and L.get("entry_type") == "PENDING" for L in all_logs):
-                    print(f"[AutoRobot] SUCCESS: {symbol} is now in trade_logs.")
-                else:
-                    print(f"[AutoRobot] WARNING: {symbol} NOT found in trade_logs after save!")
         except Exception as e:
-            print(f"[AutoRobot] Trade Error for {market_type}: {e}")
+            print(f"[AutoRobot] Trade Error for {strategy_user_id}/{market_type}: {e}")
 
     def _execute_mirror_buys(self, symbol, entry_price, market_type, name, value_score=0, pullback_score=0):
         """Execute mirror trades for all authorized followers based on their weights and balances."""
-        from api.services.storage_service import get_all_users_with_auto_trade, get_user_settings, get_user_credentials
+        from api.services.storage_service import get_all_users_with_auto_trade, get_user_credentials, get_user_settings
+
         follower_ids = get_all_users_with_auto_trade()
-        
+
         for uid in follower_ids:
-            if uid == self.user_id: continue # Already traded
-            
+            if uid == self.primary_user_id:
+                continue
+
             settings = get_user_settings(uid)
-            # SAFETY CHECK: Must be confirmed
             if not settings.get("mirror_trading_confirmed", False):
                 print(f"[AutoRobot] Mirror trading NOT confirmed for {uid}. Skipping.")
                 continue
-            
+
             creds = get_user_credentials(uid)
             is_simulation = creds.get("simulation_mode", True)
-            
-            # BALANCE CHECK & QTY CALCULATION
+
             try:
-                # Use Shioaji balance for now (extensible to MAX)
                 balance = ShioajiService.get_balance(uid)
                 if not isinstance(balance, (int, float)) or balance <= 0:
                     print(f"[AutoRobot] Invalid balance for {uid}: {balance}. Skipping.")
                     continue
-                
-                # [v2.6.7] SIP Mode: Fixed TWD amount per trade
+
                 order_value = settings.get("sip_amount_twd", 10000.0)
-                
-                # [v2.1.85] Absolute Trade Limit (Still apply for safety)
                 max_limit = settings.get("max_order_limit", 50000.0)
                 if order_value > max_limit:
                     print(f"[AutoRobot] SIP value {order_value} exceeds limit {max_limit} for {uid}. Capping.")
                     order_value = max_limit
 
-                # Convert Native price to TWD for quantity calculation
                 price_twd = entry_price
                 if market_type != "TW":
                     from api.services.trade_engine import engine
                     rate = engine._get_cached_exchange_rate()
                     price_twd = entry_price * rate
 
-                # Calc Qty
                 qty = order_value / price_twd
                 if market_type == "TW":
-                    qty = int(qty) # Odd-lots allowed
+                    qty = int(qty)
                 elif market_type == "US":
                     qty = int(qty)
                 else:
                     qty = round(qty, 4)
 
-                if qty <= 0: continue
+                if qty <= 0:
+                    continue
 
                 print(f"[AutoRobot] Mirror trading for {uid}: {symbol} x {qty} (@{entry_price})")
                 ShioajiService.place_order(
-                    uid, symbol, qty, entry_price, action="Buy",
-                    is_simulation=is_simulation, name=name
+                    uid,
+                    symbol,
+                    qty,
+                    entry_price,
+                    action="Buy",
+                    is_simulation=is_simulation,
+                    name=name,
                 )
             except Exception as e:
                 print(f"[AutoRobot] Failed to mirror trade for {uid}: {e}")
 
     def check_exits(self):
-        """Check exits for system_auto AND all authorized followers using their custom TP/SL."""
+        """Check exits for system strategy accounts and all authorized followers."""
         from api.services.storage_service import get_all_users_with_auto_trade, get_user_settings
-        
-        print(f"[AutoRobot] Running multi-user exit checks...")
-        
-        # 1. System Auto Exits (Fixed 20% / -5%)
-        self._check_user_exits(self.user_id, 20.0, -5.0)
-        
-        # 2. Follower Exits (Customized)
+
+        print("[AutoRobot] Running multi-user exit checks...")
+
+        for strategy in list_strategy_accounts():
+            self._check_user_exits(strategy["user_id"], 20.0, -5.0)
+
         followers = get_all_users_with_auto_trade()
         for uid in followers:
-            if uid == self.user_id: continue
             settings = get_user_settings(uid)
-            if not settings.get("mirror_trading_confirmed", False): continue
-            
+            if not settings.get("mirror_trading_confirmed", False):
+                continue
+
             tp = settings.get("tp_pct", 20.0)
             sl = settings.get("sl_pct", -5.0)
             self._check_user_exits(uid, tp, sl)
@@ -338,30 +415,28 @@ class AutoRobot:
         """Monitor active positions for a specific user and trigger TP/SL."""
         try:
             from api.services.storage_service import get_user_credentials
-            from api.services.email_service import notify_trade
-            
+
             creds = get_user_credentials(user_id)
             is_simulation = creds.get("simulation_mode", True)
-            
+
             positions = ShioajiService.get_positions(user_id)
             for pos in positions:
-                pnl_pct = pos.get('pnl_percent', 0)
+                pnl_pct = pos.get("pnl_percent", 0)
                 if pnl_pct >= tp_pct or pnl_pct <= sl_pct:
                     status = "Take Profit" if pnl_pct >= tp_pct else "Stop Loss"
                     print(f"[AutoRobot] Trigger {status} for {user_id}: {pos['symbol']} @ {pnl_pct}%")
 
                     ShioajiService.place_order(
                         user_id,
-                        pos['symbol'],
-                        pos['qty'],
-                        pos['current_price'],
+                        pos["symbol"],
+                        pos["qty"],
+                        pos["current_price"],
                         action="Sell",
-                        is_simulation=is_simulation
+                        is_simulation=is_simulation,
                     )
-                    # Notify user (Email)
-                    notify_trade(user_id, pos['symbol'], "Sell", pos['current_price'], pos.get('market', 'UNKNOWN'))
+                    notify_trade(user_id, pos["symbol"], "Sell", pos["current_price"], pos.get("market", "UNKNOWN"))
         except Exception as e:
             print(f"[AutoRobot] Exit Check Error for {user_id}: {e}")
 
-# Singleton
+
 robot = AutoRobot()

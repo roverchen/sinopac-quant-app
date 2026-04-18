@@ -7,6 +7,7 @@ from api.services.storage_service import (
     save_user_trade_logs
 )
 from api.services.quant_service import get_yahoo_ticker
+from api.services.strategy_accounts import list_strategy_account_ids
 
 class MatchingEngine:
     def __init__(self):
@@ -38,8 +39,9 @@ class MatchingEngine:
         from api.services.storage_service import get_all_users_with_pending
         active_users = get_all_users_with_pending()
         
-        if 'system_auto' not in active_users:
-            active_users.append('system_auto')
+        for system_user in list_strategy_account_ids():
+            if system_user not in active_users:
+                active_users.append(system_user)
             
         for user_id in active_users:
             self._check_pending_orders(user_id)

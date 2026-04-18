@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Dict, List, Optional
 from google.cloud import storage, firestore
 from api.config import PROJECT_ID, CACHE_DIR, SYNC_DIR
+from api.services.strategy_accounts import list_strategy_account_ids
 
 # Ensure directories exist
 os.makedirs(CACHE_DIR, exist_ok=True)
@@ -368,12 +369,12 @@ def get_all_users_with_pending() -> List[str]:
                     users_with_pending.append(doc.id)
         except Exception as e:
             print(f"[Storage] Error discovering pending users: {e}")
-    # Always include system_auto if it has pending orders
-    system_user = "system_auto"
-    if system_user not in users_with_pending:
-        logs = get_user_trade_logs(system_user)
-        if any(L.get("entry_type") == "PENDING" for L in logs):
-            users_with_pending.append(system_user)
+    # Always include strategy accounts if they have pending orders
+    for system_user in list_strategy_account_ids():
+        if system_user not in users_with_pending:
+            logs = get_user_trade_logs(system_user)
+            if any(L.get("entry_type") == "PENDING" for L in logs):
+                users_with_pending.append(system_user)
     return list(set(users_with_pending))
 
 def save_robot_status(status_dict):
@@ -554,7 +555,7 @@ def load_data_pool(market):
 
     return final_pool
 
-def acquire_daily_trade_lock(market: str, current_time: datetime) -> bool:
+def acquire_daily_trade_lock(market: str, current_time: datetime, user_id: str = "system_auto") -> bool:
     """
     Attempts to acquire an atomic distributed lock for the daily auto-trade.
     Prevents multiple Cloud Run instances from executing the trade concurrently.
@@ -568,17 +569,18 @@ def acquire_daily_trade_lock(market: str, current_time: datetime) -> bool:
     
     try:
         from google.cloud import exceptions
-        doc_ref = db.collection("users").document("system_auto").collection("locks").document(lock_id)
+        doc_ref = db.collection("users").document(user_id).collection("locks").document(lock_id)
         # create() atomically throws an Exception if the document already exists.
         doc_ref.create({
             "locked_at": current_time.isoformat(),
             "market": market,
-            "date": date_str
+            "date": date_str,
+            "user_id": user_id,
         })
-        print(f"[Storage] Successfully acquired distributed lock for {lock_id}")
+        print(f"[Storage] Successfully acquired distributed lock for {user_id}:{lock_id}")
         return True
     except exceptions.Conflict:
-        print(f"[Storage] Lock for {lock_id} is currently held by another instance. Skipping duplicate execution.")
+        print(f"[Storage] Lock for {user_id}:{lock_id} is currently held by another instance. Skipping duplicate execution.")
         return False
     except Exception as e:
         print(f"[Storage] Distributed lock acquisition error (allowing fallback execution): {e}")
