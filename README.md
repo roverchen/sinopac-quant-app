@@ -1,6 +1,6 @@
 # Sinopac Quant Pro (股市報明牌)
 
-[![Version](https://img.shields.io/badge/version-2.6.2-blue.svg)](REVISIONS.md) [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
+[![Version](https://img.shields.io/badge/version-2.6.7-blue.svg)](REVISIONS.md) [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
 
 Sinopac Quant Pro 是一個強大的多市場資產篩選與自動化交易系統，支援 **台股 (TW)**、**美股 (US)** 以及 **加密貨幣 (Crypto)**。本系統結合了動態權重配置策略、技術面計分引擎與基本面濾網，為量化交易者提供從選股、分析到下單的一站式解決方案。
 
@@ -48,6 +48,8 @@ Sinopac Quant Pro 是一個強大的多市場資產篩選與自動化交易系�
 ### 3. 進階跟單與自動交易 (Advanced Mirror Trading)
 - **獨立系統帳戶**：自動交易是由 `system_auto` 帳號執行，與個人帳號分離。您可以在「交易環境控管」中切換至 **「系統」** 標籤查看其持倉。
 - **時區精確鎖定排程**：系統強制鎖定 `Asia/Taipei` 時區，每日於 US (06:10)、TW (14:10)、Crypto (23:15) 自動執行海選。
+- **定期定額模式 (SIP Mode)**：系統帳戶預設以 `sip_amount_twd` 控制單次投入金額，預設為 `10,000 TWD`，不再使用固定張數或固定股數。
+- **跨市場數量換算**：台股支援零股以貼近定額投入；美股採整股；Crypto 依交易精度自動換算數量。
 - **預算與策略比例分配**：實盤跟單支援設定 **「單筆跟單總權重 (Total Allocation)」** 作為預算上限，並透過 **「策略比例 (Strategy Ratio)」** 自由調配價值與拉回策略的佔比。
 - **標準化持倉管理**：支援 **「合併均價 (Average Cost Basis)」**，確保部位管理邏輯與專業法人一致。
 - **多重安全鎖**：內建單筆交易最高金額上限 (Max Order Limit)、安全宣告彈窗，以及嚴謹的自動停損/停利邏輯，嚴格控制下單風險。
@@ -57,6 +59,8 @@ Sinopac Quant Pro 是一個強大的多市場資產篩選與自動化交易系�
 - **Dashboard 載入優化**：透過平行加載機制與趨勢圖快取，首頁加載速度提升 300% 以上。
 - **憑證加密存儲**：所有 API Key、PFX 憑證均採加密處理，支援多人獨立帳戶環境。
 - **快取備援機制**：實作雲端環境防封鎖保護、UARotation 以及海選快取共享機制。
+- **模擬績效校正**：US / Crypto 模擬成交與損益計算已納入 `USD/TWD` 換算與匯率快取，避免跨市場績效失真。
+- **高頻出場檢查**：自動交易出場條件固定以 5 分鐘頻率巡檢，提高風險控管即時性。
 - **行動端適應**：全站具備 RWD 響應式佈局，支援手機與平板流暢操作。
 
 ---
@@ -101,6 +105,7 @@ Sinopac Quant Pro 是一個強大的多市場資產篩選與自動化交易系�
 為高度還原真實券商環境，系統採用 **「合併均價 (Average Cost Basis)」** 的部位管理機制：
 *   **均價攤平合併**：當系統在不同時間對同一檔標的進行多次買進時（如昨日買進 1000 股、今日加碼 5000 股），系統會自動將其合併為單一持倉，並統一計算總平均成本。這不僅能保持介面的整潔，更是專業法人進行整體資金控管 (Total Exposure) 的標準作法。
 *   **整體出場觸發**：系統的停損 (SL) 與停利 (TP) 觸發條件，均是基於「合併後的總平均成本」進行評估。一旦總未實現損益 (PnL%) 觸及閾值，系統會一次性清空該標的。這有效避免了單筆結算所衍生的「先進先出 (FIFO)」帳務混亂，以及「同檔標的又買又賣」的手續費內耗問題。
+*   **績效指標標準化**：Dashboard 與系統績效摘要以 **`Total PnL / Total Invested Capital`** 作為主要 ROI 指標，避免模擬帳戶餘額稀釋報酬率。
 
 ---
 
@@ -108,6 +113,7 @@ Sinopac Quant Pro 是一個強大的多市場資產篩選與自動化交易系�
 
 - **Frontend**: React 18, Vite, Tailwind CSS, Framer Motion (動態視覺效果), Lucide React (圖標).
 - **Backend**: FastAPI (Python 3.11), Uvicorn.
+- **Legacy App**: 舊版 Streamlit 工具已收納於 `streamlit/` 子目錄，與現行 FastAPI + Vite 主系統解耦。
 - **Data & APIs**: 
   - [Shioaji](https://github.com/Sinopac/shioaji) (永豐證券 API)
   - [Max-Exchange](https://max.maicoin.com/) (Maicoin MAX API)
@@ -130,7 +136,7 @@ Sinopac Quant Pro 是一個強大的多市場資產篩選與自動化交易系�
    chmod +x run_local.sh
    ./run_local.sh
    ```
-   - 後端 API: `http://localhost:8000`
+   - 後端 API: `http://localhost:8001`
    - 前端 UI: `http://localhost:5173`
 
 ### 雲端部署 (Docker)

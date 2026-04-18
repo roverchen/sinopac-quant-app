@@ -14,7 +14,7 @@ const SkeletonRow = ({ cols = 6 }) => (
 );
 
 const TradingControl = ({ navParams }) => {
-  const [status, setStatus] = useState({ auto_trade_enabled: false, mode: 'Simulation', backend_version: "2.1.77" });
+  const [status, setStatus] = useState({ auto_trade_enabled: false, mode: 'Simulation', backend_version: "2.6.7" });
   const [account, setAccount] = useState({ balance: 0, positions: [], status: 'loading' });
   const [loading, setLoading] = useState(false);
   const [selectedPosition, setSelectedPosition] = useState(null);

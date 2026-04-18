@@ -6,12 +6,20 @@ This document codifies the established development patterns and best practices f
 - **Semantic Versioning**: Always bump the `version` in `api/main.py` for every feature update or bug fix.
 - **Revision History**: Every release must be documented in `REVISIONS.md` before deployment.
 - **README Synchronization**: Key technical features must be reflected in `README.md` to ensure the public-facing documentation matches the latest engine version.
+  - Keep the displayed README version aligned with `api/main.py`.
+  - Update startup instructions whenever ports, scripts, or local environment assumptions change.
+  - Document any user-visible behavior change such as new strategy modes, account restrictions, or performance metric changes.
 - **Invested Capital ROI**: For simulation performance, always use `(Total PnL / Total Invested Capital)` as the primary metric to avoid balance dilution.
 
 ## 2. Coding Standards (Backend)
 - **Modular Services**: Logic should reside in `api/services/` (e.g., `quant_service.py`, `auto_trade_service.py`).
 - **Schema Integrity**: Always update Pydantic models in `api/models/schemas.py` when adding new data fields to ensure API consistency.
 - **Sanitization**: Use the `sanitize()` helper in `quant_service.py` to handle `NaN` or `Inf` values before returning JSON to the frontend.
+- **Cross-Market Currency Safety**: For US and Crypto simulation flows, convert prices and PnL into TWD before comparing against stored cost basis or reporting ROI.
+- **SIP Position Sizing**: Auto-trade sizing should be based on `sip_amount_twd` rather than hardcoded share counts.
+  - TW supports odd-lot sizing.
+  - US uses integer shares.
+  - Crypto uses market-appropriate decimal precision.
 
 ## 3. UI/UX Principles (Frontend)
 - **Visual Consistency**:
@@ -19,6 +27,10 @@ This document codifies the established development patterns and best practices f
   - **Sliders**: "Left" represents Defensive/Value strategies; "Right" represents Aggressive/Growth/Pullback strategies.
 - **Interactivity**: Use `Framer Motion` for smooth transitions and `Lucide React` for professional iconography.
 - **Deep-Linking**: Ensure important dashboard metrics link directly to their corresponding detailed views with pre-selected filters.
+- **System Account Safety**:
+  - `system_auto` is a distinct system-managed account.
+  - Manual sell and cancel actions must remain disabled when viewing `system_auto`.
+  - Dashboard and trading views should preserve deep-links into the system account context.
 
 ## 4. Quant Engine Logic
 - **Relative Strength (RS)**: Always compare stock performance against the relevant market index (^TWII, ^GSPC, BTC) to calculate the RS score.
@@ -39,7 +51,8 @@ This document codifies the established development patterns and best practices f
   - **Re-tagging**: If documentation needs fixing post-commit, delete the remote tag and re-push it to ensure the build contains correct metadata.
 - **Cloud Run**: The primary deployment target is Google Cloud Run via `gcloud builds submit`.
 - **Atomic Operations**: Ensure critical tasks like `Auto-Trade` use distributed locks (via Firestore) to prevent duplicate execution in containerized environments.
+- **Local Environment Consistency**: Keep `run_local.sh`, virtualenv usage, and dependency assumptions aligned with `requirements.txt` and README instructions.
 
 ## 6. Interaction Habits
-- **Task Tracking**: Maintenance of `task.md`, `implementation_plan.md`, and `walkthrough.md` for major updates.
+- **Task Tracking**: For major updates, leave a durable change trail in project artifacts that actually exist in the repo, such as `REVISIONS.md`, implementation notes, or PR descriptions. Do not rely on undocumented placeholder files.
 - **Proactive Verification**: Always check the `/health` endpoint or specific API routes after a deployment to ensure the live environment matches the local codebase.

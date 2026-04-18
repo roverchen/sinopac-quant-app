@@ -22,7 +22,7 @@ async def get_trading_status(current_user: str = Depends(get_current_user)):
     return {
         "auto_trade_enabled": creds.get("auto_trade_enabled", False),
         "mode": "Simulation" if creds.get("simulation_mode", True) else "Live",
-        "backend_version": "2.6.4"
+        "backend_version": "2.6.7"
     }
 
 @router.post("/toggle")
@@ -240,4 +240,3 @@ async def cancel_order(trade_id: str, current_user: str = Depends(get_current_us
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
-
