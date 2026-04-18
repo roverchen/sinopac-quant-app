@@ -20,7 +20,7 @@ const ACCOUNT_OPTIONS = [
 ];
 
 const TradingControl = ({ navParams }) => {
-  const [status, setStatus] = useState({ auto_trade_enabled: false, mode: 'Simulation', backend_version: "2.6.9" });
+  const [status, setStatus] = useState({ auto_trade_enabled: false, mode: 'Simulation', backend_version: "2.7.0" });
   const [account, setAccount] = useState({ balance: 0, positions: [], status: 'loading' });
   const [loading, setLoading] = useState(false);
   const [selectedPosition, setSelectedPosition] = useState(null);
@@ -28,6 +28,40 @@ const TradingControl = ({ navParams }) => {
   const [viewAccount, setViewAccount] = useState('personal');
   const [viewType, setViewType] = useState('positions'); // 'positions' or 'history'
   const [pending, setPending] = useState([]);
+  const [history, setHistory] = useState([]);
+
+  // [v2.7.0] Unified Symbol Rendering Helper
+  const renderSymbolInfo = (item, type = 'history') => {
+    // Determine the best timestamp to show
+    let ts = item.timestamp || item.buy_filled_time || item.buy_order_time || item.order_time;
+    if (ts === 'None') ts = null;
+    
+    let timeStr = '-';
+    if (ts) {
+      try {
+        const d = new Date(ts);
+        const ymd = d.toISOString().split('T')[0];
+        const hm = d.toTimeString().split(' ')[0].slice(0, 5);
+        timeStr = `${ymd} ${hm}`;
+      } catch (e) {
+        timeStr = '系統升級前';
+      }
+    }
+
+    return (
+      <div className="flex flex-col">
+        <span className="text-lg font-black text-white group-hover:text-indigo-400 font-inter leading-tight transition-colors">
+          {item.symbol}
+        </span>
+        <div className="flex items-center gap-2 mt-0.5">
+          <span className="text-[10px] text-slate-500 font-bold">{item.name || '-'}</span>
+          <span className="text-[10px] text-slate-400/50 font-inter">
+            {timeStr}
+          </span>
+        </div>
+      </div>
+    );
+  };
   const [summary, setSummary] = useState(null);
   const [history, setHistory] = useState([]);
   const [selectedPending, setSelectedPending] = useState(null);
@@ -296,7 +330,7 @@ const TradingControl = ({ navParams }) => {
               <thead>
                 <tr className="bg-slate-800/20 border-b border-slate-800">
                   <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">模式</th>
-                  <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">標的/名稱</th>
+                  <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">標的/名稱/時間</th>
                   <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">狀態</th>
                   <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">數量</th>
                   <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">現價/成本</th>
@@ -317,10 +351,7 @@ const TradingControl = ({ navParams }) => {
                           <span className="text-xs font-bold text-slate-400">{o.is_simulation ? '模擬' : '實盤'}</span>
                         </td>
                         <td className="px-8 py-6">
-                          <div className="flex flex-col">
-                            <span className="text-lg font-black text-white group-hover:text-amber-400 font-inter leading-tight">{o.symbol}</span>
-                            <span className="text-[10px] text-slate-500 font-bold">{o.name || '-'}</span>
-                          </div>
+                          {renderSymbolInfo(o, 'pending')}
                         </td>
                         <td className="px-8 py-6">
                           <span className="px-3 py-1 bg-amber-500/10 text-amber-400 text-[10px] font-black rounded-full border border-amber-500/20 uppercase">
@@ -360,10 +391,7 @@ const TradingControl = ({ navParams }) => {
                           <span className="text-xs font-bold text-slate-400">{pos.is_simulation ? '模擬' : '實盤'}</span>
                         </td>
                         <td className="px-8 py-6">
-                          <div className="flex flex-col">
-                            <span className="text-lg font-black text-white group-hover:text-indigo-400 font-inter leading-tight">{pos.symbol}</span>
-                            <span className="text-[10px] text-slate-500 font-bold">{pos.name || '-'}</span>
-                          </div>
+                          {renderSymbolInfo(pos, 'position')}
                         </td>
                         <td className="px-8 py-6">
                           <span className="px-3 py-1 bg-emerald-500/10 text-emerald-400 text-[10px] font-black rounded-full border border-emerald-500/20 uppercase">
@@ -449,15 +477,7 @@ const TradingControl = ({ navParams }) => {
                         <span className="text-xs font-bold text-slate-400">{h.is_simulation ? '模擬' : '實盤'}</span>
                       </td>
                       <td className="px-8 py-6">
-                        <div className="flex flex-col">
-                          <span className="text-lg font-black text-white font-inter leading-tight">{h.symbol}</span>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <span className="text-[10px] text-slate-500 font-bold">{h.name || '-'}</span>
-                            <span className="text-[10px] text-slate-400/50 font-inter">
-                              {h.timestamp?.split('T')[0]} {h.timestamp?.split('T')[1]?.slice(0, 5)}
-                            </span>
-                          </div>
-                        </div>
+                        {renderSymbolInfo(h, 'history')}
                       </td>
                       <td className="px-8 py-6">
                         {h.status === 'CANCELLED' ? (

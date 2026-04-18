@@ -24,7 +24,7 @@ async def get_trading_status(current_user: str = Depends(get_current_user)):
     return {
         "auto_trade_enabled": creds.get("auto_trade_enabled", False),
         "mode": "Simulation" if creds.get("simulation_mode", True) else "Live",
-        "backend_version": "2.6.9"
+        "backend_version": "2.7.0"
     }
 
 @router.post("/toggle")

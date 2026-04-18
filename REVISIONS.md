@@ -2,6 +2,12 @@
 
 ## Version 2.2 Series
 
+### v2.7.0 (2026-04-18)
+- **UI Architecture Unification**:
+  - [Frontend] Implemented `renderSymbolInfo` helper to standardize the "Ticker/Name/Time" column across all account tabs and views.
+  - [Frontend] Unified column headers and information density across Current Positions, Pending Orders, and Trade History.
+  - [Frontend] Added missing timestamps to the Positions view identifying column for perfect cross-page alignment.
+
 ### v2.6.9 (2026-04-18)
 - **Fix: Trade History Name Display**:
   - [Backend] Implemented thread-safe global symbol-to-name caching and lazy fetching from external APIs (ISIN, Wikipedia, MAX).
