@@ -500,17 +500,15 @@ class ShioajiService:
         from api.services.quant_service import get_yahoo_ticker, fetch_stock_data
         for p in positions:
             try:
-                ticker = get_yahoo_ticker(p['symbol'], p['market'])
-                df = fetch_stock_data(p['symbol'], ticker, period="1d")
-                if df is not None and not df.empty:
-                    current_price = round(float(df['Close'].iloc[-1]), 2)
-                    p['current_price'] = current_price
+                current_price = cls.get_current_price(p['symbol'], p['market'])
+                if current_price is not None:
+                    p['current_price'] = round(current_price, 2)
                     p['pnl_percent'] = round(((current_price - p['buy_price']) / p['buy_price']) * 100, 2)
                 else:
-                    p['current_price'] = p['buy_price']
+                    p['current_price'] = p.get('buy_price', 0)
                     p['pnl_percent'] = 0.0
             except:
-                p['current_price'] = p['buy_price']
+                p['current_price'] = p.get('buy_price', 0)
                 p['pnl_percent'] = 0.0
 
         # [v2.1.65] Join with trade_logs to get buy timestamps

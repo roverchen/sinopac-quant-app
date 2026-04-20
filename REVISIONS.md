@@ -2,6 +2,12 @@
 
 ## Version 2.2 Series
 
+### v2.7.1 (2026-04-20)
+- **Critical Fix: ROI Calculation Accuracy**:
+  - [Maintenance] Fixed currency conversion bug in `ShioajiService.get_positions` where USD/Crypto prices were compared directly to TWD costs, causing fake -97% ROI.
+  - [Hotfix] Recalculated historical trade logs for `system_auto` to restore dashboard accuracy.
+  - [Automation] Prevented premature stop-loss triggers caused by miscalculated ROI in US/Crypto markets.
+
 ### v2.7.0 (2026-04-18)
 - **UI Architecture Unification**:
   - [Frontend] Implemented `renderSymbolInfo` helper to standardize the "Ticker/Name/Time" column across all account tabs and views.

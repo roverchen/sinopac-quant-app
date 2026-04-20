@@ -79,21 +79,18 @@ async def analyze_watchlist(request: StockAnalysisRequest, current_user: str = D
         res = pool_results.get(code)
         # [v2.1.92] Fast Re-score Logic
         if res:
-            v_score = res.get('value_score') if isinstance(res, dict) else getattr(res, 'value_score', 0)
-            p_score = res.get('pullback_score') if isinstance(res, dict) else getattr(res, 'pullback_score', 0)
+            # Clone to prevent in-place cache pollution
+            res_dict = res if isinstance(res, dict) else (res.model_dump() if hasattr(res, 'model_dump') else res.__dict__)
+            v_score = res_dict.get('value_score', 0)
+            p_score = res_dict.get('pullback_score', 0)
             
             if v_score is not None and p_score is not None:
                 w = request.defense_weight
                 new_score = round((w * v_score) + ((1 - w) * p_score), 1)
                 
-                if isinstance(res, dict):
-                    res['score'] = new_score
-                    if not res.get('market'): res['market'] = target_market
-                    results.append(AnalysisResult(**res))
-                else:
-                    setattr(res, 'score', new_score)
-                    if not getattr(res, 'market', None): setattr(res, 'market', target_market)
-                    results.append(res)
+                res_dict['score'] = new_score
+                if not res_dict.get('market'): res_dict['market'] = target_market
+                results.append(AnalysisResult(**res_dict))
                 continue
 
         # Fallback to K-line analysis

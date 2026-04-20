@@ -9,6 +9,25 @@ from max_api import MaxExchangeAPI
 from api.services.storage_service import save_data_pool, load_data_pool
 from api.models.schemas import AnalysisResult
 
+# [v2.2.1] Backup Symbol Lists to ensure scan breadth even if web scraping fails
+BACKUP_SYMBOLS_TW = {
+    # Semiconductors & Tech (Top 100)
+    "2330": "台積電", "2317": "鴻海", "2454": "聯發科", "2308": "台達電", "2303": "聯電", "3711": "日月光投控",
+    "2382": "廣達", "3008": "大立光", "2357": "華碩", "3034": "聯詠", "2379": "瑞昱", "3037": "欣興",
+    "2408": "南亞科", "2327": "國巨", "2345": "智邦", "3231": "緯創", "2356": "英業達", "2324": "仁寶",
+    "2353": "宏碁", "2301": "光寶科", "2313": "華通", "2409": "友達", "3481": "群創", "2337": "旺宏",
+    "2449": "京元電子", "2002": "中鋼", "2603": "長榮", "2609": "陽明", "2615": "萬海", "1301": "台塑",
+    "2881": "富邦金", "2882": "國泰金", "2886": "兆豐金", "2891": "中信金", "2884": "玉山金", "5880": "合庫金",
+    "1101": "台泥", "1216": "統一", "2207": "和泰車", "2912": "統一超", "2610": "華航", "2618": "長榮航"
+}
+
+BACKUP_SYMBOLS_US = {
+    "AAPL": "Apple Inc.", "MSFT": "Microsoft", "NVDA": "NVIDIA", "GOOGL": "Alphabet A", "AMZN": "Amazon",
+    "META": "Meta Platforms", "TSLA": "Tesla", "BRK-B": "Berkshire Hathaway", "UNH": "UnitedHealth",
+    "V": "Visa", "TSM": "TSMC ADR", "WMT": "Walmart", "PG": "Procter & Gamble", "MA": "Mastercard",
+    "KO": "Coca-Cola", "PEP": "PepsiCo", "COST": "Costco", "AVGO": "Broadcom", "AMD": "AMD", "NFLX": "Netflix"
+}
+
 # Scan status state
 scan_status = {
     "status": "idle",
@@ -84,10 +103,10 @@ def fetch_tw_symbols():
                         if not any(x in name for x in ["購", "售", "牛", "熊"]):
                             symbols[code] = name
         print(f"[QuantService] TW symbols scraped: {len(symbols)}")
-        return symbols
+        return {**BACKUP_SYMBOLS_TW, **symbols}
     except Exception as e:
         print(f"Error fetching TW symbols: {e}")
-        return {"2330": "TSMC", "2317": "Hon Hai", "2303": "UMC", "2454": "MTK", "2881": "Fubon"}
+        return BACKUP_SYMBOLS_TW
 
 def fetch_us_symbols():
     """Fetch S&P 500 symbols from Wikipedia"""
@@ -98,10 +117,11 @@ def fetch_us_symbols():
         response = requests.get(url, headers=headers, verify=False, timeout=15)
         tables = pd.read_html(response.text)
         df = tables[0]
-        return df.set_index('Symbol')['Security'].to_dict()
+        symbols = df.set_index('Symbol')['Security'].to_dict()
+        return {**BACKUP_SYMBOLS_US, **symbols}
     except Exception as e:
         print(f"Error fetching US symbols: {e}")
-        return {"AAPL": "Apple", "MSFT": "Microsoft", "NVDA": "Nvidia"}
+        return BACKUP_SYMBOLS_US
 
 def fetch_crypto_symbols():
     """Fetch major crypto symbols and MAX exchange pairs, prioritizing MAX naming (e.g., btcusdt)"""
