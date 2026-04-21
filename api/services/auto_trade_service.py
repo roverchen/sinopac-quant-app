@@ -422,6 +422,13 @@ class AutoRobot:
             positions = ShioajiService.get_positions(user_id)
             for pos in positions:
                 pnl_pct = pos.get("pnl_percent", 0)
+                
+                # [v2.7.2] Data Sanity Check: Abnormally large drop (>90%) 
+                # is likely a data bug (e.g. currency mismatch). Skip exit.
+                if pnl_pct <= -90:
+                    print(f"[AutoRobot] WARNING: Abnormal ROI {pnl_pct}% for {pos['symbol']}. Skipping exit to prevent data-bug sell.")
+                    continue
+
                 if pnl_pct >= tp_pct or pnl_pct <= sl_pct:
                     status = "Take Profit" if pnl_pct >= tp_pct else "Stop Loss"
                     print(f"[AutoRobot] Trigger {status} for {user_id}: {pos['symbol']} @ {pnl_pct}%")

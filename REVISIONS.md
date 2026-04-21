@@ -2,11 +2,14 @@
 
 ## Version 2.2 Series
 
+### v2.7.2 (2026-04-21)
+- **Enhanced Trade Notifications & Safety**:
+  - [Automation] Implemented "Data Bug Shield" (-90% safety) in `AutoRobot` to prevent accidental liquidations during API data mismatches.
+  - [Notification] Upgraded `EmailService` to include real-time PnL reporting (ROI% and Amount) for sell orders.
+  - [Maintenance] Fixed currency unit normalization in `ShioajiService.get_positions` to ensure consistent TWD-based ROI reporting.
+  - [Documentation] Synchronized `rules.md` with the new safety guard and currency normalization patterns.
+
 ### v2.7.1 (2026-04-20)
-- **Critical Fix: ROI Calculation Accuracy**:
-  - [Maintenance] Fixed currency conversion bug in `ShioajiService.get_positions` where USD/Crypto prices were compared directly to TWD costs, causing fake -97% ROI.
-  - [Hotfix] Recalculated historical trade logs for `system_auto` to restore dashboard accuracy.
-  - [Automation] Prevented premature stop-loss triggers caused by miscalculated ROI in US/Crypto markets.
 
 ### v2.7.0 (2026-04-18)
 - **UI Architecture Unification**:

@@ -502,8 +502,22 @@ class ShioajiService:
             try:
                 current_price = cls.get_current_price(p['symbol'], p['market'])
                 if current_price is not None:
+                    # [v2.7.2] Normalize price for ROI calculation
                     p['current_price'] = round(current_price, 2)
-                    p['pnl_percent'] = round(((current_price - p['buy_price']) / p['buy_price']) * 100, 2)
+                    
+                    calc_current = current_price
+                    if p['market'] in ["US", "CRYPTO"]:
+                        # Fetch USD/TWD rate if needed
+                        rate = 32.5 # Default fallback
+                        try:
+                            import yfinance as yf
+                            rate_df = yf.Ticker("TWD=X").history(period="1d")
+                            if not rate_df.empty:
+                                rate = float(rate_df['Close'].iloc[-1])
+                        except: pass
+                        calc_current = current_price * rate
+                    
+                    p['pnl_percent'] = round(((calc_current - p['buy_price']) / p['buy_price']) * 100, 2)
                 else:
                     p['current_price'] = p.get('buy_price', 0)
                     p['pnl_percent'] = 0.0

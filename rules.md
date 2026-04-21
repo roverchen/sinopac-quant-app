@@ -42,6 +42,7 @@ This document codifies the established development patterns and best practices f
 - **Liquidity & Safety Guards**:
   - *Liquidity Filter*: Minimum daily turnover (TW > 10M, Crypto > 1M) to prevent "Flash Crashes".
   - *Price Guard*: Maximum 3% divergence allowed between scan price and execution price.
+  - *Data Bug Shield*: [v2.7.2] Prevent automated "Panic Selling" by skipping exits if ROI is suspiciously low (>-90%), which usually indicates a currency or API data mismatch.
   - *High-Frequency Monitoring*: Maintenance of 5-minute exit checks for automated strategies.
 
 ## 5. Deployment Workflow
