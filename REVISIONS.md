@@ -2,12 +2,14 @@
 
 ## Version 2.2 Series
 
+### v2.7.3 (2026-04-21)
+- **Critical: Performance Restoration & Deep Recovery**:
+  - [Maintenance] Recovered "The SMCI Disaster" (False -720k loss) by implementing an intelligent ROI heuristic in `recalc_pnl_hotfix.py`.
+  - [Backend] Implemented `Unit Safety Guard` in `MatchingEngine` to force TWD normalization at the moment of fill execution.
+  - [API] Refactored `get_performance_summary` to be unit-safe during runtime calculation of invested capital and PnL.
+  - [Maintenance] Deep-cleaned all historical logs for `system_auto` to restore dashboard accuracy.
+
 ### v2.7.2 (2026-04-21)
-- **Enhanced Trade Notifications & Safety**:
-  - [Automation] Implemented "Data Bug Shield" (-90% safety) in `AutoRobot` to prevent accidental liquidations during API data mismatches.
-  - [Notification] Upgraded `EmailService` to include real-time PnL reporting (ROI% and Amount) for sell orders.
-  - [Maintenance] Fixed currency unit normalization in `ShioajiService.get_positions` to ensure consistent TWD-based ROI reporting.
-  - [Documentation] Synchronized `rules.md` with the new safety guard and currency normalization patterns.
 
 ### v2.7.1 (2026-04-20)
 

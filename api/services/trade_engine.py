@@ -198,7 +198,15 @@ class MatchingEngine:
         action = order['action']
         market = order['market']
         is_simulation = order.get('is_simulation', True)
-        total_value = fill_price * qty
+        
+        # [v2.7.3] Unit Safety Guard: Ensure fill_price is TWD for US/Crypto
+        actual_fill_price = fill_price
+        if market in ["US", "CRYPTO"] and fill_price < 2000:
+             rate = self._get_cached_exchange_rate()
+             actual_fill_price = fill_price * rate
+             print(f"[TradeEngine] Normalizing fill_price from {fill_price} to {actual_fill_price:.2f} TWD (Rate: {rate:.2f})")
+        
+        total_value = actual_fill_price * qty
 
         # Calculate costs for simulation
         fee, tax = 0, 0

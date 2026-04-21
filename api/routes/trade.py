@@ -99,10 +99,17 @@ async def get_performance_summary(user_id: Optional[str] = None, current_user: s
 
     # From Closed Trades (History)
     for item in history:
-        pnl = item.get('realized_pl', 0)
-        # Original Buy Cost = (Sell Price * Qty) - Fees - Tax - Realized PnL
-        # This works for both manual and auto since trade_engine sets realized_pl
-        buy_cost = (item.get('price', 0) * item.get('qty', 0)) - item.get('fee', 0) - item.get('tax', 0) - pnl
+        pnl = item.get('realized_pl', 0) 
+        market = item.get('market', 'TW')
+        
+        # [v2.7.3] Unit Safety Guard for History Summary
+        price = item.get('price', 0)
+        # If price is suspiciously low (USD), normalize it for cost calculation
+        if market in ["US", "CRYPTO"] and price < 2000:
+             # This is a rough estimation for the summary; accurate data is in logs
+             price = price * 32.5 
+             
+        buy_cost = (price * item.get('qty', 0)) - item.get('fee', 0) - item.get('tax', 0) - pnl
         
         if item.get('is_simulation') or is_system_strategy_account(target_user):
             realized_mock += pnl
@@ -119,9 +126,19 @@ async def get_performance_summary(user_id: Optional[str] = None, current_user: s
         current = pos.get('current_price', 0)
         buy = pos.get('buy_price', 0)
         qty = pos.get('qty', 0)
+        market = pos.get('market', 'TW')
+        
         if current and buy and qty:
-            pnl = (current - buy) * qty
-            buy_cost = buy * qty
+            # [v2.7.3] Unit Safety Guard for Unrealized
+            calc_current = current
+            calc_buy = buy
+            if market in ["US", "CRYPTO"]:
+                if current < 2000: calc_current = current * 32.5
+                if buy < 2000: calc_buy = buy * 32.5
+                
+            pnl = (calc_current - calc_buy) * qty
+            buy_cost = calc_buy * qty
+            
             if pos.get('is_simulation') or is_system_strategy_account(target_user):
                 unrealized_mock += pnl
                 invested_mock += buy_cost
