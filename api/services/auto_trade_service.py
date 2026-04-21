@@ -434,7 +434,15 @@ class AutoRobot:
                         action="Sell",
                         is_simulation=is_simulation,
                     )
-                    notify_trade(user_id, pos["symbol"], "Sell", pos["current_price"], pos.get("market", "UNKNOWN"))
+                    # [v2.7.2] Pass PnL metrics to notification
+                    notify_trade(
+                        user_id, 
+                        pos["symbol"], "Sell", 
+                        pos["current_price"], 
+                        pos.get("market", "UNKNOWN"),
+                        pnl_pct=pos.get("pnl_percent"),
+                        pnl_amount=pos.get("pnl")
+                    )
         except Exception as e:
             print(f"[AutoRobot] Exit Check Error for {user_id}: {e}")
 

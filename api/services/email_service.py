@@ -39,7 +39,7 @@ def send_email(to_email: str, subject: str, body_html: str):
         print(f"[EmailService] Failed to send email to {to_email}: {e}")
         return False
 
-def notify_trade(to_email: str, symbol: str, action: str, price: float, market: str, score: float = 0):
+def notify_trade(to_email: str, symbol: str, action: str, price: float, market: str, score: float = 0, pnl_pct: float = None, pnl_amount: float = None):
     """
     Convenience function to notify about a trade.
     """
@@ -48,6 +48,22 @@ def notify_trade(to_email: str, symbol: str, action: str, price: float, market: 
     action_zh = "買入" if action.lower() == "buy" else "賣出"
     color = "#10b981" if action.lower() == "buy" else "#f43f5e"
     
+    # [v2.7.2] PnL Reporting for Sell actions
+    pnl_html = ""
+    if action.lower() == "sell" and pnl_pct is not None:
+        perf_color = "#10b981" if pnl_pct >= 0 else "#f43f5e"
+        status_text = "獲利中結" if pnl_pct >= 0 else "停損出場"
+        pnl_html = f"""
+        <tr style="border-top: 1px solid #f1f5f9;">
+            <td style="padding-top: 10px; font-weight: bold;">成交績效：</td>
+            <td style="padding-top: 10px; color: {perf_color}; font-weight: 900; font-size: 1.2em;">
+                {status_text} {pnl_pct:+.2f}%
+            </td>
+        </tr>
+        """
+        if pnl_amount is not None:
+            pnl_html += f"<tr><td style='font-weight: bold;'>結算金額：</td><td style='font-weight: bold;'>$ {pnl_amount:,.1f} (TWD)</td></tr>"
+            
     html = f"""
     <html>
     <body style="font-family: sans-serif; color: #1e293b; line-height: 1.6;">
@@ -71,9 +87,10 @@ def notify_trade(to_email: str, symbol: str, action: str, price: float, market: 
                     </tr>
                     <tr>
                         <td style="font-weight: bold;">成交價：</td>
-                        <td style="font-family: monospace; font-weight: bold;">${price}</td>
+                        <td style="font-family: monospace; font-weight: bold;">${price:,.2f}</td>
                     </tr>
-                    {f"<tr><td style='font-weight: bold;'>策略評分：</td><td>{score}</td></tr>" if score else ""}
+                    {pnl_html}
+                    {f"<tr><td style='font-weight: bold;'>策略評分：</td><td>{score}</td></tr>" if score and not pnl_html else ""}
                 </table>
             </div>
             
