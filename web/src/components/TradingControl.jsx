@@ -63,9 +63,7 @@ const TradingControl = ({ navParams }) => {
     );
   };
   const [summary, setSummary] = useState(null);
-  const [history, setHistory] = useState([]);
   const [selectedPending, setSelectedPending] = useState(null);
-
   useEffect(() => {
     fetchStatus();
     refreshAll();
