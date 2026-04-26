@@ -9,6 +9,11 @@ from max_api import MaxExchangeAPI
 from api.services.storage_service import save_data_pool, load_data_pool
 from api.models.schemas import AnalysisResult
 
+# [v2.7.4] Data directory for backup symbol lists
+DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+if not os.path.exists(DATA_DIR):
+    os.makedirs(DATA_DIR)
+
 # [v2.2.1] Backup Symbol Lists to ensure scan breadth even if web scraping fails
 BACKUP_SYMBOLS_TW = {
     # Semiconductors & Tech (Top 100)
@@ -81,8 +86,18 @@ def extract_stock_code(raw_str, market_type=None):
 
 def fetch_tw_symbols():
     """Fetch all TW stock symbols (Listed, OTC, Emerging, ETFs)"""
-    import requests
-    import pandas as pd
+    import json
+    json_path = os.path.join(DATA_DIR, "symbols_tw.json")
+    backup_list = BACKUP_SYMBOLS_TW.copy()
+    
+    # 1. Try loading from local JSON first
+    if os.path.exists(json_path):
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                backup_list.update(json.load(f))
+        except Exception as e:
+            print(f"Error loading {json_path}: {e}")
+
     try:
         symbols = {}
         for mode in ["2", "4", "5"]:
@@ -98,19 +113,37 @@ def fetch_tw_symbols():
                     code = parts[0].strip()
                     name = parts[1].strip()
                     if code.isdigit() and len(code) in [4, 5]:
-                        # Typical TW stocks are 4 digits, ETFs are 5 digits.
-                        # Exclude warrants which are usually 6 digits and contain names like "購/售/牛/熊"
                         if not any(x in name for x in ["購", "售", "牛", "熊"]):
                             symbols[code] = name
-        print(f"[QuantService] TW symbols scraped: {len(symbols)}")
-        return {**BACKUP_SYMBOLS_TW, **symbols}
+        
+        # [v2.7.4] If scraping succeeded, update local JSON
+        if symbols:
+            full_list = {**backup_list, **symbols}
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump(full_list, f, ensure_ascii=False, indent=2)
+            print(f"[QuantService] TW symbols scraped and saved: {len(full_list)}")
+            return full_list
+            
+        return backup_list
     except Exception as e:
         print(f"Error fetching TW symbols: {e}")
-        return BACKUP_SYMBOLS_TW
+        return backup_list
 
 def fetch_us_symbols():
     """Fetch S&P 500 symbols from Wikipedia"""
     import requests
+    import json
+    json_path = os.path.join(DATA_DIR, "symbols_us.json")
+    backup_list = BACKUP_SYMBOLS_US.copy()
+
+    # 1. Try loading from local JSON first
+    if os.path.exists(json_path):
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                backup_list.update(json.load(f))
+        except Exception as e:
+            print(f"Error loading {json_path}: {e}")
+
     try:
         url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
         headers = {"User-Agent": "Mozilla/5.0"}
@@ -118,10 +151,18 @@ def fetch_us_symbols():
         tables = pd.read_html(response.text)
         df = tables[0]
         symbols = df.set_index('Symbol')['Security'].to_dict()
-        return {**BACKUP_SYMBOLS_US, **symbols}
+        
+        # [v2.7.4] Update local JSON if scraping succeeded
+        if symbols:
+            full_list = {**backup_list, **symbols}
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump(full_list, f, ensure_ascii=False, indent=2)
+            return full_list
+            
+        return backup_list
     except Exception as e:
         print(f"Error fetching US symbols: {e}")
-        return BACKUP_SYMBOLS_US
+        return backup_list
 
 def fetch_crypto_symbols():
     """Fetch major crypto symbols and MAX exchange pairs, prioritizing MAX naming (e.g., btcusdt)"""
@@ -143,11 +184,18 @@ def fetch_crypto_symbols():
         "etcusdt": "Ethereum Classic (ETC/USDT)", "renderusdt": "Render (RENDER/USDT)", 
         "filusdt": "Filecoin (FIL/USDT)", "ldousdt": "Lido DAO (LDO/USDT)"
     }
+    # [v2.7.4] Persistence check for Crypto
+    import json
+    json_path = os.path.join(DATA_DIR, "symbols_crypto.json")
+    
     try:
         api = MaxExchangeAPI("", "")
         markets = api.get_markets()
         if not markets:
-            print("[QuantService] MAX API returned empty market list, using MAX-formatted fallback.")
+            print("[QuantService] MAX API returned empty market list, using fallback/cache.")
+            if os.path.exists(json_path):
+                with open(json_path, "r", encoding="utf-8") as f:
+                    return json.load(f)
             return symbols
             
         # [v2.1.61] Deduplicate by base currency: Prioritize TWD over USDT for local users
@@ -164,8 +212,10 @@ def fetch_crypto_symbols():
         
         live_symbols = {v[0]: v[1] for v in unique_live.values()}
 
-        # Merge live data into symbols (live data takes precedence)
+        # [v2.7.4] Save results to local JSON for next fallback
         if live_symbols:
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump(live_symbols, f, ensure_ascii=False, indent=2)
             return live_symbols
         
         # [v2.1.63] Deduplicate fallback list: Prioritize TWD
@@ -177,7 +227,10 @@ def fetch_crypto_symbols():
                 unique_fallback[base] = (k, v)
         return {v[0]: v[1] for v in unique_fallback.values()}
     except Exception as e:
-        print(f"Error fetching Crypto symbols from MAX API: {e}. Using MAX-formatted fallback.")
+        print(f"Error fetching Crypto symbols: {e}. Using fallback/cache.")
+        if os.path.exists(json_path):
+            with open(json_path, "r", encoding="utf-8") as f:
+                return json.load(f)
         return symbols
 
 
@@ -607,9 +660,9 @@ async def run_market_scan(market_type: str, defense_weight: float = 0.5):
             print(f"[QuantService] {market_type} Progress: {len(results)}/{total}")
             scan_status["results_count"] = len(results)
             
-            # Partial save to GCS every 500 stocks for better responsiveness
-            if len(results) % 500 == 0 or i + chunk_size >= total:
-                print(f"[QuantService] Syncing results to GCS ({len(results)} stocks)...")
+            # [v2.7.4] Increased partial save frequency for massive scans (every 100 stocks)
+            if len(results) % 100 == 0 or i + chunk_size >= total:
+                print(f"[QuantService] Syncing results to GCS/Firestore ({len(results)} stocks)...")
                 # Ensure results are sorted by score before partial save
                 sorted_partial = sorted(results, key=lambda x: x.score, reverse=True)
                 partial_pool = {"results": sorted_partial, "dfs": all_dfs, "timestamp": datetime.now().isoformat(), "is_partial": True}

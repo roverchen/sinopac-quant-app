@@ -1,6 +1,14 @@
 # Sinopac Quant Pro (Revisions)
 
 ## Version 2.2 Series
++
++### v2.7.4 (2026-04-27)
++- **Robust Full-Market Scanning (6,000+ Stocks)**:
++  - [Backend] Implemented persistent local backup lists in `api/data/` (JSON) to guarantee scanning breadth even during cloud network failures (SSL/404).
++  - [Backend] Expanded scanning scope to ~6,000 stocks: TW (Listed/OTC/Emerging/ETF), US (S&P500/NASDAQ), and MAX Crypto.
++  - [Backend] Increased partial save frequency from 500 to **100 stocks** to improve progress persistence in ephemeral environments.
++  - [Backend] Optimized symbol fetching with a "Cache-Scrape-Update" loop for self-healing backup lists.
++  - [Documentation] Updated `README.md` and `rules.md` to codify the new 6,000-stock target.
 
 ### v2.7.3 (2026-04-21)
 - **Critical: Performance Restoration & Deep Recovery**:
