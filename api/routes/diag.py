@@ -82,9 +82,11 @@ async def wakeup(token: str = ""):
     from api.services.auto_trade_service import robot
     print(f"[Diag] Wakeup pulse received @ {datetime.now()}")
     
-    # Run the robust makeup and scan logic synchronously to keep Cloud Run alive
-    # We use robot.ensure_fresh_scans() which internally handles the logic
-    robot.ensure_fresh_scans()
+    # [v2.7.5] Run the logic in a separate thread to avoid "RuntimeError: asyncio.run() from running loop"
+    import threading
+    worker = threading.Thread(target=robot.ensure_fresh_scans)
+    worker.start()
+    worker.join() # Await completion to keep Cloud Run alive
     
     return {
         "status": "success",

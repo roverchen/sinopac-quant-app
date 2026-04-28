@@ -44,9 +44,9 @@ app.add_middleware(
 )
 
 @app.get("/health")
-@app.get("/api/health")
-async def health():
-    return {"status": "healthy", "version": app.version}
+@app.get("/")
+async def root():
+    return {"message": "Sinopac Quant Pro API", "version": "2.7.5"}
 
 app.include_router(quant.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")

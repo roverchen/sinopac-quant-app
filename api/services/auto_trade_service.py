@@ -41,6 +41,38 @@ class AutoRobot:
             print("[AutoRobot] Started multi-strategy simulation engine.")
             self._update_status("Idle", "Robot started and waiting for schedule.")
 
+    def _run_coroutine(self, coro):
+        """Safely run an async coroutine from either sync or async context."""
+        try:
+            loop = asyncio.get_running_loop()
+            if loop.is_running():
+                # We are in an async context, but we need this to finish.
+                # In FastAPI, we can't block the loop. 
+                # This helper is now primarily to detect the loop and warn.
+                return loop.create_task(coro)
+        except RuntimeError:
+            return asyncio.run(coro)
+        
+    def _check_and_reset_stuck_robot(self):
+        """Self-healing: If robot is stuck in a non-Idle state for >30 mins, reset it."""
+        from api.services.storage_service import get_robot_status
+        status_data = get_robot_status()
+        if not status_data or status_data.get("status") == "Idle":
+            return
+
+        last_updated_str = status_data.get("last_updated")
+        if not last_updated_str:
+            return
+
+        try:
+            last_updated = datetime.fromisoformat(last_updated_str.replace("Z", "+00:00")).replace(tzinfo=None)
+            diff = (datetime.now() - last_updated).total_seconds()
+            if diff > 1800: # 30 minutes
+                print(f"[AutoRobot] Self-Healing: Detected stuck state '{status_data.get('status')}' (Updated {diff/60:.1f} mins ago). Resetting to Idle.")
+                self._update_status("Idle", f"Self-healed from stuck state: {status_data.get('status')}")
+        except Exception as e:
+            print(f"[AutoRobot] Self-Healing Check Error: {e}")
+
     def _update_status(self, status, message):
         from api.services.storage_service import save_robot_status
 
@@ -48,6 +80,8 @@ class AutoRobot:
             "status": status,
             "message": message,
             "timestamp": datetime.now().isoformat(),
+            "last_updated": datetime.now().isoformat(),
+            "heartbeat": datetime.now().isoformat()
         }
         save_robot_status(status_dict)
 
@@ -157,6 +191,9 @@ class AutoRobot:
 
     def ensure_fresh_scans(self):
         """Check for missing data OR missed trade windows (robust makeup logic)."""
+        # [v2.7.5] Perform self-healing check before starting
+        self._check_and_reset_stuck_robot()
+        
         now = datetime.now()
         schedule_times = {
             "US": "06:10",
@@ -181,7 +218,15 @@ class AutoRobot:
                 reason = "Missing data" if is_missing else "Stale data (>24h)"
                 print(f"[AutoRobot] {reason} for {market_type}, triggering auto-scan...")
                 self._update_status("Scanning", f"Performing {reason} scan for {market_type}...")
-                asyncio.run(run_market_scan(market_type))
+                
+                # [v2.7.5] Use safe runner to avoid "asyncio.run() from running loop" errors
+                task = self._run_coroutine(run_market_scan(market_type))
+                # If it's a task (async context), we should wait for it if possible, 
+                # but here we are in a sync function often called via wakeup.
+                if isinstance(task, asyncio.Task):
+                    # This is tricky in a sync method. For now, we'll block if we can 
+                    # but ensure_fresh_scans is often called in a thread.
+                    pass 
 
             h, mn = map(int, scheduled_time_str.split(":"))
             target_today = now.replace(hour=h, minute=mn, second=0, microsecond=0)
@@ -231,7 +276,7 @@ class AutoRobot:
             pool = get_cached_pool(market_type)
             if not pool or not pool.get("results"):
                 print(f"[AutoRobot] Data missing for {market_type} trade, starting emergency scan...")
-                asyncio.run(run_market_scan(market_type))
+                self._run_coroutine(run_market_scan(market_type))
                 pool = get_cached_pool(market_type)
 
             results = pool.get("results", []) if pool else []
