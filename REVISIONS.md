@@ -2,7 +2,14 @@
 
 ## Version 2.2 Series
 +
-+### v2.7.5 (2026-04-28)
++### v2.7.6 (2026-05-03)
+- **Scheduler Optimization & Robustness**:
+  - [Backend] Offloaded `AutoRobot` scheduled tasks (`ensure_fresh_scans`, `check_exits`) to dedicated threads to prevent market scanning from blocking the main scheduler loop.
+  - [Backend] Implemented `_is_scanning` state lock in `AutoRobot` to prevent redundant concurrent scans.
+  - [Backend] Optimized `ensure_fresh_scans` with proper try-except-finally blocks for status consistency.
+  - [Maintenance] Forced-reset robot status to "Idle" to unblock systems stuck in perpetual scanning.
+
+### v2.7.5 (2026-04-28)
 +- **Cloud Run & Stability Optimization**:
 +  - [Backend] Resolved `RuntimeError: asyncio.run() from running loop` by offloading `ensure_fresh_scans` to a dedicated thread in the `/diag/wakeup` endpoint.
 +  - [Backend] Implemented `AutoRobot` self-healing: automatically resets the robot status to "Idle" if stuck in a processing state for more than 30 minutes.

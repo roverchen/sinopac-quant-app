@@ -18,8 +18,8 @@ from api.services.strategy_accounts import (
 class AutoRobot:
     def __init__(self):
         self.primary_user_id = "system_auto"
-        self.running = False
         self.thread = None
+        self._is_scanning = False  # [v2.7.6] Flag to prevent redundant concurrent scans
 
     def start(self):
         if not self.running:
@@ -29,9 +29,9 @@ class AutoRobot:
             schedule.every().day.at("14:10").do(self.perform_daily_trade, market_type="TW")
             schedule.every().day.at("23:15").do(self.perform_daily_trade, market_type="CRYPTO")
 
-            # Periodic checks (v2.5.2: Increased to 5 mins for safety)
-            schedule.every(5).minutes.do(self.check_exits)
-            schedule.every(4).hours.do(self.ensure_fresh_scans)
+            # Periodic checks (v2.7.6: Offloaded to threads to avoid blocking scheduler)
+            schedule.every(5).minutes.do(lambda: threading.Thread(target=self.check_exits, daemon=True).start())
+            schedule.every(4).hours.do(lambda: threading.Thread(target=self.ensure_fresh_scans, daemon=True).start())
 
             self.thread = threading.Thread(target=self._run_scheduler, daemon=True)
             self.thread.start()
@@ -191,68 +191,80 @@ class AutoRobot:
 
     def ensure_fresh_scans(self):
         """Check for missing data OR missed trade windows (robust makeup logic)."""
-        # [v2.7.5] Perform self-healing check before starting
-        self._check_and_reset_stuck_robot()
+        # [v2.7.6] Guard against concurrent scans
+        if self._is_scanning:
+            print("[AutoRobot] Scan already in progress, skipping ensure_fresh_scans.")
+            return
         
-        now = datetime.now()
-        schedule_times = {
-            "US": "06:10",
-            "TW": "14:10",
-            "CRYPTO": "23:15",
-        }
+        self._is_scanning = True
+        try:
+            # [v2.7.5] Perform self-healing check before starting
+            self._check_and_reset_stuck_robot()
+        
+            now = datetime.now()
+            schedule_times = {
+                "US": "06:10",
+                "TW": "14:10",
+                "CRYPTO": "23:15",
+            }
 
-        for market_type, scheduled_time_str in schedule_times.items():
-            pool = get_cached_pool(market_type)
-            is_missing = not pool or not pool.get("results")
-            is_stale = False
+            for market_type, scheduled_time_str in schedule_times.items():
+                pool = get_cached_pool(market_type)
+                is_missing = not pool or not pool.get("results")
+                is_stale = False
 
-            if pool and pool.get("timestamp"):
-                try:
-                    pool_ts = datetime.fromisoformat(pool["timestamp"].replace("Z", "+00:00"))
-                    if (now - pool_ts.replace(tzinfo=None)).total_seconds() > 86400:
+                if pool and pool.get("timestamp"):
+                    try:
+                        pool_ts = datetime.fromisoformat(pool["timestamp"].replace("Z", "+00:00"))
+                        if (now - pool_ts.replace(tzinfo=None)).total_seconds() > 86400:
+                            is_stale = True
+                    except Exception:
                         is_stale = True
-                except Exception:
-                    is_stale = True
 
-            if is_missing or is_stale:
-                reason = "Missing data" if is_missing else "Stale data (>24h)"
-                print(f"[AutoRobot] {reason} for {market_type}, triggering auto-scan...")
-                self._update_status("Scanning", f"Performing {reason} scan for {market_type}...")
-                
-                # [v2.7.5] Use safe runner to avoid "asyncio.run() from running loop" errors
-                task = self._run_coroutine(run_market_scan(market_type))
-                # If it's a task (async context), we should wait for it if possible, 
-                # but here we are in a sync function often called via wakeup.
-                if isinstance(task, asyncio.Task):
-                    # This is tricky in a sync method. For now, we'll block if we can 
-                    # but ensure_fresh_scans is often called in a thread.
-                    pass 
+                if is_missing or is_stale:
+                    reason = "Missing data" if is_missing else "Stale data (>24h)"
+                    print(f"[AutoRobot] {reason} for {market_type}, triggering auto-scan...")
+                    self._update_status("Scanning", f"Performing {reason} scan for {market_type}...")
+                    
+                    # [v2.7.5] Use safe runner to avoid "asyncio.run() from running loop" errors
+                    task = self._run_coroutine(run_market_scan(market_type))
+                    # If it's a task (async context), we should wait for it if possible, 
+                    # but here we are in a sync function often called via wakeup.
+                    if isinstance(task, asyncio.Task):
+                        # This is tricky in a sync method. For now, we'll block if we can 
+                        # but ensure_fresh_scans is often called in a thread.
+                        pass 
 
-            h, mn = map(int, scheduled_time_str.split(":"))
-            target_today = now.replace(hour=h, minute=mn, second=0, microsecond=0)
-            last_expected = target_today if now >= target_today else target_today - timedelta(days=1)
+                h, mn = map(int, scheduled_time_str.split(":"))
+                target_today = now.replace(hour=h, minute=mn, second=0, microsecond=0)
+                last_expected = target_today if now >= target_today else target_today - timedelta(days=1)
 
-            for strategy in list_strategy_accounts():
-                user_id = strategy["user_id"]
-                if not supports_market(user_id, market_type):
-                    continue
+                for strategy in list_strategy_accounts():
+                    user_id = strategy["user_id"]
+                    if not supports_market(user_id, market_type):
+                        continue
 
-                last_trade = self.get_last_trade_time(user_id, market_type)
-                if last_trade < (last_expected - timedelta(minutes=1)):
-                    print(
-                        f"[AutoRobot] Missed window detected for {user_id}/{market_type} "
-                        f"(Last expected: {last_expected}, Last actual: {last_trade})"
-                    )
-                    self._update_status(
-                        "Trading",
-                        f"{strategy['short_label']} makeup trade for {market_type} "
-                        f"({last_expected.strftime('%m-%d %H:%M')})",
-                    )
-                    self.perform_daily_trade(market_type, strategy_user_id=user_id)
-                else:
-                    print(f"[AutoRobot] {user_id}/{market_type} is up to date (Last trade: {last_trade}).")
+                    last_trade = self.get_last_trade_time(user_id, market_type)
+                    if last_trade < (last_expected - timedelta(minutes=1)):
+                        print(
+                            f"[AutoRobot] Missed window detected for {user_id}/{market_type} "
+                            f"(Last expected: {last_expected}, Last actual: {last_trade})"
+                        )
+                        self._update_status(
+                            "Trading",
+                            f"{strategy['short_label']} makeup trade for {market_type} "
+                            f"({last_expected.strftime('%m-%d %H:%M')})",
+                        )
+                        self.perform_daily_trade(market_type, strategy_user_id=user_id)
+                    else:
+                        print(f"[AutoRobot] {user_id}/{market_type} is up to date (Last trade: {last_trade}).")
 
-        self._update_status("Idle", "Startup checks and makeup trades complete.")
+            self._update_status("Idle", "Startup checks and makeup trades complete.")
+        except Exception as e:
+            print(f"[AutoRobot] ensure_fresh_scans error: {e}")
+            self._update_status("Error", f"Error during fresh scans: {e}")
+        finally:
+            self._is_scanning = False
 
     def perform_daily_trade(self, market_type, strategy_user_id=None):
         strategy_user_id = strategy_user_id or self.primary_user_id
