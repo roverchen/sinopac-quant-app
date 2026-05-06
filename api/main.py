@@ -44,7 +44,6 @@ app.add_middleware(
 )
 
 @app.get("/health")
-@app.get("/")
 async def root():
     return {"message": "Sinopac Quant Pro API", "version": "v2.7.7"}
 
