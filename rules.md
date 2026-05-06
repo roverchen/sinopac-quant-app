@@ -45,7 +45,7 @@ This document codifies the established development patterns and best practices f
   - *Data Bug Shield*: [v2.7.2] Prevent automated "Panic Selling" by skipping exits if ROI is suspiciously low (>-90%), which usually indicates a currency or API data mismatch.
   - *High-Frequency Monitoring*: Maintenance of 5-minute exit checks for automated strategies.
 - **Scanning Scope & Robustness**:
-  - *Target Coverage*: Total ~6,000 stocks (TW: Listed/OTC/Emerging/ETF, US: S&P500/NASDAQ, Crypto: MAX).
+  - *Target Coverage*: Total ~6,000 stocks (TW: 上市、上櫃、興櫃、基金/ETF, US: S&P500/NASDAQ, Crypto: MAX).
   - *Hybrid Strategy*: Use dynamic scrapers for fresh names, but always maintain a large JSON-based backup list (>500 core stocks) to handle cloud environment SSL/404 failures.
   - *Incremental Updates*: For massive lists (>5,000), implement partial saves every 100-500 stocks to ensure progress is persisted even if the task is throttled or killed.
 

@@ -113,7 +113,7 @@ def fetch_tw_symbols():
                 if len(parts) >= 2:
                     code = parts[0].strip()
                     name = parts[1].strip()
-                    if code.isdigit() and len(code) in [4, 5]:
+                    if code.isdigit() and len(code) in [4, 5, 6]:
                         if not any(x in name for x in ["購", "售", "牛", "熊"]):
                             symbols[code] = name
         
