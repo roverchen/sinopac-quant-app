@@ -19,6 +19,7 @@ class AutoRobot:
     def __init__(self):
         self.primary_user_id = "system_auto"
         self.thread = None
+        self.running = False
         self._is_scanning = False  # [v2.7.6] Flag to prevent redundant concurrent scans
 
     def start(self):
@@ -36,8 +37,12 @@ class AutoRobot:
             self.thread = threading.Thread(target=self._run_scheduler, daemon=True)
             self.thread.start()
 
-            # Initial check at startup
-            threading.Thread(target=self.ensure_fresh_scans, daemon=True).start()
+            # [v2.7.7] Delayed startup scan to avoid blocking Cloud Run health checks
+            def delayed_check():
+                time.sleep(30)
+                self.ensure_fresh_scans()
+            
+            threading.Thread(target=delayed_check, daemon=True).start()
             print("[AutoRobot] Started multi-strategy simulation engine.")
             self._update_status("Idle", "Robot started and waiting for schedule.")
 
