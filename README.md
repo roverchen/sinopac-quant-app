@@ -1,6 +1,6 @@
 # Sinopac Quant Pro (股市報明牌)
 
-[![Version](https://img.shields.io/badge/version-2.7.5-blue.svg)](REVISIONS.md) [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
+[![Version](https://img.shields.io/badge/version-2.7.7-blue.svg)](CHANGELOG.md) [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
 
 Sinopac Quant Pro 是一個強大的多市場資產篩選與自動化交易系統，支援 **台股 (TW)**、**美股 (US)** 以及 **加密貨幣 (Crypto)**。本系統結合了動態權重配置策略、技術面計分引擎與基本面濾網，為量化交易者提供從選股、分析到下單的一站式解決方案。
 
@@ -182,7 +182,7 @@ Sinopac Quant Pro 是一個強大的多市場資產篩選與自動化交易系�
 ## 🛠️ 技術架構 (Tech Stack)
 
 - **Frontend**: React 18, Vite, Tailwind CSS, Framer Motion (動態視覺效果), Lucide React (圖標).
-- **Backend**: FastAPI (Python 3.11), Uvicorn.
+- **Backend**: FastAPI (Python 3.9), Uvicorn.
 - **Legacy App**: 舊版 Streamlit 工具已收納於 `streamlit/` 子目錄，與現行 FastAPI + Vite 主系統解耦。
 - **Data & APIs**: 
   - [Shioaji](https://github.com/Sinopac/shioaji) (永豐證券 API)
@@ -220,7 +220,7 @@ gcloud builds submit --config cloudbuild.yaml .
 ## 變更紀錄 (Revision History)
 
 關於系統的歷次更新細節、Bug Fix 以及版本迭代說明，請參閱：
-👉 **[REVISIONS.md](REVISIONS.md)**
+👉 **[CHANGELOG.md](CHANGELOG.md)**
 
 ## 🛠 數據修正與系統穩定性說明 (Data Correction & Stability) - v2.7.1
 
@@ -243,6 +243,54 @@ gcloud builds submit --config cloudbuild.yaml .
 
 ---
 
+## 📜 開發與維運規範 (Development Rules & Habits)
+
+以下為本專案所遵循的開發模式與最佳實踐（整合自 `rules.md`）：
+
+### 1. 版本控制與文件規範 (Versioning & Documentation)
+- **語意化版本**: 每次功能更新或 Bug 修復，皆須更新 `api/main.py` 中的 `version`。
+- **版本紀錄**: 任何部署發布前，必須在 `CHANGELOG.md` 中詳細記錄變更。
+- **README 同步**: 確保公用文件的技術細節與當前版本一致（包含 Port、啟動腳本等變更）。
+- **投置資本 ROI**: 模擬績效一律以 `(Total PnL / Total Invested Capital)` 為主要指標，防範帳戶資金稀釋報酬率。
+
+### 2. 後端開發規範 (Backend Standards)
+- **模組化服務**: 核心邏輯封裝於 `api/services/`（如 `quant_service.py`、`auto_trade_service.py`），維持 Route 層簡潔。
+- **Schema 完整性**: 新增 API 欄位時，同步更新 `api/models/schemas.py`。
+- **資料清洗**: 返回前端 JSON 前，使用 `sanitize()` 處理 `NaN` 或 `Inf`。
+- **跨市場貨幣安全**: 美股與加密貨幣的模擬交易及損益計算須先折算為 TWD 再做比較與呈現。
+- **定期定額 (SIP) 部位計算**: 自動交易一律以定額 `sip_amount_twd` 換算交易數量，台股支援零股、美股採整股、Crypto 依精度換算。
+
+### 3. 前端 UI/UX 原則 (Frontend Design)
+- **視覺一致性**: 買入/看漲使用 `#10b981` (綠色)，賣出/看跌使用 `#f43f5e` (紅色)；策略拉動條左側代表防守 Value，右側代表成長 Pullback。
+- **互動流暢**: 採用 `Framer Motion` 微動畫與 `Lucide React` 圖標。
+- **系統帳戶安全**: `system_auto` 為獨立系統帳戶，檢視此帳戶時，手動賣出與撤單按鈕須保持禁用。
+
+### 4. 量化引擎邏輯 (Quant Engine Logic)
+- **相對強度 (RS)**：選股評分須對照大盤指數（^TWII, ^GSPC, BTC）。
+- **量能形態定義**：
+  - *窒息量 (Choking)*：低位階 + 極致縮量。
+  - *止跌量 (Bottoming)*：長下影線 + 溫和增量。
+  - *洗盤量 (Washout)*：強勢股拉回時縮量。
+  - *動能追擊 (Momentum Chase)*：自底部向上跳空 >7%。
+- **安全防護與風控**：
+  - *流動性過濾*：日成交值台股 > 10M TWD、加密貨幣 > 1M TWD。
+  - *價格防護*：掃描價與下單執行價容許偏差最大 3%。
+  - *數據錯誤防禦*：當 ROI 異常低於 -90% 時（通常為匯率或 API 錯誤），自動跳過出場以防恐慌拋售。
+  - *即時出場巡檢*：維持 5 分鐘一次的自動交易出場檢查。
+- **海選範圍保底**：維護大於 500 檔的核心標的 JSON 保底名單，防範雲端環境 SSL/404 爬蟲失效。
+
+### 5. 部署流程 (Deployment Workflow)
+- **GitHub 觸發與 Tag**：使用 `vX.Y.Z` 標籤觸發 CI/CD 部署，Commit `README.md` 與 `CHANGELOG.md` 必須在 Push Tag 之前。
+- **雲端部署**：以 GCP Cloud Run 為主。
+- **原子操作防併發**：自動交易等任務須透過 Firestore 分布式鎖（Distributed Lock）確保多實例併發時僅執行一次。
+
+### 6. 協作與驗證習慣 (Interaction & Verification)
+- **任務追蹤**：任何更新均在 `CHANGELOG.md` 中留下足跡。
+- **主動驗證**：部署後主動調用 `/health` 或相關診斷 API，確保線上版本與本地程式碼一致。
+
+---
+
 ## ⚖️ 免責聲明 (Disclaimer)
 
 本系統僅供學術研究與模擬交易參考，不構成任何形式的投資建議。使用者在本系統內所進行的任何實盤下單行為，其後果由使用者自行承擔。
+

@@ -1,8 +1,13 @@
-# Sinopac Quant Pro (Revisions)
+# Changelog
 
 ## Version 2.2 Series
-+
-+### v2.7.6 (2026-05-03)
+
+### v2.7.7 (2026-05-17)
+- [Maintenance] Bumped backend version to `v2.7.7`.
+- [Maintenance] Synchronized `README.md`, diagnostic metadata, and release notes with the current runtime version.
+- [Maintenance] Updated documentation to reflect Python 3.9 compatibility.
+
+### v2.7.6 (2026-05-03)
 - **Scheduler Optimization & Robustness**:
   - [Backend] Offloaded `AutoRobot` scheduled tasks (`ensure_fresh_scans`, `check_exits`) to dedicated threads to prevent market scanning from blocking the main scheduler loop.
   - [Backend] Implemented `_is_scanning` state lock in `AutoRobot` to prevent redundant concurrent scans.
@@ -52,7 +57,7 @@
   - [Backend] Added filtering by `userId` for positions, history, and pending order endpoints.
   - [Backend] Enhanced `storage_service` and `trade_engine` for multi-account compatibility.
   - [Frontend] Updated `TradingControl` and `Dashboard` to support switching between different system strategy views.
-  - [Maintenance] Synchronized `rover-rules.md` with SIP mode and relative strength definitions.
+  - [Maintenance] Synchronized `strategy-rover.md` with SIP mode and relative strength definitions.
 
 ### v2.6.7 (2026-04-13)
 - **New Feature: SIP (Periodic Investment) Mode**:
@@ -105,7 +110,7 @@
 ### v2.5.3 (2026-03-23)
 - **Rules Synchronization**:
   - [Maintenance] Updated `rules.md` to codify the new **Invested Capital ROI** and **Liquidity Filter** standards.
-  - [Maintenance] Ensured `README.md` and `REVISIONS.md` follow the updated versioning rules.
+  - [Maintenance] Ensured `README.md` and `CHANGELOG.md` follow the updated versioning rules.
 
 ### v2.5.2 (2026-03-23)
 - **Enhanced Safety Engine**:

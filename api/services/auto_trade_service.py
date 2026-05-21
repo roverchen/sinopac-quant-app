@@ -90,7 +90,7 @@ class AutoRobot:
         }
         save_robot_status(status_dict)
 
-    def _notify_users(self, symbol, action, price, market, score=0):
+    def _notify_users(self, symbol, action, price, market, score=0, pnl_pct=None, pnl_amount=None):
         """Send email notifications to all subscribed users."""
         targets = get_all_users_for_notifications()
         if not targets:
@@ -98,7 +98,7 @@ class AutoRobot:
 
         print(f"[AutoRobot] Notifying {len(targets)} users about {action} {symbol}")
         for email, _ in targets:
-            notify_trade(email, symbol, action, price, market, score)
+            notify_trade(email, symbol, action, price, market, score, pnl_pct=pnl_pct, pnl_amount=pnl_amount)
 
     def _run_scheduler(self):
         while self.running:
@@ -142,7 +142,7 @@ class AutoRobot:
 
     def _pick_eric_candidate(self, results):
         """
-        TW-only swing strategy inspired by eric-rules:
+        TW-only swing strategy inspired by strategy-eric.md:
         prefer strong bullish trend structure, healthy pullback, and non-exhausted levels.
         """
         ranked = []
@@ -504,14 +504,27 @@ class AutoRobot:
                         is_simulation=is_simulation,
                     )
                     # [v2.7.2] Pass PnL metrics to notification
-                    notify_trade(
-                        user_id, 
-                        pos["symbol"], "Sell", 
-                        pos["current_price"], 
-                        pos.get("market", "UNKNOWN"),
-                        pnl_pct=pos.get("pnl_percent"),
-                        pnl_amount=pos.get("pnl")
-                    )
+                    strategy_ids = [s["user_id"] for s in list_strategy_accounts()]
+                    if user_id in strategy_ids:
+                        self._notify_users(
+                            pos["symbol"], "Sell",
+                            pos["current_price"],
+                            pos.get("market", "UNKNOWN"),
+                            pnl_pct=pos.get("pnl_percent"),
+                            pnl_amount=pos.get("pnl")
+                        )
+                    else:
+                        from api.services.storage_service import get_user_settings
+                        settings = get_user_settings(user_id)
+                        user_email = settings.get("email") or user_id
+                        notify_trade(
+                            user_email, 
+                            pos["symbol"], "Sell", 
+                            pos["current_price"], 
+                            pos.get("market", "UNKNOWN"),
+                            pnl_pct=pos.get("pnl_percent"),
+                            pnl_amount=pos.get("pnl")
+                        )
         except Exception as e:
             print(f"[AutoRobot] Exit Check Error for {user_id}: {e}")
 

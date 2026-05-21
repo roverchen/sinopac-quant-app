@@ -4,15 +4,15 @@
 
 ## 1. 版本控制與文件規範 (Versioning & Documentation)
 - **語意化版本 (Semantic Versioning)**：嚴格遵循 `vX.Y.Z` 格式。核心版本號定義於 `api/main.py`。
-- **變更紀錄 (REVISIONS.md)**：
-    - 任何功能更新或 Bug Fix 必須同步更新 `REVISIONS.md`。
+- **變更紀錄 (CHANGELOG.md)**：
+    - 任何功能更新或 Bug Fix 必須同步更新 `CHANGELOG.md`。
     - 筆記應包含分類標籤：`[Backend]`、`[Frontend]`、`[Maintenance]`。
 - **同步更新**：發布新版本前，確保 `README.md` 中的核心技術描述與最新引擎版本一致。
     - `README.md` 顯示版本需與 `api/main.py` 相同。
     - 若本地啟動 port、部署方式、排程行為或績效口徑有變更，需同步更新文件。
 
 ## 2. 後端開發架構 (Backend Architecture)
-- **FastAPI / Python 3.11**：
+- **FastAPI / Python 3.9**：
     - **Service-Oriented**：業務邏輯應封裝於 `api/services/` (如 `quant_service.py`)。Route 層僅負責解析請求與調用 Service。
     - **Pydantic Schemas**：統一在 `api/models/schemas.py` 定義資料模型，確保 API 層的類型安全。
     - **資料清洗 (Sanitization)**：返回 JSON 前，務必使用 `sanitize()` helper 處理 `NaN` 或 `Inf` 數值，防止前端解析失效。
