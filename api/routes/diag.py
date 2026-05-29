@@ -70,8 +70,9 @@ async def trigger_auto_trade(market: str = "TW", strategy_user_id: str = "system
 
 @router.get("/wakeup")
 async def wakeup(token: str = ""):
-    """Special endpoint for Cloud Scheduler pulsars to wake up the system and run auto-trade logic.
-    Awaits full execution to prevent Cloud Run from scaling down prematurely.
+    """Daily scheduler wakeup endpoint.
+    Runs the consolidated makeup logic once so the service can catch up all
+    due strategy/market tasks before Cloud Run scales back down.
     """
     # Simple security token check to prevent unauthorized spamming of scans
     # If not set in env, it's open for now (can be added later for security)

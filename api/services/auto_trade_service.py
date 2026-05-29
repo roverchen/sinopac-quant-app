@@ -21,18 +21,19 @@ class AutoRobot:
         self.thread = None
         self.running = False
         self._is_scanning = False  # [v2.7.6] Flag to prevent redundant concurrent scans
+        self.daily_wakeup_time = "23:20"
 
     def start(self):
         if not self.running:
             self.running = True
-            # Internal schedule targets the intended trade windows in Taiwan time.
-            schedule.every().day.at("06:10").do(self.perform_daily_trade, market_type="US")
-            schedule.every().day.at("14:10").do(self.perform_daily_trade, market_type="TW")
-            schedule.every().day.at("23:15").do(self.perform_daily_trade, market_type="CRYPTO")
+            # Run one consolidated daily wakeup. The wakeup flow will makeup any
+            # missed US/TW/Crypto trade windows through ensure_fresh_scans().
+            schedule.every().day.at(self.daily_wakeup_time).do(
+                lambda: threading.Thread(target=self.ensure_fresh_scans, daemon=True).start()
+            )
 
             # Periodic checks (v2.7.6: Offloaded to threads to avoid blocking scheduler)
             schedule.every(5).minutes.do(lambda: threading.Thread(target=self.check_exits, daemon=True).start())
-            schedule.every(4).hours.do(lambda: threading.Thread(target=self.ensure_fresh_scans, daemon=True).start())
 
             self.thread = threading.Thread(target=self._run_scheduler, daemon=True)
             self.thread.start()
@@ -44,7 +45,7 @@ class AutoRobot:
             
             threading.Thread(target=delayed_check, daemon=True).start()
             print("[AutoRobot] Started multi-strategy simulation engine.")
-            self._update_status("Idle", "Robot started and waiting for schedule.")
+            self._update_status("Idle", f"Robot started and waiting for daily wakeup at {self.daily_wakeup_time}.")
 
     def _run_coroutine(self, coro):
         """Safely run an async coroutine from either sync or async context."""
