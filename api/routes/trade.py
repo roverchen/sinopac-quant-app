@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from api.routes.auth import get_current_user
-from api.services.shioaji_service import ShioajiService
+from api.services.shioaji_service import ShioajiService, is_usd_denominated
 from api.services.reconciliation_service import reconciliation_service
 from api.services.storage_service import get_user_credentials, update_user_credentials, get_user_trade_logs
 from api.services.strategy_accounts import is_system_strategy_account, list_strategy_account_ids
@@ -102,12 +102,10 @@ async def get_performance_summary(user_id: Optional[str] = None, current_user: s
         pnl = item.get('realized_pl', 0) 
         market = item.get('market', 'TW')
         
-        # [v2.7.3] Unit Safety Guard for History Summary
+        # [v2.7.8] Normalize price to TWD if the symbol is USD-denominated
         price = item.get('price', 0)
-        # If price is suspiciously low (USD), normalize it for cost calculation
-        if market in ["US", "CRYPTO"] and price < 2000:
-             # This is a rough estimation for the summary; accurate data is in logs
-             price = price * 32.5 
+        if is_usd_denominated(item.get('symbol', ''), market):
+             price = price * 32.5
              
         buy_cost = (price * item.get('qty', 0)) - item.get('fee', 0) - item.get('tax', 0) - pnl
         
@@ -129,12 +127,9 @@ async def get_performance_summary(user_id: Optional[str] = None, current_user: s
         market = pos.get('market', 'TW')
         
         if current and buy and qty:
-            # [v2.7.3] Unit Safety Guard for Unrealized
+            # [v2.7.8] Prices are already normalized to TWD
             calc_current = current
             calc_buy = buy
-            if market in ["US", "CRYPTO"]:
-                if current < 2000: calc_current = current * 32.5
-                if buy < 2000: calc_buy = buy * 32.5
                 
             pnl = (calc_current - calc_buy) * qty
             buy_cost = calc_buy * qty

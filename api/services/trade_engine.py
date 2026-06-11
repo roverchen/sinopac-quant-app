@@ -8,6 +8,7 @@ from api.services.storage_service import (
 )
 from api.services.quant_service import get_yahoo_ticker, get_symbol_name
 from api.services.strategy_accounts import list_strategy_account_ids
+from api.services.shioaji_service import is_usd_denominated
 
 class MatchingEngine:
     def __init__(self):
@@ -80,8 +81,8 @@ class MatchingEngine:
                     if not data.empty:
                         price = float(data['Close'].iloc[-1])
                         
-                        # [v2.6.3] Fix: Convert USD price to TWD if the symbol is US or Crypto TWD pair
-                        if m_type == "US" or (m_type == "CRYPTO" and s.lower().endswith("twd")):
+                        # [v2.7.8] Fix: Convert USD price to TWD for all US and Crypto assets
+                        if m_type in ["US", "CRYPTO"]:
                             exchange_rate = self._get_cached_exchange_rate()
                             price = price * exchange_rate
                             print(f"[TradeEngine] Converted Yahoo {s} USD price to {price:.2f} TWD (Rate: {exchange_rate:.2f})")
@@ -96,8 +97,8 @@ class MatchingEngine:
                         if r.status_code == 200:
                             price = float(r.json()['price'])
                             
-                            # [v2.6.3] Fix: Convert USD price to TWD if the symbol is a TWD pair or US market is active
-                            if s.lower().endswith("twd") or m_type == "US":
+                            # [v2.7.8] Fix: Convert USD price to TWD for all US and Crypto assets
+                            if m_type in ["US", "CRYPTO"]:
                                 exchange_rate = self._get_cached_exchange_rate()
                                 price = price * exchange_rate
                                 print(f"[TradeEngine] Converted Binance {base} USD price to {price:.2f} TWD (Rate: {exchange_rate:.2f})")
@@ -199,9 +200,9 @@ class MatchingEngine:
         market = order['market']
         is_simulation = order.get('is_simulation', True)
         
-        # [v2.7.3] Unit Safety Guard: Ensure fill_price is TWD for US/Crypto
+        # [v2.7.8] Unit Safety Guard: Ensure fill_price is TWD for USD-denominated assets
         actual_fill_price = fill_price
-        if market in ["US", "CRYPTO"] and fill_price < 2000:
+        if is_usd_denominated(symbol, market):
              rate = self._get_cached_exchange_rate()
              actual_fill_price = fill_price * rate
              print(f"[TradeEngine] Normalizing fill_price from {fill_price} to {actual_fill_price:.2f} TWD (Rate: {rate:.2f})")

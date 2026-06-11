@@ -79,6 +79,21 @@ class MockShioajiClient:
 _shioaji_instances = {}
 _shioaji_lock = threading.Lock()
 
+def is_usd_denominated(symbol: str, market: str) -> bool:
+    """Helper to check if a symbol/market combination is USD-denominated [v2.7.8]"""
+    market = market.upper()
+    symbol = symbol.upper()
+    if market == "TW":
+        return False
+    if market == "US":
+        return True
+    if market == "CRYPTO":
+        # Crypto is USD denominated UNLESS it is a TWD pair (e.g. BTC-TWD, usdttwd)
+        if "TWD" in symbol or symbol.endswith("TWD"):
+            return False
+        return True
+    return False
+
 class ShioajiService:
     @classmethod
     def get_api_client(cls, email: str):
@@ -506,18 +521,8 @@ class ShioajiService:
                     p['current_price'] = round(current_price, 2)
                     
                     calc_current = current_price
-                    if p['market'] in ["US", "CRYPTO"]:
-                        # Fetch USD/TWD rate if needed
-                        rate = 32.5 # Default fallback
-                        try:
-                            import yfinance as yf
-                            rate_df = yf.Ticker("TWD=X").history(period="1d")
-                            if not rate_df.empty:
-                                rate = float(rate_df['Close'].iloc[-1])
-                        except: pass
-                        calc_current = current_price * rate
-                    
                     p['pnl_percent'] = round(((calc_current - p['buy_price']) / p['buy_price']) * 100, 2)
+                    p['unrealized_pl'] = round((calc_current - p['buy_price']) * p['qty'], 2)
                 else:
                     p['current_price'] = p.get('buy_price', 0)
                     p['pnl_percent'] = 0.0
@@ -603,6 +608,7 @@ class ShioajiService:
                             "is_simulation": False,
                             "current_price": current_price_twd,
                             "pnl_percent": round(((current_price_twd - buy_price) / buy_price * 100), 2) if buy_price > 0 else 0.0,
+                            "unrealized_pl": round((current_price_twd - buy_price) * qty, 2) if buy_price > 0 else 0.0,
                             "buy_order_time": buy_record.get("order_time") if buy_record else None,
                             "buy_filled_time": buy_record.get("fill_time") if buy_record else None
                         })
@@ -621,16 +627,14 @@ class ShioajiService:
             if df is not None and not df.empty:
                 val = df['Close'].iloc[-1]
                 
-                # Handle exchange rate for US/Crypto if returned from Yahoo in USD
+                # Handle exchange rate for US/Crypto to ensure price is in TWD
                 if market_type in ['US', 'CRYPTO']:
                     try:
                         import yfinance as yf
                         rate_df = yf.Ticker("TWD=X").history(period="1d")
                         if not rate_df.empty:
                             exchange_rate = float(rate_df['Close'].iloc[-1])
-                            # If it's a USD ticker (ends in -USD or -USDT on Yahoo), convert to TWD
-                            if "-USD" in ticker or "-USDT" in ticker:
-                                val = val * exchange_rate
+                            val = val * exchange_rate
                     except: pass
                 
                 return float(val)
