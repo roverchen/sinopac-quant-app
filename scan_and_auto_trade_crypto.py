@@ -46,12 +46,19 @@ async def main():
         print("Quantity too small, skipping trade.")
         return
 
+    from api.services.shioaji_service import is_usd_denominated
+    from api.services.trade_engine import engine
+    order_price = price
+    if is_usd_denominated(symbol, "CRYPTO"):
+        rate = engine._get_cached_exchange_rate()
+        order_price = price / rate
+
     print(f"--- [AutoTrade] Placing REAL order for {symbol} ---")
     res = ShioajiService.place_order(
         USER_EMAIL,
         symbol,
         qty,
-        price,
+        order_price,
         action="Buy",
         is_simulation=False,
         name=name

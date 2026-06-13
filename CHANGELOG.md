@@ -2,6 +2,20 @@
 
 ## Version 2.2 Series
 
+### v2.7.9 (2026-06-13)
+- **Fix: Automated Trading Currency Alignment**:
+  - [Backend] Refactored `perform_daily_trade`, `_execute_mirror_buys`, and `_check_user_exits` in `auto_trade_service.py` to calculate order volume in TWD but submit orders using native currencies.
+  - [Backend] Modified `MatchingEngine._check_pending_orders` to check and compare limit prices in their native currencies, preventing incorrect matching.
+  - [Backend] Unified order placing currency flow: always submit using native currencies (USD for US/USD-crypto, TWD for TW/TWD-crypto).
+  - [Maintenance] Executed `scratch/fix_june_trades.py` data recovery script to fix double-converted stablecoin positions and historical sell realized PnL logs from June 12th and 13th.
+
+### v2.7.8 (2026-06-11)
+- **Fix: Currency Double-Conversion for Crypto**:
+  - [Backend] Introduced `is_usd_denominated(symbol, market)` helper to differentiate TWD and USD crypto assets.
+  - [Backend] Normalized `get_current_price` to consistently return TWD for all assets.
+  - [Backend] Updated matching engine and trades summary routes to correctly compute TWD prices.
+  - [Maintenance] Cleaned up historical double-converted stablecoin buy prices.
+
 ### v2.7.7 (2026-05-17)
 - [Maintenance] Bumped backend version to `v2.7.7`.
 - [Maintenance] Synchronized `README.md`, diagnostic metadata, and release notes with the current runtime version.

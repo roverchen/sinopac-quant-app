@@ -81,8 +81,8 @@ class MatchingEngine:
                     if not data.empty:
                         price = float(data['Close'].iloc[-1])
                         
-                        # [v2.7.8] Fix: Convert USD price to TWD for all US and Crypto assets
-                        if m_type in ["US", "CRYPTO"]:
+                        # [v2.7.9] Convert USD price to TWD only if the asset is TWD-denominated (e.g. TWD crypto pairs)
+                        if not is_usd_denominated(s, m_type) and m_type == "CRYPTO":
                             exchange_rate = self._get_cached_exchange_rate()
                             price = price * exchange_rate
                             print(f"[TradeEngine] Converted Yahoo {s} USD price to {price:.2f} TWD (Rate: {exchange_rate:.2f})")
@@ -97,8 +97,8 @@ class MatchingEngine:
                         if r.status_code == 200:
                             price = float(r.json()['price'])
                             
-                            # [v2.7.8] Fix: Convert USD price to TWD for all US and Crypto assets
-                            if m_type in ["US", "CRYPTO"]:
+                            # [v2.7.9] Convert USD price to TWD only if the asset is TWD-denominated (e.g. TWD crypto pairs)
+                            if not is_usd_denominated(s, m_type) and m_type == "CRYPTO":
                                 exchange_rate = self._get_cached_exchange_rate()
                                 price = price * exchange_rate
                                 print(f"[TradeEngine] Converted Binance {base} USD price to {price:.2f} TWD (Rate: {exchange_rate:.2f})")

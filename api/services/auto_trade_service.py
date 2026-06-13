@@ -345,10 +345,6 @@ class AutoRobot:
             sip_amount = settings.get("sip_amount_twd", 10000.0)
 
             price_twd = entry_price
-            if market_type != "TW":
-                from api.services.trade_engine import engine
-                rate = engine._get_cached_exchange_rate()
-                price_twd = entry_price * rate
 
             qty = sip_amount / price_twd
             if market_type == "TW":
@@ -364,11 +360,19 @@ class AutoRobot:
                 self._update_status("Idle", msg)
                 return
 
+            # [v2.7.9] Convert order price to native currency if it is USD-denominated
+            from api.services.shioaji_service import is_usd_denominated
+            order_price = entry_price
+            if is_usd_denominated(symbol, market_type):
+                from api.services.trade_engine import engine
+                rate = engine._get_cached_exchange_rate()
+                order_price = entry_price / rate
+
             res = ShioajiService.place_order(
                 strategy_user_id,
                 symbol,
                 qty,
-                entry_price,
+                order_price,
                 action="Buy",
                 is_simulation=True,
                 name=name,
@@ -426,10 +430,6 @@ class AutoRobot:
                     order_value = max_limit
 
                 price_twd = entry_price
-                if market_type != "TW":
-                    from api.services.trade_engine import engine
-                    rate = engine._get_cached_exchange_rate()
-                    price_twd = entry_price * rate
 
                 qty = order_value / price_twd
                 if market_type == "TW":
@@ -442,12 +442,20 @@ class AutoRobot:
                 if qty <= 0:
                     continue
 
-                print(f"[AutoRobot] Mirror trading for {uid}: {symbol} x {qty} (@{entry_price})")
+                # [v2.7.9] Convert order price to native currency if it is USD-denominated
+                from api.services.shioaji_service import is_usd_denominated
+                order_price = entry_price
+                if is_usd_denominated(symbol, market_type):
+                    from api.services.trade_engine import engine
+                    rate = engine._get_cached_exchange_rate()
+                    order_price = entry_price / rate
+
+                print(f"[AutoRobot] Mirror trading for {uid}: {symbol} x {qty} (@{order_price} native)")
                 ShioajiService.place_order(
                     uid,
                     symbol,
                     qty,
-                    entry_price,
+                    order_price,
                     action="Buy",
                     is_simulation=is_simulation,
                     name=name,
@@ -496,11 +504,20 @@ class AutoRobot:
                     status = "Take Profit" if pnl_pct >= tp_pct else "Stop Loss"
                     print(f"[AutoRobot] Trigger {status} for {user_id}: {pos['symbol']} @ {pnl_pct}%")
 
+                    # [v2.7.9] Convert exit current_price to native currency if USD-denominated
+                    from api.services.shioaji_service import is_usd_denominated
+                    pos_market = pos.get("market", "UNKNOWN")
+                    order_price = pos["current_price"]
+                    if is_usd_denominated(pos["symbol"], pos_market):
+                        from api.services.trade_engine import engine
+                        rate = engine._get_cached_exchange_rate()
+                        order_price = pos["current_price"] / rate
+
                     ShioajiService.place_order(
                         user_id,
                         pos["symbol"],
                         pos["qty"],
-                        pos["current_price"],
+                        order_price,
                         action="Sell",
                         is_simulation=is_simulation,
                     )
