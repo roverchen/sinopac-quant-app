@@ -19,6 +19,22 @@ STRATEGY_ACCOUNTS = {
     },
 }
 
+# [v2.8.0] Per-market risk parameters. The three markets have fundamentally
+# different volatility / crash profiles, so TP/SL/position sizing are separated:
+#   - TW:    lowest win rate, strict SL to cap slippage
+#   - US:    strongest performer, wider SL allowed, TP raised to let winners run
+#   - CRYPTO: crash-prone -> hard stop handled separately; half-size positions
+#             and a wider normal SL to avoid noise, larger TP to catch runs.
+MARKET_PARAMS = {
+    "TW": {"tp_pct": 20.0, "sl_pct": -5.0, "sip_multiplier": 1.0},
+    "US": {"tp_pct": 25.0, "sl_pct": -7.0, "sip_multiplier": 1.0},
+    "CRYPTO": {"tp_pct": 30.0, "sl_pct": -10.0, "sip_multiplier": 0.5},
+}
+
+
+def get_market_params(market_type: str):
+    return MARKET_PARAMS.get(market_type, MARKET_PARAMS["TW"])
+
 
 def list_strategy_accounts():
     return list(STRATEGY_ACCOUNTS.values())

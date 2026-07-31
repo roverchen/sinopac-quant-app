@@ -32,8 +32,8 @@ class AutoRobot:
                 lambda: threading.Thread(target=self.ensure_fresh_scans, daemon=True).start()
             )
 
-            # Periodic checks (v2.7.6: Offloaded to threads to avoid blocking scheduler)
-            schedule.every(5).minutes.do(lambda: threading.Thread(target=self.check_exits, daemon=True).start())
+            # Periodic checks (v2.8.0: Every 1 minute to catch fast crashes / SL slippage)
+            schedule.every(1).minutes.do(lambda: threading.Thread(target=self.check_exits, daemon=True).start())
 
             self.thread = threading.Thread(target=self._run_scheduler, daemon=True)
             self.thread.start()
@@ -343,6 +343,9 @@ class AutoRobot:
 
             settings = get_user_settings(strategy_user_id)
             sip_amount = settings.get("sip_amount_twd", 10000.0)
+            # [v2.8.0] Apply per-market position sizing (e.g. CRYPTO = 0.5x)
+            from api.services.strategy_accounts import get_market_params
+            sip_amount = sip_amount * get_market_params(market_type).get("sip_multiplier", 1.0)
 
             price_twd = entry_price
 
@@ -424,6 +427,9 @@ class AutoRobot:
                     continue
 
                 order_value = settings.get("sip_amount_twd", 10000.0)
+                # [v2.8.0] Apply per-market position sizing to mirrored followers
+                from api.services.strategy_accounts import get_market_params
+                order_value = order_value * get_market_params(market_type).get("sip_multiplier", 1.0)
                 max_limit = settings.get("max_order_limit", 50000.0)
                 if order_value > max_limit:
                     print(f"[AutoRobot] SIP value {order_value} exceeds limit {max_limit} for {uid}. Capping.")
@@ -470,7 +476,8 @@ class AutoRobot:
         print("[AutoRobot] Running multi-user exit checks...")
 
         for strategy in list_strategy_accounts():
-            self._check_user_exits(strategy["user_id"], 20.0, -5.0)
+            # [v2.8.0] Strategy accounts use per-market TP/SL (None => resolve by position market)
+            self._check_user_exits(strategy["user_id"])
 
         followers = get_all_users_with_auto_trade()
         for uid in followers:
@@ -482,67 +489,96 @@ class AutoRobot:
             sl = settings.get("sl_pct", -5.0)
             self._check_user_exits(uid, tp, sl)
 
-    def _check_user_exits(self, user_id, tp_pct, sl_pct):
-        """Monitor active positions for a specific user and trigger TP/SL."""
+    def _execute_exit(self, user_id, pos, status):
+        """Place a sell order for a position hitting TP/SL/hard-stop and notify users."""
         try:
-            from api.services.storage_service import get_user_credentials
+            from api.services.storage_service import get_user_credentials, get_user_settings
 
             creds = get_user_credentials(user_id)
             is_simulation = creds.get("simulation_mode", True)
 
+            # [v2.7.9] Convert exit current_price to native currency if USD-denominated
+            from api.services.shioaji_service import is_usd_denominated
+            pos_market = pos.get("market", "UNKNOWN")
+            order_price = pos["current_price"]
+            if is_usd_denominated(pos["symbol"], pos_market):
+                from api.services.trade_engine import engine
+                rate = engine._get_cached_exchange_rate()
+                order_price = pos["current_price"] / rate
+
+            ShioajiService.place_order(
+                user_id,
+                pos["symbol"],
+                pos["qty"],
+                order_price,
+                action="Sell",
+                is_simulation=is_simulation,
+            )
+
+            # [v2.7.2] Pass PnL metrics to notification
+            strategy_ids = [s["user_id"] for s in list_strategy_accounts()]
+            if user_id in strategy_ids:
+                self._notify_users(
+                    pos["symbol"], "Sell",
+                    pos["current_price"],
+                    pos.get("market", "UNKNOWN"),
+                    pnl_pct=pos.get("pnl_percent"),
+                    pnl_amount=pos.get("pnl")
+                )
+            else:
+                settings = get_user_settings(user_id)
+                user_email = settings.get("email") or user_id
+                notify_trade(
+                    user_email,
+                    pos["symbol"], "Sell",
+                    pos["current_price"],
+                    pos.get("market", "UNKNOWN"),
+                    pnl_pct=pos.get("pnl_percent"),
+                    pnl_amount=pos.get("pnl")
+                )
+        except Exception as e:
+            print(f"[AutoRobot] Exit Order Error for {user_id}/{pos.get('symbol')}: {e}")
+
+    def _check_user_exits(self, user_id, tp_pct=None, sl_pct=None):
+        """Monitor active positions for a specific user and trigger TP/SL.
+
+        If tp_pct/sl_pct are None, resolve per-market params from
+        strategy_accounts.MARKET_PARAMS based on each position's market.
+        """
+        try:
             positions = ShioajiService.get_positions(user_id)
             for pos in positions:
                 pnl_pct = pos.get("pnl_percent", 0)
-                
-                # [v2.7.2] Data Sanity Check: Abnormally large drop (>90%) 
-                # is likely a data bug (e.g. currency mismatch). Skip exit.
+
+                if tp_pct is None or sl_pct is None:
+                    from api.services.strategy_accounts import get_market_params
+                    market_params = get_market_params(pos.get("market", "UNKNOWN"))
+                    eff_tp = market_params["tp_pct"]
+                    eff_sl = market_params["sl_pct"]
+                else:
+                    eff_tp = tp_pct
+                    eff_sl = sl_pct
+
+                # [v2.7.2] Data Sanity Check: TW/US cannot plausibly drop >90% in a day.
+                # Only skip NON-crypto (likely a currency-mismatch data bug). CRYPTO can
+                # genuinely crash >90% (e.g. alicetwd -96.8%), so let those exit normally.
                 if pnl_pct <= -90:
-                    print(f"[AutoRobot] WARNING: Abnormal ROI {pnl_pct}% for {pos['symbol']}. Skipping exit to prevent data-bug sell.")
+                    pos_market = pos.get("market", "UNKNOWN")
+                    if pos_market != "CRYPTO":
+                        print(f"[AutoRobot] WARNING: Abnormal ROI {pnl_pct}% for {pos['symbol']}. Skipping exit to prevent data-bug sell.")
+                        continue
+
+                # [v2.8.0] Hard stop: never hold a position past -50% (real crash).
+                # This catches catastrophic drops even if intermediate checks were missed.
+                if pnl_pct <= -50.0:
+                    print(f"[AutoRobot] HARD STOP for {user_id}: {pos['symbol']} @ {pnl_pct}%")
+                    self._execute_exit(user_id, pos, "Stop Loss")
                     continue
 
-                if pnl_pct >= tp_pct or pnl_pct <= sl_pct:
-                    status = "Take Profit" if pnl_pct >= tp_pct else "Stop Loss"
+                if pnl_pct >= eff_tp or pnl_pct <= eff_sl:
+                    status = "Take Profit" if pnl_pct >= eff_tp else "Stop Loss"
                     print(f"[AutoRobot] Trigger {status} for {user_id}: {pos['symbol']} @ {pnl_pct}%")
-
-                    # [v2.7.9] Convert exit current_price to native currency if USD-denominated
-                    from api.services.shioaji_service import is_usd_denominated
-                    pos_market = pos.get("market", "UNKNOWN")
-                    order_price = pos["current_price"]
-                    if is_usd_denominated(pos["symbol"], pos_market):
-                        from api.services.trade_engine import engine
-                        rate = engine._get_cached_exchange_rate()
-                        order_price = pos["current_price"] / rate
-
-                    ShioajiService.place_order(
-                        user_id,
-                        pos["symbol"],
-                        pos["qty"],
-                        order_price,
-                        action="Sell",
-                        is_simulation=is_simulation,
-                    )
-                    # [v2.7.2] Pass PnL metrics to notification
-                    strategy_ids = [s["user_id"] for s in list_strategy_accounts()]
-                    if user_id in strategy_ids:
-                        self._notify_users(
-                            pos["symbol"], "Sell",
-                            pos["current_price"],
-                            pos.get("market", "UNKNOWN"),
-                            pnl_pct=pos.get("pnl_percent"),
-                            pnl_amount=pos.get("pnl")
-                        )
-                    else:
-                        from api.services.storage_service import get_user_settings
-                        settings = get_user_settings(user_id)
-                        user_email = settings.get("email") or user_id
-                        notify_trade(
-                            user_email, 
-                            pos["symbol"], "Sell", 
-                            pos["current_price"], 
-                            pos.get("market", "UNKNOWN"),
-                            pnl_pct=pos.get("pnl_percent"),
-                            pnl_amount=pos.get("pnl")
-                        )
+                    self._execute_exit(user_id, pos, status)
         except Exception as e:
             print(f"[AutoRobot] Exit Check Error for {user_id}: {e}")
 
