@@ -2,6 +2,21 @@
 
 ## Version 2.2 Series
 
+### v2.8.0 (2026-07-31)
+- **Fix: Stop-Loss Slippage & Catastrophic Losses**:
+  - [Backend] Reduced exit checks from every 5 minutes to every 1 minute in `AutoRobot`, cutting price slippage on fast-dropping positions (realized losses previously ran -5.4% to -9.6% vs the -5% SL).
+  - [Backend] Fixed the >90% data-sanity guard: it only skips exits for NON-crypto positions (currency-mismatch data bug). CRYPTO crashes (e.g. `alicetwd` -96.8%) now trigger a stop-loss instead of being permanently held.
+  - [Backend] Added a `-50%` hard stop so no position can ever stay open past a catastrophic loss (`_check_user_exits` → `_execute_exit`).
+  - [Backend] Extracted shared `_execute_exit()` helper for TP/SL/hard-stop sells to remove duplicated sell/notification logic.
+- **Separated Per-Market Risk Parameters**:
+  - [Backend] New `MARKET_PARAMS` in `strategy_accounts.py` gives each market independent TP/SL/position sizing:
+    - TW: TP 20% / SL -5% / 1.0x (lowest win rate, strict SL to cap slippage)
+    - US: TP 25% / SL -7% / 1.0x (strongest performer, wider SL, let winners run)
+    - CRYPTO: TP 30% / SL -10% / 0.5x (crash-prone, half-size positions, hard stop caps tail risk)
+  - [Backend] `perform_daily_trade` and `_execute_mirror_buys` apply the per-market `sip_multiplier` (CRYPTO positions are half size).
+  - [Backend] `check_exits` for strategy accounts now resolves TP/SL per position market; followers keep their personal `tp_pct`/`sl_pct` settings.
+- [Maintenance] Bumped backend version to `v2.8.0` and synced documentation.
+
 ### v2.7.9 (2026-06-13)
 - **Fix: Automated Trading Currency Alignment**:
   - [Backend] Refactored `perform_daily_trade`, `_execute_mirror_buys`, and `_check_user_exits` in `auto_trade_service.py` to calculate order volume in TWD but submit orders using native currencies.

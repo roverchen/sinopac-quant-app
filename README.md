@@ -1,6 +1,6 @@
 # Sinopac Quant Pro (股市報明牌)
 
-[![Version](https://img.shields.io/badge/version-2.7.7-blue.svg)](CHANGELOG.md) [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
+[![Version](https://img.shields.io/badge/version-2.8.0-blue.svg)](CHANGELOG.md) [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
 
 Sinopac Quant Pro 是一個強大的多市場資產篩選與自動化交易系統，支援 **台股 (TW)**、**美股 (US)** 以及 **加密貨幣 (Crypto)**。本系統結合了動態權重配置策略、技術面計分引擎與基本面濾網，為量化交易者提供從選股、分析到下單的一站式解決方案。
 
@@ -175,6 +175,11 @@ Sinopac Quant Pro 是一個強大的多市場資產篩選與自動化交易系�
 為高度還原真實券商環境，系統採用 **「合併均價 (Average Cost Basis)」** 的部位管理機制：
 *   **均價攤平合併**：當系統在不同時間對同一檔標的進行多次買進時（如昨日買進 1000 股、今日加碼 5000 股），系統會自動將其合併為單一持倉，並統一計算總平均成本。這不僅能保持介面的整潔，更是專業法人進行整體資金控管 (Total Exposure) 的標準作法。
 *   **整體出場觸發**：系統的停損 (SL) 與停利 (TP) 觸發條件，均是基於「合併後的總平均成本」進行評估。一旦總未實現損益 (PnL%) 觸及閾值，系統會一次性清空該標的。這有效避免了單筆結算所衍生的「先進先出 (FIFO)」帳務混亂，以及「同檔標的又買又賣」的手續費內耗問題。
+*   **分市場風險參數 (v2.8.0)**：三個市場具有截然不同的波動與崩盤特性，因此 TP/SL/倉位獨立設定：
+    *   **TW**：TP 20% / SL -5% / 倉位 1.0x —— 勝率較低，以嚴格停損抑制滑價。
+    *   **US**：TP 25% / SL -7% / 倉位 1.0x —— 主要獲利來源，放寬空間讓獲利單跑。
+    *   **CRYPTO**：TP 30% / SL -10% / 倉位 0.5x —— 崩盤風險高，半倉建倉，並以 **-50% 硬停損** 兜底災難性虧損。
+*   **出場檢查頻率 (v2.8.0)**：每 **1 分鐘** 執行一次停損/停利掃描（原 5 分鐘），大幅降低快速下跌行情的滑價。超出 -50% 的持倉一律觸發硬停損出場（CRYPTO 不套用 >90% 資料保護跳過，確保真崩盤可正常停損）。
 *   **績效指標標準化**：Dashboard 與系統績效摘要以 **`Total PnL / Total Invested Capital`** 作為主要 ROI 指標，避免模擬帳戶餘額稀釋報酬率。
 
 ---
